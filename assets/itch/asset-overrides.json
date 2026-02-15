@@ -1,0 +1,226 @@
+[
+  {
+    "key": "bullet",
+    "path": "/assets/third_party/itch-adapted/bullet.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "bullet_cannon",
+    "path": "/assets/third_party/itch-adapted/bullet_cannon.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "bullet_chain",
+    "path": "/assets/third_party/itch-adapted/bullet_chain.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "bullet_flame",
+    "path": "/assets/third_party/itch-adapted/bullet_flame.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "bullet_frost",
+    "path": "/assets/third_party/itch-adapted/bullet_frost.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "bullet_pierce",
+    "path": "/assets/third_party/itch-adapted/bullet_pierce.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "bullet_pulse",
+    "path": "/assets/third_party/itch-adapted/bullet_pulse.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "bullet_scatter",
+    "path": "/assets/third_party/itch-adapted/bullet_scatter.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "companion",
+    "path": "/assets/third_party/itch-adapted/companion.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "gate",
+    "path": "/assets/third_party/itch-adapted/gate.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "gate_v2",
+    "path": "/assets/third_party/itch-adapted/gate_v2.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "gate_v3",
+    "path": "/assets/third_party/itch-adapted/gate_v3.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "player",
+    "path": "/assets/third_party/itch-adapted/player.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "reinforced_wall",
+    "path": "/assets/third_party/itch-adapted/reinforced_wall.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "reinforced_wall_v2",
+    "path": "/assets/third_party/itch-adapted/reinforced_wall_v2.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "reinforced_wall_v3",
+    "path": "/assets/third_party/itch-adapted/reinforced_wall_v3.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "runner",
+    "path": "/assets/third_party/itch-adapted/runner.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "store_counter",
+    "path": "/assets/third_party/itch-adapted/store_counter.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "supply_crate",
+    "path": "/assets/third_party/itch-adapted/supply_crate.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "tank",
+    "path": "/assets/third_party/itch-adapted/tank.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "wall",
+    "path": "/assets/third_party/itch-adapted/wall.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "wall_v2",
+    "path": "/assets/third_party/itch-adapted/wall_v2.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "wall_v3",
+    "path": "/assets/third_party/itch-adapted/wall_v3.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "village_ground",
+    "path": "/assets/third_party/itch-adapted/village_ground.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "village_path",
+    "path": "/assets/third_party/itch-adapted/village_path.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "workbench",
+    "path": "/assets/third_party/itch-adapted/workbench.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "world_base_map",
+    "path": "/assets/third_party/itch-adapted/world_base_map.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  },
+  {
+    "key": "zombie",
+    "path": "/assets/third_party/itch-adapted/zombie.png",
+    "packageSlug": "itch-adapted",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos"
+  }
+]

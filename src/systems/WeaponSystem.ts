@@ -1,0 +1,600 @@
+import Phaser from 'phaser';
+import { gameState } from '../state/GameState';
+import { getWeaponAtLevel } from '../data/weapons';
+
+export type WeaponType = 'pistol' | 'shotgun' | 'rifle' | 'flamethrower' | 'laser' | 'rocket';
+
+export interface WeaponConfig {
+    name: string;
+    nameCN: string;
+    damage: number;
+    fireRate: number; // ms between shots
+    range: number;
+    spread: number; // angle in degrees
+    projectileCount: number;
+    speed: number;
+    color: number;
+    auto: boolean;
+    special?: 'none' | 'burn' | 'explode' | 'pierce' | 'chain';
+}
+
+export interface WeaponFireModifiers {
+    fireRateMul?: number;
+    damageMul?: number;
+    projectileBonus?: number;
+    speedMul?: number;
+    spreadMul?: number;
+    forceSpecial?: 'chain' | 'burn' | 'pierce';
+    tintColor?: number;
+    homing?: boolean;
+}
+
+export const WEAPON_DEFINITIONS: Record<WeaponType, WeaponConfig> = {
+    pistol: {
+        name: 'AR Basic',
+        nameCN: '基础激光',
+        damage: 30,
+        fireRate: 300,
+        range: 400,
+        spread: 5,
+        projectileCount: 1,
+        speed: 460,
+        color: 0x0ea5e9,
+        auto: false
+    },
+    shotgun: {
+        name: 'Scatter Beam',
+        nameCN: '散射光波',
+        damage: 20,
+        fireRate: 560,
+        range: 250,
+        spread: 30,
+        projectileCount: 6,
+        speed: 390,
+        color: 0x38bdf8,
+        auto: false
+    },
+    rifle: {
+        name: 'Pulse Burst',
+        nameCN: '脉冲连射',
+        damage: 22,
+        fireRate: 110,
+        range: 600,
+        spread: 8,
+        projectileCount: 1,
+        speed: 660,
+        color: 0x06b6d4,
+        auto: true
+    },
+    flamethrower: {
+        name: 'Flame Ray',
+        nameCN: '烈焰射线',
+        damage: 5,
+        fireRate: 40,
+        range: 200,
+        spread: 15,
+        projectileCount: 1,
+        speed: 220,
+        color: 0xff4400,
+        auto: true,
+        special: 'burn'
+    },
+    laser: {
+        name: 'Pierce Beam',
+        nameCN: '穿透光束',
+        damage: 45,
+        fireRate: 450,
+        range: 800,
+        spread: 0,
+        projectileCount: 1,
+        speed: 1080,
+        color: 0x22d3ee,
+        auto: false,
+        special: 'pierce'
+    },
+    rocket: {
+        name: 'Energy Cannon',
+        nameCN: '能量炮',
+        damage: 92,
+        fireRate: 1080,
+        range: 1000,
+        spread: 2,
+        projectileCount: 1,
+        speed: 330,
+        color: 0xa855f7,
+        auto: false,
+        special: 'explode'
+    }
+};
+
+export class WeaponSystem {
+    private scene: Phaser.Scene;
+    private currentWeapon: WeaponType = 'pistol';
+    private lastFired: number = 0;
+    private weaponShotCounter: Record<WeaponType, number> = {
+        pistol: 0,
+        shotgun: 0,
+        rifle: 0,
+        flamethrower: 0,
+        laser: 0,
+        rocket: 0,
+    };
+    private bullets: Phaser.Physics.Arcade.Group;
+    private obstacleGroups: Phaser.GameObjects.Group[];
+    private obstacleSprites: Phaser.Physics.Arcade.Sprite[];
+
+    constructor(
+        scene: Phaser.Scene,
+        bulletGroup: Phaser.Physics.Arcade.Group,
+        obstacleGroups: Phaser.GameObjects.Group[] = [],
+        obstacleSprites: Phaser.Physics.Arcade.Sprite[] = []
+    ) {
+        this.scene = scene;
+        this.bullets = bulletGroup;
+        this.obstacleGroups = obstacleGroups;
+        this.obstacleSprites = obstacleSprites;
+    }
+
+    public switchWeapon(type: WeaponType): void {
+        if (WEAPON_DEFINITIONS[type]) {
+            this.currentWeapon = type;
+        }
+    }
+
+    public getCurrentWeapon(): WeaponConfig {
+        return WEAPON_DEFINITIONS[this.currentWeapon];
+    }
+
+    public getCurrentWeaponType(): WeaponType {
+        return this.currentWeapon;
+    }
+
+    /**
+     * Attempts to fire. Returns true if a bullet was actually created (rate limit passed).
+     */
+    public fire(x: number, y: number, targetX: number, targetY: number, modifiers?: WeaponFireModifiers): boolean {
+        const config = WEAPON_DEFINITIONS[this.currentWeapon];
+        const scaled = this.getScaledConfig(config, this.currentWeapon);
+        const mod = modifiers || {};
+        const adjustedFireRate = Math.max(30, scaled.fireRate / Math.max(0.3, mod.fireRateMul || 1));
+        const now = this.scene.time.now;
+
+        if (now < this.lastFired) {
+            this.lastFired = now - adjustedFireRate;
+        }
+
+        if (now - this.lastFired < adjustedFireRate) return false;
+
+        this.lastFired = now;
+
+        // Calculate angle to target
+        const angle = Phaser.Math.Angle.Between(x, y, targetX, targetY);
+
+        const projectileCount = Math.max(1, scaled.projectileCount + (mod.projectileBonus || 0));
+        const spreadValue = scaled.spread * (mod.spreadMul || 1);
+        const speedValue = scaled.speed * (mod.speedMul || 1);
+        const damageValue = scaled.damage * (mod.damageMul || 1);
+        const specialValue = ((mod.forceSpecial as WeaponConfig['special']) || scaled.special || 'none');
+        const weaponType = this.currentWeapon;
+        this.weaponShotCounter[weaponType] += 1;
+        const shotIndex = this.weaponShotCounter[weaponType];
+
+        // Fire projectiles
+        for (let i = 0; i < projectileCount; i++) {
+            // Calculate spread
+            let spreadAngle = 0;
+            if (projectileCount > 1) {
+                const step = Phaser.Math.DegToRad(spreadValue) / Math.max(1, projectileCount - 1);
+                spreadAngle = -Phaser.Math.DegToRad(spreadValue) / 2 + step * i;
+            } else if (spreadValue > 0) {
+                spreadAngle = Phaser.Math.DegToRad(Phaser.Math.Between(-spreadValue / 2, spreadValue / 2));
+            }
+
+            const finalAngle = angle + spreadAngle;
+            const spawnPoint = this.getSafeSpawnPoint(x, y, finalAngle);
+            const spawnX = spawnPoint.x;
+            const spawnY = spawnPoint.y;
+            const velocityX = Math.cos(finalAngle) * speedValue;
+            const velocityY = Math.sin(finalAngle) * speedValue;
+
+            this.createBullet(
+                spawnX,
+                spawnY,
+                velocityX,
+                velocityY,
+                scaled,
+                damageValue,
+                specialValue,
+                mod.tintColor,
+                !!mod.homing,
+                weaponType
+            );
+        }
+
+        this.maybeFireSignaturePattern(
+            weaponType,
+            shotIndex,
+            x,
+            y,
+            angle,
+            scaled,
+            mod,
+            specialValue
+        );
+
+        return true;
+    }
+
+    private maybeFireSignaturePattern(
+        weaponType: WeaponType,
+        shotIndex: number,
+        x: number,
+        y: number,
+        baseAngle: number,
+        scaled: WeaponConfig,
+        mod: WeaponFireModifiers,
+        fallbackSpecial: WeaponConfig['special']
+    ): void {
+        const damageMul = mod.damageMul || 1;
+        const speedMul = mod.speedMul || 1;
+        const spreadMul = mod.spreadMul || 1;
+        const tint = mod.tintColor;
+        const emitSpread = (
+            count: number,
+            spreadDeg: number,
+            projectileSpeedMul: number,
+            projectileDamageMul: number,
+            special: WeaponConfig['special'],
+            rangeMul: number = 1
+        ): void => {
+            const safeCount = Math.max(1, count);
+            const safeSpread = Math.max(0, spreadDeg * spreadMul);
+            const step = safeCount > 1 ? safeSpread / (safeCount - 1) : 0;
+            for (let i = 0; i < safeCount; i += 1) {
+                const spreadOffset = safeCount > 1
+                    ? (-safeSpread / 2 + step * i)
+                    : 0;
+                const finalAngle = baseAngle + Phaser.Math.DegToRad(spreadOffset + Phaser.Math.FloatBetween(-1.8, 1.8));
+                const shotSpeed = Math.max(120, scaled.speed * speedMul * projectileSpeedMul);
+                const shotDamage = Math.max(1, scaled.damage * damageMul * projectileDamageMul);
+                const spawn = this.getSafeSpawnPoint(x, y, finalAngle);
+                const tunedConfig: WeaponConfig = {
+                    ...scaled,
+                    range: Math.max(140, scaled.range * rangeMul),
+                    speed: shotSpeed,
+                    color: tint ?? scaled.color,
+                    special,
+                };
+                this.createBullet(
+                    spawn.x,
+                    spawn.y,
+                    Math.cos(finalAngle) * shotSpeed,
+                    Math.sin(finalAngle) * shotSpeed,
+                    tunedConfig,
+                    shotDamage,
+                    special,
+                    tint,
+                    false,
+                    weaponType
+                );
+            }
+        };
+
+        if (weaponType === 'pistol' && shotIndex % 6 === 0) {
+            emitSpread(3, 22, 1.18, 0.78, fallbackSpecial === 'none' ? 'chain' : fallbackSpecial, 1.05);
+            return;
+        }
+        if (weaponType === 'shotgun' && shotIndex % 3 === 0) {
+            emitSpread(7, 68, 0.92, 0.54, fallbackSpecial === 'none' ? 'burn' : fallbackSpecial, 0.72);
+            return;
+        }
+        if (weaponType === 'rifle' && shotIndex % 8 === 0) {
+            emitSpread(3, 14, 1.45, 0.88, 'pierce', 1.25);
+            return;
+        }
+        if (weaponType === 'flamethrower' && shotIndex % 9 === 0) {
+            emitSpread(8, 92, 0.84, 0.58, 'burn', 0.9);
+            return;
+        }
+        if (weaponType === 'laser' && shotIndex % 4 === 0) {
+            emitSpread(3, 20, 1.32, 0.96, 'pierce', 1.3);
+            return;
+        }
+        if (weaponType === 'rocket' && shotIndex % 5 === 0) {
+            emitSpread(5, 26, 1.1, 0.62, 'explode', 1.16);
+        }
+    }
+
+    private getScaledConfig(config: WeaponConfig, type: WeaponType): WeaponConfig {
+        const slotMap: Record<WeaponType, string> = {
+            pistol: 'ar_basic',
+            shotgun: 'scatter',
+            rifle: 'pulse',
+            flamethrower: 'flame',
+            laser: 'pierce',
+            rocket: 'cannon',
+        };
+        const slotId = slotMap[type];
+        const slot = gameState.data.weapons.find(w => w.id === slotId);
+        const lv = Math.max(1, gameState.data.playerLevel || 1);
+        const levelDamageMul = 1 + Math.min(1.38, (lv - 1) * 0.052);
+        const levelFireRateMul = Math.max(0.56, 1 - (lv - 1) * 0.013);
+        const ownedWeapons = Math.max(1, gameState.data.weapons.length);
+        const evolvedWeapons = gameState.data.weapons.filter(w => w.evolved).length;
+        const arsenalDamageMul = 1 + Math.min(0.72, ownedWeapons * 0.04 + evolvedWeapons * 0.1);
+        const arsenalFireRateMul = Math.max(0.5, 1 - ownedWeapons * 0.015 - evolvedWeapons * 0.03);
+
+        if (!slot) {
+            const adaptiveProjectileBonus =
+                (type === 'shotgun' && lv >= 8 ? 1 : 0) +
+                (type === 'shotgun' && lv >= 16 ? 1 : 0) +
+                (type === 'rifle' && lv >= 14 ? 1 : 0);
+            const baseScaled: WeaponConfig = {
+                ...config,
+                damage: Math.max(1, Math.round(config.damage * levelDamageMul * arsenalDamageMul)),
+                fireRate: Math.max(30, Math.round(config.fireRate * levelFireRateMul * arsenalFireRateMul)),
+                projectileCount: Math.max(1, config.projectileCount + adaptiveProjectileBonus),
+            };
+            return this.applyGearBonuses(baseScaled, type);
+        }
+
+        const effectiveId = slot.evolved && slot.evolvedId ? slot.evolvedId : slot.id;
+        const scaledDef = getWeaponAtLevel(effectiveId, slot.evolved ? 1 : slot.level);
+        if (!scaledDef) return { ...config };
+
+        const damageMul = config.damage > 0 ? (scaledDef.damage / config.damage) : 1;
+        const fireRateMul = config.fireRate > 0 ? (scaledDef.fireRate / config.fireRate) : 1;
+
+        const evolvedBonus = slot.evolved ? 1.24 : 1;
+        const levelProjectileBonus = Math.floor((Math.max(1, slot.level) - 1) / 3);
+        const projectileBonus = type === 'shotgun'
+            ? levelProjectileBonus + (slot.level >= 7 ? 1 : 0)
+            : (type === 'rifle'
+                ? Math.floor((levelProjectileBonus + 1) / 2) + (slot.level >= 9 ? 1 : 0)
+                : (type === 'pistol' && slot.level >= 6 ? 1 : 0));
+        const scaledConfig: WeaponConfig = {
+            ...config,
+            damage: Math.max(1, Math.round(config.damage * damageMul * levelDamageMul * evolvedBonus * arsenalDamageMul)),
+            fireRate: Math.max(30, Math.round(config.fireRate * fireRateMul * levelFireRateMul * arsenalFireRateMul)),
+            range: Math.round(config.range * (1 + (slot.level - 1) * 0.09)),
+            speed: Math.round(config.speed * (1 + (slot.level - 1) * 0.065)),
+            projectileCount: Math.max(1, config.projectileCount + projectileBonus),
+        };
+        return this.applyGearBonuses(scaledConfig, type);
+    }
+
+    private applyGearBonuses(config: WeaponConfig, type: WeaponType): WeaponConfig {
+        const bonuses = gameState.getWeaponGearBonuses(type);
+        const equipped = gameState.getEquippedGearForWeapon(type);
+        return {
+            ...config,
+            damage: Math.max(1, Math.round(config.damage * Math.max(0.5, bonuses.damageMul || 1))),
+            fireRate: Math.max(24, Math.round(config.fireRate / Math.max(0.45, bonuses.fireRateMul || 1))),
+            speed: Math.max(80, Math.round(config.speed * Math.max(0.6, bonuses.speedMul || 1))),
+            projectileCount: Math.max(1, config.projectileCount + Math.max(0, bonuses.projectileBonus || 0)),
+            color: this.getGearRarityTint(equipped?.rarity) || config.color,
+        };
+    }
+
+    private getGearRarityTint(rarity?: string): number | null {
+        if (rarity === 'mythic') return 0xef4444;
+        if (rarity === 'legendary') return 0xf59e0b;
+        if (rarity === 'epic') return 0xa855f7;
+        if (rarity === 'rare') return 0x10b981;
+        if (rarity === 'magic') return 0x3b82f6;
+        if (rarity === 'common') return 0x94a3b8;
+        return null;
+    }
+
+    private createBullet(
+        x: number,
+        y: number,
+        vx: number,
+        vy: number,
+        config: WeaponConfig,
+        damageValue: number,
+        specialValue: WeaponConfig['special'],
+        brandTint?: number,
+        homingEnabled?: boolean,
+        weaponType?: WeaponType
+    ): void {
+        let bullet = this.acquireBullet(x, y);
+        if (!bullet) return;
+
+        bullet.enableBody(true, x, y, true, true);
+        const bulletTexture = this.getBulletTextureByWeapon(weaponType, specialValue);
+        bullet.setTexture(bulletTexture);
+        bullet.setBlendMode(Phaser.BlendModes.ADD);
+        bullet.setActive(true);
+        bullet.setVisible(true);
+        bullet.setAlpha(1);
+        bullet.setScale(1);
+        let tint = config.color;
+        let bulletScale = 1.35;
+        if (specialValue === 'burn') {
+            tint = 0xff6b1a;
+            bulletScale = 1.5;
+        } else if (specialValue === 'pierce') {
+            tint = 0x7dd3fc;
+            bulletScale = 1.45;
+        } else if (specialValue === 'explode') {
+            tint = 0xa855f7;
+            bulletScale = 1.75;
+        } else if (specialValue === 'chain') {
+            tint = 0xc084fc;
+            bulletScale = 1.6;
+        } else if (brandTint != null) {
+            tint = brandTint;
+        }
+        if (bulletTexture === 'bullet_scatter') bulletScale = Math.max(bulletScale, 1.45);
+        if (bulletTexture === 'bullet_pulse') bulletScale = Math.max(bulletScale, 1.4);
+        if (bulletTexture === 'bullet_frost') bulletScale = Math.max(bulletScale, 1.5);
+        if (bulletTexture === 'bullet_cannon') bulletScale = Math.max(bulletScale, 1.75);
+        bullet.setTint(tint);
+        bullet.setScale(bulletScale);
+        bullet.setAlpha(0.96);
+        bullet.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
+
+        const body = bullet.body as Phaser.Physics.Arcade.Body;
+        if (!body) {
+            this.disableBullet(bullet);
+            return;
+        }
+        body.reset(x, y);
+        body.setAllowGravity(false);
+        const radius = Math.max(4, Math.min(7, Math.floor(4 * bulletScale)));
+        body.setCircle(radius, bullet.width / 2 - radius, bullet.height / 2 - radius);
+        body.setVelocity(vx, vy);
+        body.setCollideWorldBounds(false);
+        body.setBounce(0, 0);
+        body.setDrag(0, 0);
+
+        // Apply damage and other properties (reset both legacy and VS fields)
+        const anyBullet = bullet as any;
+        anyBullet.damage = damageValue;
+        anyBullet.special = specialValue;
+        anyBullet.weaponDamage = damageValue;
+        anyBullet.weaponSpecial = specialValue;
+        anyBullet.weaponType = weaponType || this.currentWeapon;
+        anyBullet.isPlayerBullet = true;
+        anyBullet.isHoming = !!homingEnabled;
+        anyBullet.homingTarget = null;
+        anyBullet.homingStrength = homingEnabled ? 0.16 : null;
+
+        // Cleanup: disable for pooling
+        if (anyBullet.lifetimeTimer) {
+            anyBullet.lifetimeTimer.remove();
+            anyBullet.lifetimeTimer = null;
+        }
+        if (anyBullet.vsLifetimeTimer) {
+            anyBullet.vsLifetimeTimer.remove();
+            anyBullet.vsLifetimeTimer = null;
+        }
+
+        const lifeTime = (config.range / config.speed) * 1000;
+        anyBullet.lifetimeTimer = this.scene.time.delayedCall(lifeTime, () => {
+            anyBullet.lifetimeTimer = null;
+            if (bullet.active) {
+                anyBullet.weaponDamage = null;
+                anyBullet.weaponSpecial = null;
+                anyBullet.damage = null;
+                anyBullet.special = null;
+                anyBullet.bulletEffect = null;
+                anyBullet.isHoming = false;
+                anyBullet.homingTarget = null;
+                anyBullet.homingStrength = null;
+                bullet.setVelocity(0, 0);
+                bullet.disableBody(true, true);
+            }
+        });
+        anyBullet.spawnTime = this.scene.time.now;
+        anyBullet.maxLifetime = lifeTime + 200;
+    }
+
+    private getBulletTextureByWeapon(
+      weaponType: WeaponType | undefined,
+      specialValue: WeaponConfig['special']
+    ): string {
+      if (specialValue === 'burn') return 'bullet_flame';
+      if (specialValue === 'pierce') return 'bullet_pierce';
+      if (specialValue === 'explode') return 'bullet_cannon';
+      if (specialValue === 'chain') return 'bullet_chain';
+      if (weaponType === 'shotgun') return 'bullet_scatter';
+      if (weaponType === 'rifle') return 'bullet_pulse';
+      if (weaponType === 'laser') return 'bullet_pierce';
+      if (weaponType === 'rocket') return 'bullet_cannon';
+      return 'bullet';
+    }
+
+    private acquireBullet(x: number, y: number): Phaser.Physics.Arcade.Sprite | null {
+        let bullet = this.bullets.get(x, y, 'bullet') as Phaser.Physics.Arcade.Sprite | null;
+        if (!bullet) {
+            const recycle = this.findOldestActiveBullet();
+            if (recycle) this.disableBullet(recycle);
+            bullet = this.bullets.get(x, y, 'bullet') as Phaser.Physics.Arcade.Sprite | null;
+        }
+        return bullet;
+    }
+
+    private findOldestActiveBullet(): Phaser.Physics.Arcade.Sprite | null {
+        let oldest: Phaser.Physics.Arcade.Sprite | null = null;
+        let oldestTime = Infinity;
+        for (const child of this.bullets.getChildren()) {
+            const b = child as Phaser.Physics.Arcade.Sprite;
+            if (!b.active) continue;
+            const t = (b as any).spawnTime ?? 0;
+            if (t < oldestTime) {
+                oldestTime = t;
+                oldest = b;
+            }
+        }
+        return oldest;
+    }
+
+    private disableBullet(bullet: Phaser.Physics.Arcade.Sprite): void {
+        const anyBullet = bullet as any;
+        if (anyBullet.lifetimeTimer) {
+            anyBullet.lifetimeTimer.remove();
+            anyBullet.lifetimeTimer = null;
+        }
+        if (anyBullet.vsLifetimeTimer) {
+            anyBullet.vsLifetimeTimer.remove();
+            anyBullet.vsLifetimeTimer = null;
+        }
+        anyBullet.weaponDamage = null;
+        anyBullet.weaponSpecial = null;
+        anyBullet.weaponType = null;
+        anyBullet.damage = null;
+        anyBullet.special = null;
+        anyBullet.bulletEffect = null;
+        anyBullet.isHoming = false;
+        anyBullet.homingTarget = null;
+        anyBullet.homingStrength = null;
+        anyBullet.spawnTime = null;
+        anyBullet.maxLifetime = null;
+        bullet.setVelocity(0, 0);
+        bullet.disableBody(true, true);
+    }
+
+    private getSafeSpawnPoint(originX: number, originY: number, angle: number): { x: number; y: number } {
+        const maxDistance = 48;
+        const step = 4;
+        let distance = 18;
+        let lastPoint = { x: originX, y: originY };
+
+        while (distance <= maxDistance) {
+            const testX = originX + Math.cos(angle) * distance;
+            const testY = originY + Math.sin(angle) * distance;
+            if (!this.pointInsideObstacle(testX, testY)) {
+                return { x: testX, y: testY };
+            }
+            lastPoint = { x: testX, y: testY };
+            distance += step;
+        }
+
+        return lastPoint;
+    }
+
+    private pointInsideObstacle(x: number, y: number): boolean {
+        for (const group of this.obstacleGroups) {
+            const children = group.getChildren() as Phaser.Physics.Arcade.Sprite[];
+            for (const sprite of children) {
+                if (!sprite || !sprite.active || !sprite.visible) continue;
+                const bounds = sprite.getBounds();
+                if (bounds.contains(x, y)) {
+                    return true;
+                }
+            }
+        }
+
+        for (const sprite of this.obstacleSprites) {
+            if (!sprite || !sprite.active || !sprite.visible) continue;
+            const bounds = sprite.getBounds();
+            if (bounds.contains(x, y)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

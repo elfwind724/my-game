@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>Zombie Survival - Roguelike</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      background: #0f0f1a;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      border: 2px solid #374151;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #4ade80;
+      font-size: 24px;
+      text-align: center;
+    }
+
+    .pixel-text {
+      font-family: 'Courier New', monospace;
+      letter-spacing: 2px;
+    }
+
+    @media (max-width: 900px) {
+      #game-container {
+        justify-content: center;
+        align-items: center;
+      }
+      canvas {
+        border-width: 1px;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="loading" class="pixel-text">LOADING...</div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

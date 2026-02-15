@@ -1,0 +1,22 @@
+{
+  "name": "zombie-survival-roguelike",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "assets:init": "node scripts/itch_assets.mjs init",
+    "assets:discover": "node scripts/itch_assets.mjs discover",
+    "assets:ingest": "node scripts/itch_assets.mjs ingest",
+    "test:game": "node scripts/web_game_playwright_client_mac.js --url http://localhost:5173 --actions-json '{\"steps\":[{\"buttons\":[],\"frames\":240}]}' --iterations 1 --pause-ms 300 --screenshot-dir output/web-game --auto-start true"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
+  }
+}

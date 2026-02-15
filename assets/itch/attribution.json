@@ -1,0 +1,175 @@
+[
+  {
+    "slug": "cainos-topdown-basic",
+    "importedAt": "2026-02-08T15:50:30.796Z",
+    "sourceUrl": "https://cainos.itch.io/pixel-art-top-down-basic",
+    "license": "FREE (Name your own price) - see itch page",
+    "attribution": "Cainos",
+    "files": [
+      {
+        "key": "zone_city_tile",
+        "path": "/assets/third_party/cainos-topdown-basic/zone_city_tile.png",
+        "file": "zone_city_tile.png"
+      },
+      {
+        "key": "zone_wasteland_tile",
+        "path": "/assets/third_party/cainos-topdown-basic/zone_wasteland_tile.png",
+        "file": "zone_wasteland_tile.png"
+      },
+      {
+        "key": "zone_industry_tile",
+        "path": "/assets/third_party/cainos-topdown-basic/zone_industry_tile.png",
+        "file": "zone_industry_tile.png"
+      },
+      {
+        "key": "zone_road_tile",
+        "path": "/assets/third_party/cainos-topdown-basic/zone_road_tile.png",
+        "file": "zone_road_tile.png"
+      },
+      {
+        "key": "wall",
+        "path": "/assets/third_party/cainos-topdown-basic/wall.png",
+        "file": "wall.png"
+      },
+      {
+        "key": "gate",
+        "path": "/assets/third_party/cainos-topdown-basic/gate.png",
+        "file": "gate.png"
+      },
+      {
+        "key": "reinforced_wall",
+        "path": "/assets/third_party/cainos-topdown-basic/reinforced_wall.png",
+        "file": "reinforced_wall.png"
+      },
+      {
+        "key": "barricade",
+        "path": "/assets/third_party/cainos-topdown-basic/barricade.png",
+        "file": "barricade.png"
+      },
+      {
+        "key": "player",
+        "path": "/assets/third_party/cainos-topdown-basic/player.png",
+        "file": "player.png"
+      },
+      {
+        "key": "store_front",
+        "path": "/assets/third_party/cainos-topdown-basic/store_front.png",
+        "file": "store_front.png"
+      },
+      {
+        "key": "store_counter",
+        "path": "/assets/third_party/cainos-topdown-basic/store_counter.png",
+        "file": "store_counter.png"
+      },
+      {
+        "key": "storage",
+        "path": "/assets/third_party/cainos-topdown-basic/storage.png",
+        "file": "storage.png"
+      },
+      {
+        "key": "workbench",
+        "path": "/assets/third_party/cainos-topdown-basic/workbench.png",
+        "file": "workbench.png"
+      },
+      {
+        "key": "supply_crate",
+        "path": "/assets/third_party/cainos-topdown-basic/supply_crate.png",
+        "file": "supply_crate.png"
+      }
+    ]
+  },
+  {
+    "slug": "itch-adapted",
+    "importedAt": "2026-02-08T17:01:28.053Z",
+    "sourceUrl": "https://zerie.itch.io/tiny-rpg-character-asset-pack",
+    "license": "itch free pack + cainos pack",
+    "attribution": "Zerie + Cainos",
+    "files": [
+      {
+        "key": "player",
+        "path": "/assets/third_party/itch-adapted/player.png",
+        "file": "player.png"
+      },
+      {
+        "key": "companion",
+        "path": "/assets/third_party/itch-adapted/companion.png",
+        "file": "companion.png"
+      },
+      {
+        "key": "zombie",
+        "path": "/assets/third_party/itch-adapted/zombie.png",
+        "file": "zombie.png"
+      },
+      {
+        "key": "runner",
+        "path": "/assets/third_party/itch-adapted/runner.png",
+        "file": "runner.png"
+      },
+      {
+        "key": "tank",
+        "path": "/assets/third_party/itch-adapted/tank.png",
+        "file": "tank.png"
+      },
+      {
+        "key": "wall",
+        "path": "/assets/third_party/itch-adapted/wall.png",
+        "file": "wall.png"
+      },
+      {
+        "key": "wall_v2",
+        "path": "/assets/third_party/itch-adapted/wall_v2.png",
+        "file": "wall_v2.png"
+      },
+      {
+        "key": "wall_v3",
+        "path": "/assets/third_party/itch-adapted/wall_v3.png",
+        "file": "wall_v3.png"
+      },
+      {
+        "key": "reinforced_wall",
+        "path": "/assets/third_party/itch-adapted/reinforced_wall.png",
+        "file": "reinforced_wall.png"
+      },
+      {
+        "key": "reinforced_wall_v2",
+        "path": "/assets/third_party/itch-adapted/reinforced_wall_v2.png",
+        "file": "reinforced_wall_v2.png"
+      },
+      {
+        "key": "reinforced_wall_v3",
+        "path": "/assets/third_party/itch-adapted/reinforced_wall_v3.png",
+        "file": "reinforced_wall_v3.png"
+      },
+      {
+        "key": "gate",
+        "path": "/assets/third_party/itch-adapted/gate.png",
+        "file": "gate.png"
+      },
+      {
+        "key": "gate_v2",
+        "path": "/assets/third_party/itch-adapted/gate_v2.png",
+        "file": "gate_v2.png"
+      },
+      {
+        "key": "gate_v3",
+        "path": "/assets/third_party/itch-adapted/gate_v3.png",
+        "file": "gate_v3.png"
+      },
+      {
+        "key": "store_counter",
+        "path": "/assets/third_party/itch-adapted/store_counter.png",
+        "file": "store_counter.png"
+      },
+      {
+        "key": "workbench",
+        "path": "/assets/third_party/itch-adapted/workbench.png",
+        "file": "workbench.png"
+      },
+      {
+        "key": "world_base_map",
+        "path": "/assets/third_party/itch-adapted/world_base_map.png",
+        "file": "world_base_map.png"
+      }
+    ]
+  }
+]

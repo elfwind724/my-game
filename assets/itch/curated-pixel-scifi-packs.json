@@ -1,0 +1,92 @@
+{
+  "generatedAt": "2026-02-08T15:40:00Z",
+  "source": "https://itch.io/game-assets/free + https://itch.io/game-assets/free/tag-sci-fi/tag-top-down",
+  "note": "仅记录候选包，不包含下载文件。导入前请逐包确认授权条款（是否允许商用、是否要求署名、是否允许再分发）。",
+  "packs": [
+    {
+      "slug": "cainos-topdown-basic",
+      "name": "Pixel Art Top Down - Basic",
+      "url": "https://cainos.itch.io/pixel-art-top-down-basic",
+      "fitScore": 9.2,
+      "fitReason": "顶视角像素场景与建筑完整，适合末日基地和地图底图",
+      "targetUse": [
+        "zone_city_tile",
+        "zone_wasteland_tile",
+        "wall",
+        "gate",
+        "deco_ruin"
+      ],
+      "status": "pending_download"
+    },
+    {
+      "slug": "limezu-modern-interiors",
+      "name": "Modern Interiors - RPG Tileset",
+      "url": "https://limezu.itch.io/moderninteriors",
+      "fitScore": 8.8,
+      "fitReason": "室内柜台与家具适配“影目AR眼镜体验中心”店铺场景",
+      "targetUse": [
+        "store_front",
+        "store_counter",
+        "workbench",
+        "storage",
+        "radar"
+      ],
+      "status": "pending_download"
+    },
+    {
+      "slug": "viwium-topdown-spaceships",
+      "name": "Top-Down Spaceship pack",
+      "url": "https://viwium.itch.io/top-down-spaceship-pack",
+      "fitScore": 8.6,
+      "fitReason": "可直接改造成 AR 无人机、炮塔飞弹与精英敌人载具",
+      "targetUse": [
+        "runner",
+        "tank",
+        "missile_turret",
+        "bullet"
+      ],
+      "status": "pending_download"
+    },
+    {
+      "slug": "gbcamd-cyberpunk-characters",
+      "name": "Cyberpunk Character Pack",
+      "url": "https://gbcamd.itch.io/cyberpunk-character-pack-top-down-pixel-art",
+      "fitScore": 8.4,
+      "fitReason": "赛博风人形单位贴合玩家、伙伴、NPC 与高阶敌人",
+      "targetUse": [
+        "player",
+        "companion",
+        "zombie",
+        "merchant_npc"
+      ],
+      "status": "pending_download"
+    },
+    {
+      "slug": "unclemugsy-pixel-ui",
+      "name": "Pixel UI",
+      "url": "https://unclemugsy.itch.io/pixel-ui",
+      "fitScore": 8.1,
+      "fitReason": "可统一任务面板、商店面板、基地管理面板的像素 UI 主题",
+      "targetUse": [
+        "ui_panel",
+        "ui_button",
+        "ui_healthbar"
+      ],
+      "status": "pending_download"
+    },
+    {
+      "slug": "trevor-tech-dungeon",
+      "name": "Tech Dungeon: Roguelite - Asset Pack",
+      "url": "https://trevor-pupkin.itch.io/tech-dungeon-roguelite",
+      "fitScore": 8.0,
+      "fitReason": "科技地牢元素与夜战波次风格一致，可强化敌人与关卡装饰",
+      "targetUse": [
+        "zone_industry_tile",
+        "laser_turret",
+        "electric_fence",
+        "deco_machine"
+      ],
+      "status": "pending_download"
+    }
+  ]
+}
