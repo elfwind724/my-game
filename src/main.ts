@@ -80,6 +80,7 @@ if (loadingEl) {
 // Start game
 const game = new Phaser.Game(config);
 if (typeof window !== 'undefined') {
+  (window as any).__phaserGame = game;
   const applyResponsiveResize = () => {
     const nextStage = resolveStageForViewport(window.innerWidth, window.innerHeight);
     const currentW = game.scale.gameSize.width;

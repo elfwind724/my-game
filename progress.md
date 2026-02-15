@@ -997,3 +997,56 @@ src/
 
 ### 备注
 - `develop-web-game`脚本客户端在本项目仍表现为`render_game_to_text`停留menu状态（历史已知），因此本轮仍以MCP Playwright可视截图与console为验收主依据。
+
+## 2026-02-15 移动端触控全面补齐（摇杆 + 功能按钮 + 关闭态）
+
+### 用户需求
+- 手机端没有虚拟摇杆，人物无法移动。
+- 没有鼠标时，菜单难以打开/关闭。
+- 需要移动端按钮：建造（含关闭态X）、伙伴、任务、交互、交易商人、眼镜店、仓库V。
+
+### 本轮实现
+
+#### 1) 玩家移动输入支持虚拟摇杆（`PlayerSystem`）
+- 文件：`src/systems/PlayerSystem.ts`
+- 增加 `virtualMove` 向量与 `setVirtualDirection(x, y)`。
+- 在无键盘方向输入时，改用摇杆向量驱动移动。
+- `setMovementEnabled(false)` 与 `reset()` 会清空虚拟输入，避免残留漂移。
+
+#### 2) GameScene 接入移动事件（`GameScene`）
+- 文件：`src/scenes/GameScene.ts`
+- 监听：`mobile-move`、`mobile-interact`、`mobile-toggle-build`。
+- `mobile-move` -> 转发到 `playerSystem.setVirtualDirection`。
+- `mobile-interact` -> 复用 `handleInteraction()`，并支持设施内退出。
+- `mobile-toggle-build` -> 复用建造开关逻辑。
+- 场景 `shutdown` 时解除监听并清零移动向量。
+
+#### 3) UIScene 新增移动端触控 HUD（`UIScene`）
+- 文件：`src/scenes/UIScene.ts`
+- 仅移动端创建触控层：
+  - 左下：虚拟摇杆（支持拖拽、释放回中、持续发射 `mobile-move`）。
+  - 右下：8 个操作按钮（2x4）
+    - `建造` / `制造`
+    - `伙伴` / `任务`
+    - `交互E` / `交易`
+    - `眼镜店` / `仓库V`
+- 每个按钮有活动态 `×` 文案（如 `任务×`、`仓库×`），可作为“开关关闭”反馈。
+- 增加移动端全局关闭 `✕`（带放大点击热区），并统一 `closeTopLayerForMobile()` 处理顶层关闭。
+- 新增状态联动刷新（`BUILD_MODE_TOGGLED` + 周期刷新），保证按钮高亮与面板状态一致。
+- 修复触控层点击优先级：为移动按钮/关闭区设置更高 `priorityID`，降低被面板背景拦截风险。
+
+#### 4) 调试可观测性（`main.ts`）
+- 文件：`src/main.ts`
+- 暴露 `window.__phaserGame = game`，便于 Playwright/手动调试时读取场景与面板开关状态。
+
+### 验证
+- `npm run build` 多次通过。
+- Playwright 竖屏（486x869）验证：
+  - 摇杆拖拽后 `render_game_to_text.player.x` 从 `1000` 变为 `1147`，移动生效。
+  - 按钮状态脚本验证（读取 `UIScene` 面板状态）：
+    - `build / base / quest / exchange / shop / vault` 均可打开并再次点击关闭。
+  - 控制台 error: 0。
+
+### 备注
+- 当“等级提升”面板处于开启状态时，移动端全局关闭 `✕` 会按设计忽略（避免跳过升级选择）。
+- 普通菜单可通过“同名按钮再次点击（×态）”稳定关闭，符合无键鼠移动端闭环操作。

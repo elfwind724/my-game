@@ -74,6 +74,27 @@ export default class UIScene extends Phaser.Scene {
   private glassesShopPanel!: GlassesShopPanel;
   private gearVaultPanel!: GearVaultPanel;
   private brandTreeText!: Phaser.GameObjects.Text;
+  private mobileViewport: boolean = false;
+  private mobileControls: Phaser.GameObjects.Container | null = null;
+  private mobileCloseButton: Phaser.GameObjects.Text | null = null;
+  private mobileCloseHit: Phaser.GameObjects.Rectangle | null = null;
+  private mobileButtons: Record<string, {
+    bg: Phaser.GameObjects.Rectangle;
+    text: Phaser.GameObjects.Text;
+    idleLabel: string;
+    activeLabel?: string;
+    activeCheck?: () => boolean;
+  }> = {};
+  private buildModeActive: boolean = false;
+  private mobileUiRefreshAt: number = 0;
+  private joystickZone: Phaser.GameObjects.Arc | null = null;
+  private joystickBase: Phaser.GameObjects.Arc | null = null;
+  private joystickKnob: Phaser.GameObjects.Arc | null = null;
+  private joystickCenter: Phaser.Math.Vector2 = new Phaser.Math.Vector2();
+  private joystickRadius: number = 46;
+  private joystickPointerId: number | null = null;
+  private joystickMoveHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
+  private joystickUpHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
 
   constructor() {
     super({ key: 'UIScene' });
@@ -83,6 +104,8 @@ export default class UIScene extends Phaser.Scene {
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
     const portraitLayout = h > w * 1.2;
+    const mobileViewport = this.isMobileViewport();
+    this.mobileViewport = mobileViewport;
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
 
@@ -211,24 +234,30 @@ export default class UIScene extends Phaser.Scene {
     // ========================================
     // BOTTOM RIGHT - CONTROLS
     // ========================================
-    const compactHud = w <= 900;
-    const controlsText = compactHud
-      ? (portraitLayout
-        ? '竖屏HUD: B建造 C制造 Q任务 T基地 V仓库\nE交互 X交易 R拆除 G图鉴'
-        : 'B建造 C制造 Q任务 T基地 H休闲 V仓库\nE交互 X交易 R拆除 G图鉴')
-      : 'WASD:移动 | B:建造 | C:制造 | Q:任务 | T:基地 | H:休闲 | V:仓库 | E:交互 | X:交易 | R:拆除 | G:图鉴';
-    this.add.text(w - 10, h - 10, controlsText, {
-      fontSize: compactHud ? (portraitLayout ? '15px' : '12px') : '11px',
-      color: '#475569',
-      fontFamily: 'Courier New',
-      align: 'right',
-      lineSpacing: 4,
-    }).setOrigin(1, 1).setDepth(1001);
+    if (!mobileViewport) {
+      const compactHud = w <= 900;
+      const controlsText = compactHud
+        ? (portraitLayout
+          ? '竖屏HUD: B建造 C制造 Q任务 T基地 V仓库\nE交互 X交易 R拆除 G图鉴'
+          : 'B建造 C制造 Q任务 T基地 H休闲 V仓库\nE交互 X交易 R拆除 G图鉴')
+        : 'WASD:移动 | B:建造 | C:制造 | Q:任务 | T:基地 | H:休闲 | V:仓库 | E:交互 | X:交易 | R:拆除 | G:图鉴';
+      this.add.text(w - 10, h - 10, controlsText, {
+        fontSize: compactHud ? (portraitLayout ? '15px' : '12px') : '11px',
+        color: '#475569',
+        fontFamily: 'Courier New',
+        align: 'right',
+        lineSpacing: 4,
+      }).setOrigin(1, 1).setDepth(1001);
+    }
 
     // ========================================
     // EVENT LISTENERS
     // ========================================
     this.setupEventListeners();
+    if (mobileViewport) {
+      this.createMobileTouchControls(w, h, portraitLayout);
+      this.refreshMobileActionButtons();
+    }
 
     // ESC closes top-most panel
     this.input.keyboard?.on('keydown-ESC', () => {
@@ -256,6 +285,16 @@ export default class UIScene extends Phaser.Scene {
       if (this.levelUpPanel?.getIsOpen()) return;
       this.gearVaultPanel.toggle();
     });
+  }
+
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024 || (navigator.maxTouchPoints || 0) > 1;
+  }
+
+  private getUIFontFamily(): string {
+    return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
   }
 
   private setupEventListeners(): void {
@@ -435,11 +474,217 @@ export default class UIScene extends Phaser.Scene {
         onComplete: () => text.destroy(),
       });
     });
+
+    events.on(GameEvents.BUILD_MODE_TOGGLED, (payload: { active?: boolean } | null) => {
+      this.buildModeActive = !!payload?.active;
+      this.refreshMobileActionButtons();
+    });
   }
 
-  update(_time: number, delta: number): void {
+  private closeTopLayerForMobile(): void {
+    if (this.levelUpPanel?.getIsOpen()) return;
+    if (this.buildModeActive) { events.emit('mobile-toggle-build'); return; }
+    if (this.gearVaultPanel?.getIsOpen()) { this.gearVaultPanel.toggle(); return; }
+    if (this.glassesShopPanel?.getIsOpen()) { this.glassesShopPanel.toggle(); return; }
+    if (this.exchangePanel?.getIsOpen()) { this.exchangePanel.toggle(); return; }
+    if (this.basePanel?.getIsOpen()) { this.basePanel.toggle(); return; }
+    if (this.leisurePanel?.getIsOpen()) { this.leisurePanel.toggle(); return; }
+    if (this.craftingPanel?.getIsOpen()) { this.craftingPanel.togglePanel({ buildOnly: true, category: 'building' }); return; }
+    if (this.questPanel?.getIsOpen()) { this.questPanel.toggle(); return; }
+    if (this.collectionPanel?.getIsOpen()) { this.collectionPanel.toggle(); return; }
+  }
+
+  private createMobileTouchControls(w: number, h: number, portraitLayout: boolean): void {
+    this.mobileControls?.destroy();
+    this.mobileButtons = {};
+    // Keep mobile touch controls above all panels so they remain tappable on phones.
+    this.mobileControls = this.add.container(0, 0).setDepth(20000).setScrollFactor(0);
+    const uiFont = this.getUIFontFamily();
+    const btnW = portraitLayout ? 94 : 84;
+    const btnH = portraitLayout ? 36 : 32;
+    const gapX = 6;
+    const gapY = 7;
+    const cols = 2;
+    const rows = 4;
+    const totalW = cols * btnW + gapX;
+    const totalH = rows * btnH + (rows - 1) * gapY;
+    const startX = w - totalW - 8 + btnW / 2;
+    const startY = portraitLayout ? (h - totalH - 104 + btnH / 2) : (h - totalH - 30 + btnH / 2);
+
+    const addButton = (
+      id: string,
+      col: number,
+      row: number,
+      idleLabel: string,
+      onTap: () => void,
+      activeLabel?: string,
+      activeCheck?: () => boolean
+    ) => {
+      const x = startX + col * (btnW + gapX);
+      const y = startY + row * (btnH + gapY);
+      const bg = this.add.rectangle(x, y, btnW, btnH, 0x0b1220, 0.88)
+        .setStrokeStyle(1, 0x1e3a5f, 0.9)
+        .setInteractive({ useHandCursor: true })
+        .setScrollFactor(0)
+        .setDepth(20001);
+      if (bg.input) (bg.input as any).priorityID = 20;
+      const text = this.add.text(x, y, idleLabel, {
+        fontSize: portraitLayout ? '14px' : '12px',
+        color: '#e2e8f0',
+        fontFamily: uiFont,
+        fontStyle: 'bold',
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(20002);
+      bg.on('pointerdown', (pointer: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
+        event.stopPropagation();
+        pointer.event?.preventDefault?.();
+        onTap();
+        this.time.delayedCall(20, () => this.refreshMobileActionButtons());
+      });
+      this.mobileControls?.add([bg, text]);
+      this.mobileButtons[id] = { bg, text, idleLabel, activeLabel, activeCheck };
+    };
+
+    addButton('build', 0, 0, '建造', () => {
+      if (this.buildModeActive) {
+        events.emit('mobile-toggle-build');
+        return;
+      }
+      if (this.craftingPanel.getIsOpen()) {
+        this.craftingPanel.togglePanel({ buildOnly: true, category: 'building' });
+      } else {
+        this.craftingPanel.openCategory('building', { buildOnly: true });
+      }
+    }, '建造×', () => this.buildModeActive || this.craftingPanel.getIsOpen());
+    addButton('craft', 1, 0, '制造', () => {
+      if (this.craftingPanel.getIsOpen()) {
+        this.craftingPanel.togglePanel({ buildOnly: false, category: 'weapon' });
+      } else {
+        this.craftingPanel.openCategory('weapon', { buildOnly: false });
+      }
+    }, '制造×', () => this.craftingPanel.getIsOpen());
+    addButton('base', 0, 1, '伙伴', () => this.basePanel.toggle(), '伙伴×', () => this.basePanel.getIsOpen());
+    addButton('quest', 1, 1, '任务', () => this.questPanel.toggle(), '任务×', () => this.questPanel.getIsOpen());
+    addButton('interact', 0, 2, '交互E', () => events.emit('mobile-interact'));
+    addButton('exchange', 1, 2, '交易', () => this.exchangePanel.toggle(), '交易×', () => this.exchangePanel.getIsOpen());
+    addButton('shop', 0, 3, '眼镜店', () => this.glassesShopPanel.toggle(), '店铺×', () => this.glassesShopPanel.getIsOpen());
+    addButton('vault', 1, 3, '仓库V', () => this.gearVaultPanel.toggle(), '仓库×', () => this.gearVaultPanel.getIsOpen());
+
+    this.mobileCloseButton?.destroy();
+    this.mobileCloseHit?.destroy();
+    const closeCenterX = w - 24;
+    const closeCenterY = portraitLayout ? 74 : 62;
+    this.mobileCloseHit = this.add.rectangle(closeCenterX, closeCenterY, portraitLayout ? 60 : 52, portraitLayout ? 60 : 52, 0x000000, 0.001)
+      .setOrigin(0.5)
+      .setDepth(20009)
+      .setInteractive({ useHandCursor: true })
+      .setScrollFactor(0);
+    if (this.mobileCloseHit.input) (this.mobileCloseHit.input as any).priorityID = 50;
+    this.mobileCloseButton = this.add.text(w - 10, 58, '✕', {
+      fontSize: portraitLayout ? '28px' : '24px',
+      color: '#ef4444',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+      stroke: '#020617',
+      strokeThickness: 4,
+      backgroundColor: '#0b1220cc',
+      padding: { x: 8, y: 2 },
+    }).setOrigin(1, 0).setDepth(20010).setInteractive({ useHandCursor: true }).setScrollFactor(0);
+    if (this.mobileCloseButton.input) (this.mobileCloseButton.input as any).priorityID = 51;
+    const closeTap = (_pointer: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+      this.closeTopLayerForMobile();
+    };
+    this.mobileCloseButton.on('pointerdown', closeTap);
+    this.mobileCloseHit.on('pointerdown', closeTap);
+
+    // Virtual joystick (movement)
+    this.joystickRadius = portraitLayout ? 50 : 44;
+    let joyY = h - this.minimapHeight - (portraitLayout ? 100 : 84);
+    if (joyY < 180) joyY = h - 150;
+    const joyX = 18 + this.joystickRadius;
+    this.joystickCenter.set(joyX, joyY);
+    this.joystickBase = this.add.circle(joyX, joyY, this.joystickRadius, 0x0b1220, 0.36)
+      .setStrokeStyle(2, 0x38bdf8, 0.78).setDepth(20003).setScrollFactor(0);
+    this.joystickKnob = this.add.circle(joyX, joyY, Math.max(16, Math.floor(this.joystickRadius * 0.42)), 0x0ea5e9, 0.9)
+      .setStrokeStyle(2, 0x7dd3fc, 1).setDepth(20004).setScrollFactor(0);
+    this.joystickZone = this.add.circle(joyX, joyY, this.joystickRadius + 22, 0xffffff, 0.001)
+      .setInteractive({ useHandCursor: false }).setDepth(20000).setScrollFactor(0);
+    if (this.joystickZone.input) (this.joystickZone.input as any).priorityID = 15;
+    this.joystickZone.on('pointerdown', (pointer: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+      this.joystickPointerId = pointer.id;
+      this.updateJoystickFromPointer(pointer);
+    });
+    this.mobileControls.add([this.joystickBase, this.joystickKnob, this.joystickZone]);
+    this.joystickMoveHandler = (pointer: Phaser.Input.Pointer) => {
+      if (this.joystickPointerId == null || pointer.id !== this.joystickPointerId) return;
+      this.updateJoystickFromPointer(pointer);
+    };
+    this.joystickUpHandler = (pointer: Phaser.Input.Pointer) => {
+      if (this.joystickPointerId == null || pointer.id !== this.joystickPointerId) return;
+      this.releaseJoystick();
+    };
+    this.input.on('pointermove', this.joystickMoveHandler);
+    this.input.on('pointerup', this.joystickUpHandler);
+  }
+
+  private updateJoystickFromPointer(pointer: Phaser.Input.Pointer): void {
+    if (!this.joystickKnob) return;
+    const dxRaw = pointer.x - this.joystickCenter.x;
+    const dyRaw = pointer.y - this.joystickCenter.y;
+    const dist = Math.sqrt(dxRaw * dxRaw + dyRaw * dyRaw);
+    const maxDist = this.joystickRadius;
+    const scale = dist > maxDist ? maxDist / dist : 1;
+    const dx = dxRaw * scale;
+    const dy = dyRaw * scale;
+    this.joystickKnob.setPosition(this.joystickCenter.x + dx, this.joystickCenter.y + dy);
+    const nx = Phaser.Math.Clamp(dx / maxDist, -1, 1);
+    const ny = Phaser.Math.Clamp(dy / maxDist, -1, 1);
+    events.emit('mobile-move', { x: nx, y: ny });
+  }
+
+  private releaseJoystick(): void {
+    this.joystickPointerId = null;
+    if (this.joystickKnob) {
+      this.joystickKnob.setPosition(this.joystickCenter.x, this.joystickCenter.y);
+    }
+    events.emit('mobile-move', { x: 0, y: 0 });
+  }
+
+  private refreshMobileActionButtons(): void {
+    if (!this.mobileViewport) return;
+    const entries = Object.values(this.mobileButtons);
+    entries.forEach((entry) => {
+      const active = entry.activeCheck ? !!entry.activeCheck() : false;
+      const label = active ? (entry.activeLabel || `${entry.idleLabel}×`) : entry.idleLabel;
+      entry.text.setText(label);
+      entry.bg.setFillStyle(active ? 0x0c3a57 : 0x0b1220, active ? 0.95 : 0.88);
+      entry.bg.setStrokeStyle(1, active ? 0x38bdf8 : 0x1e3a5f, 0.92);
+      entry.text.setColor(active ? '#67e8f9' : '#e2e8f0');
+    });
+    if (this.mobileCloseButton) {
+      const hasClosable =
+        this.buildModeActive ||
+        this.craftingPanel.getIsOpen() ||
+        this.questPanel.getIsOpen() ||
+        this.basePanel.getIsOpen() ||
+        this.exchangePanel.getIsOpen() ||
+        this.glassesShopPanel.getIsOpen() ||
+        this.gearVaultPanel.getIsOpen() ||
+        this.collectionPanel.getIsOpen() ||
+        this.leisurePanel.getIsOpen();
+      this.mobileCloseButton.setVisible(hasClosable);
+      this.mobileCloseHit?.setVisible(hasClosable);
+    }
+  }
+
+  update(time: number, delta: number): void {
     this.updateMinimap();
     this.updateWeaponSlots();
+    if (this.mobileViewport && time >= this.mobileUiRefreshAt) {
+      this.mobileUiRefreshAt = time + 120;
+      this.refreshMobileActionButtons();
+    }
 
     // Update grade every 2 seconds
     this.gradeTimer -= delta;
@@ -855,7 +1100,27 @@ export default class UIScene extends Phaser.Scene {
     events.off('show-levelup-panel');
     events.off('toggle-collection');
     events.off('glasses-equipped');
+    events.off(GameEvents.BUILD_MODE_TOGGLED);
     this.events.off(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
+    if (this.joystickMoveHandler) {
+      this.input.off('pointermove', this.joystickMoveHandler);
+      this.joystickMoveHandler = null;
+    }
+    if (this.joystickUpHandler) {
+      this.input.off('pointerup', this.joystickUpHandler);
+      this.joystickUpHandler = null;
+    }
+    this.releaseJoystick();
+    this.mobileControls?.destroy();
+    this.mobileControls = null;
+    this.mobileCloseButton?.destroy();
+    this.mobileCloseButton = null;
+    this.mobileCloseHit?.destroy();
+    this.mobileCloseHit = null;
+    this.mobileButtons = {};
+    this.joystickZone = null;
+    this.joystickBase = null;
+    this.joystickKnob = null;
 
     this.craftingPanel?.destroy();
     this.questPanel?.destroy();

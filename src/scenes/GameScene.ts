@@ -620,6 +620,9 @@ export default class GameScene extends Phaser.Scene {
     events.on('companion-job-changed', this.onCompanionJobChanged, this);
     events.on('select-build-item', this.onBuildSelection, this);
     events.on('crafting-panel-state', this.onCraftingPanelState, this);
+    events.on('mobile-move', this.onMobileMove, this);
+    events.on('mobile-interact', this.onMobileInteract, this);
+    events.on('mobile-toggle-build', this.onMobileToggleBuild, this);
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
 
@@ -4083,6 +4086,32 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  private onMobileMove(payload: { x?: number; y?: number } | null): void {
+    const x = Number(payload?.x ?? 0);
+    const y = Number(payload?.y ?? 0);
+    this.playerSystem?.setVirtualDirection(Number.isFinite(x) ? x : 0, Number.isFinite(y) ? y : 0);
+  }
+
+  private onMobileInteract(): void {
+    if (this.isGameOver || this.runEventOpen) return;
+    if (this.currentFacility) {
+      this.exitFacility();
+      return;
+    }
+    if (this.time.now < this.interactionDebounceUntil) return;
+    this.interactionDebounceUntil = this.time.now + 130;
+    this.handleInteraction();
+  }
+
+  private onMobileToggleBuild(): void {
+    if (this.currentFacility) return;
+    if (this.isBuildMode) {
+      this.exitBuildMode();
+      return;
+    }
+    this.toggleBuildMode();
+  }
+
   private handleInteraction(): void {
     if (this.facilityTransitioning) {
       // Hard recover first so a second E press never gets trapped in transition state.
@@ -6618,6 +6647,9 @@ export default class GameScene extends Phaser.Scene {
     events.off('companion-job-changed', this.onCompanionJobChanged, this);
     events.off('select-build-item', this.onBuildSelection, this);
     events.off('crafting-panel-state', this.onCraftingPanelState, this);
+    events.off('mobile-move', this.onMobileMove, this);
+    events.off('mobile-interact', this.onMobileInteract, this);
+    events.off('mobile-toggle-build', this.onMobileToggleBuild, this);
     this.events.off(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
 
     this.dayCycleSystem?.destroy();
@@ -6645,6 +6677,7 @@ export default class GameScene extends Phaser.Scene {
     this.runEventOpen = false;
     this.setUISceneInputEnabled(true);
     this.pendingNightWaveStartAfterEvent = false;
+    this.playerSystem?.setVirtualDirection(0, 0);
     (window as any).__force_bloodmoon_test = undefined;
     (window as any).__debug_trigger_run_event = undefined;
     (window as any).__in_game = false;

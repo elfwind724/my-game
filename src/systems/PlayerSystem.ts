@@ -18,6 +18,7 @@ export class PlayerSystem {
     private currentHealth: number = 100;
     private isInvincible: boolean = false;
     private movementEnabled: boolean = true;
+    private virtualMove: Phaser.Math.Vector2 = new Phaser.Math.Vector2(0, 0);
     private upgrades: any; // Reference to upgrades object
     private statSyncAccumulator: number = 0;
     private regenAccumulator: number = 0;
@@ -62,28 +63,33 @@ export class PlayerSystem {
         const computed = EvolutionSystem.getComputedStats();
         const moveSpeed = (computed.moveSpeed || 200) + (this.upgrades.moveSpeedBonus * 25);
 
+        let moveX = 0;
+        let moveY = 0;
         const left = this.cursors.left.isDown || this.keyA.isDown;
         const right = this.cursors.right.isDown || this.keyD.isDown;
         const up = this.cursors.up.isDown || this.keyW.isDown;
         const down = this.cursors.down.isDown || this.keyS.isDown;
+        if (left) moveX -= 1;
+        if (right) moveX += 1;
+        if (up) moveY -= 1;
+        if (down) moveY += 1;
 
-        if (left) {
-            body.setVelocityX(-moveSpeed);
-            this.player.setFlipX(true);
-        } else if (right) {
-            body.setVelocityX(moveSpeed);
-            this.player.setFlipX(false);
-        } else {
-            body.setVelocityX(0);
+        // Use virtual stick direction when no keyboard direction is pressed.
+        if (moveX === 0 && moveY === 0) {
+            moveX = this.virtualMove.x;
+            moveY = this.virtualMove.y;
+            if (Math.abs(moveX) < 0.08) moveX = 0;
+            if (Math.abs(moveY) < 0.08) moveY = 0;
         }
 
-        if (up) {
-            body.setVelocityY(-moveSpeed);
-        } else if (down) {
-            body.setVelocityY(moveSpeed);
-        } else {
-            body.setVelocityY(0);
+        const length = Math.sqrt(moveX * moveX + moveY * moveY);
+        if (length > 1) {
+            moveX /= length;
+            moveY /= length;
         }
+        body.setVelocity(moveX * moveSpeed, moveY * moveSpeed);
+        if (moveX < -0.05) this.player.setFlipX(true);
+        else if (moveX > 0.05) this.player.setFlipX(false);
 
         const regenPerSecond = Math.max(0, (computed.regen || 0) + (this.upgrades.healthRegen || 0) * 0.35);
         if (regenPerSecond > 0 && this.currentHealth > 0 && this.currentHealth < this.maxHealth) {
@@ -137,6 +143,7 @@ export class PlayerSystem {
         this.currentHealth = this.maxHealth;
         this.isInvincible = false;
         this.movementEnabled = true;
+        this.virtualMove.set(0, 0);
         this.regenAccumulator = 0;
         this.statSyncAccumulator = 0;
         this.player.clearTint();
@@ -152,6 +159,11 @@ export class PlayerSystem {
 
     public setMovementEnabled(enabled: boolean): void {
         this.movementEnabled = enabled;
+        if (!enabled) this.virtualMove.set(0, 0);
+    }
+
+    public setVirtualDirection(x: number, y: number): void {
+        this.virtualMove.set(Phaser.Math.Clamp(x, -1, 1), Phaser.Math.Clamp(y, -1, 1));
     }
 
     private onHealRequested(data: { amount: number }): void {
