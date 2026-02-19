@@ -1393,3 +1393,7 @@ src/
 - [x] 建筑贴图美化二轮：`wall/turret/barricade/kitchen/workbench/guard_post` 增加旧化细节、灯条反光、阴影层和警示色。
 - [x] 子弹表现增强二轮：新增发射口 `muzzle flash`（玩家/炮塔/驻守伙伴）并按弹种分型。
 - [x] 验证：`npm run build` 通过；Playwright 折叠点击与渲染正常，`errors-0.json` 为空。
+
+- 2026-02-19 mobile perf pass: added adaptive low/ultra mobile performance tiers (fps, arcade fps, bullet VFX throttling, weather particle throttling, damage text limits, lighting/update throttles).
+- 2026-02-19 deploy note: documented CN-friendly deployment alternatives to Netlify in README (Cloudflare Pages / COS+CDN / OSS+CDN / OBS+CDN).
+- 2026-02-19 verification: npm run build passed; Playwright client smoke ran with no new console/page errors but remained in menu state (state json scene=menu), needs dedicated menu-start automation selector later.

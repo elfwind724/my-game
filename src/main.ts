@@ -33,6 +33,9 @@ const resolveStageForViewport = (vw: number, vh: number) => {
 
 const initialStage = resolveStageForViewport(viewportWidth, viewportHeight);
 const prefersMobilePerf = initialStage.width !== STAGE_DESKTOP.width || initialStage.height !== STAGE_DESKTOP.height;
+const hardwareThreads = typeof navigator !== 'undefined' ? (navigator.hardwareConcurrency || 8) : 8;
+const deviceMemoryGB = typeof navigator !== 'undefined' ? ((navigator as any).deviceMemory || 0) : 0;
+const lowEndMobilePerf = prefersMobilePerf && (hardwareThreads <= 6 || (deviceMemoryGB > 0 && deviceMemoryGB <= 4));
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -51,15 +54,16 @@ const config: Phaser.Types.Core.GameConfig = {
     powerPreference: 'high-performance',
   },
   fps: {
-    target: prefersMobilePerf ? 50 : 60,
+    target: lowEndMobilePerf ? 45 : prefersMobilePerf ? 50 : 60,
     forceSetTimeOut: prefersMobilePerf,
-    smoothStep: !prefersMobilePerf,
+    smoothStep: !(prefersMobilePerf || lowEndMobilePerf),
   },
   scene: [BootScene, MenuScene, GameScene, UIScene, CRTScene],
   physics: {
     default: 'arcade',
     arcade: {
       gravity: { x: 0, y: 0 },
+      fps: lowEndMobilePerf ? 50 : 60,
       debug: false
     }
   },

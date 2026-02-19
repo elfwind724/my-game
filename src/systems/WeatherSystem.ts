@@ -2,6 +2,11 @@ import Phaser from 'phaser';
 
 export type WeatherType = 'clear' | 'rain' | 'storm' | 'snow';
 
+interface WeatherPerfOptions {
+    lowPerfMode?: boolean;
+    ultraLowPerfMode?: boolean;
+}
+
 export class WeatherSystem {
     private scene: Phaser.Scene;
     private currentWeather: WeatherType = 'clear';
@@ -9,9 +14,13 @@ export class WeatherSystem {
     private weatherTimer: Phaser.Time.TimerEvent | null = null;
     private lightningOverlay: Phaser.GameObjects.Rectangle | null = null;
     private isStorming: boolean = false;
+    private lowPerfMode: boolean = false;
+    private ultraLowPerfMode: boolean = false;
 
-    constructor(scene: Phaser.Scene) {
+    constructor(scene: Phaser.Scene, options: WeatherPerfOptions = {}) {
         this.scene = scene;
+        this.lowPerfMode = !!options.lowPerfMode;
+        this.ultraLowPerfMode = !!options.ultraLowPerfMode;
         this.createAssets();
     }
 
@@ -120,6 +129,16 @@ export class WeatherSystem {
                 scale = 0.5;
                 break;
         }
+        if (this.lowPerfMode) {
+            frequency = Math.round(frequency * 1.8);
+            alpha *= 0.8;
+            scale *= 0.9;
+        }
+        if (this.ultraLowPerfMode) {
+            frequency = Math.round(frequency * 2.8);
+            alpha *= 0.7;
+            scale *= 0.8;
+        }
 
         this.emitter = this.scene.add.particles(0, -50, 'weather_particle', {
             x: { min: -100, max: width + 100 },
@@ -127,7 +146,7 @@ export class WeatherSystem {
             lifespan: lifelong,
             speedY: { min: speedY * 0.8, max: speedY * 1.2 },
             speedX: { min: speedX - 20, max: speedX + 20 },
-            quantity: 2,
+            quantity: this.ultraLowPerfMode ? 1 : this.lowPerfMode ? 1 : 2,
             frequency: frequency,
             alpha: { start: alpha, end: 0 },
             scale: scale,
@@ -163,7 +182,9 @@ export class WeatherSystem {
         // Flash: quick bright flash then fade out
         this.lightningOverlay.setAlpha(0.25);
 
-        this.scene.cameras.main.shake(80, 0.003);
+        if (!this.ultraLowPerfMode) {
+            this.scene.cameras.main.shake(this.lowPerfMode ? 50 : 80, this.lowPerfMode ? 0.002 : 0.003);
+        }
 
         this.scene.tweens.add({
             targets: this.lightningOverlay,

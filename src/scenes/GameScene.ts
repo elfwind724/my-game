@@ -432,6 +432,14 @@ export default class GameScene extends Phaser.Scene {
   private arOverdrivePulseAt: number = 0;
   private currentPowerTier: 1 | 2 | 3 = 1;
   private mobileViewport: boolean = false;
+  private lowPerfMode: boolean = false;
+  private ultraLowPerfMode: boolean = false;
+  private nextCompanionRosterSyncAt: number = 0;
+  private nextExplorationUiUpdateAt: number = 0;
+  private nextResidentAssistUpdateAt: number = 0;
+  private nextLightingUpdateAt: number = 0;
+  private activeDamageNumberCount: number = 0;
+  private frameCounter: number = 0;
   private playerFacingDir: HeroV2Direction = 's';
   private playerActionLockUntil: number = 0;
 
@@ -447,6 +455,17 @@ export default class GameScene extends Phaser.Scene {
 
   private isMobilePortraitViewport(): boolean {
     return this.mobileViewport && this.scale.height > this.scale.width;
+  }
+
+  private resolvePerformanceTier(): { low: boolean; ultra: boolean } {
+    if (!this.mobileViewport || typeof navigator === 'undefined') {
+      return { low: false, ultra: false };
+    }
+    const threads = navigator.hardwareConcurrency || 8;
+    const memory = Number((navigator as any).deviceMemory || 0);
+    const low = threads <= 6 || (memory > 0 && memory <= 4);
+    const ultra = threads <= 4 || (memory > 0 && memory <= 2);
+    return { low, ultra };
   }
 
   private getPlayerVisualScale(): number {
@@ -491,6 +510,9 @@ export default class GameScene extends Phaser.Scene {
     const mobileViewport = this.isMobileViewport();
     const mobilePortrait = mobileViewport && this.scale.height > this.scale.width;
     this.mobileViewport = mobileViewport;
+    const perfTier = this.resolvePerformanceTier();
+    this.lowPerfMode = perfTier.low;
+    this.ultraLowPerfMode = perfTier.ultra;
 
     // Reset state
     gameState.resetRun();
@@ -530,6 +552,12 @@ export default class GameScene extends Phaser.Scene {
     this.arOverdriveActiveUntil = 0;
     this.arOverdrivePulseAt = 0;
     this.currentPowerTier = 1;
+    this.nextCompanionRosterSyncAt = 0;
+    this.nextExplorationUiUpdateAt = 0;
+    this.nextResidentAssistUpdateAt = 0;
+    this.nextLightingUpdateAt = 0;
+    this.activeDamageNumberCount = 0;
+    this.frameCounter = 0;
     this.playerFacingDir = 's';
     this.playerActionLockUntil = 0;
     if (this.baseLifePulseTimer) {
@@ -595,9 +623,21 @@ export default class GameScene extends Phaser.Scene {
 
     // Physics groups
     this.enemies = this.physics.add.group();
-    const bulletPoolSize = mobileViewport ? (mobilePortrait ? 700 : 820) : 1200;
-    const vsBulletPoolSize = mobileViewport ? (mobilePortrait ? 1100 : 1300) : 2000;
-    const companionBulletPoolSize = mobileViewport ? (mobilePortrait ? 220 : 260) : 400;
+    const bulletPoolSize = this.ultraLowPerfMode
+      ? (mobilePortrait ? 440 : 520)
+      : this.lowPerfMode
+        ? (mobilePortrait ? 560 : 660)
+        : mobileViewport ? (mobilePortrait ? 700 : 820) : 1200;
+    const vsBulletPoolSize = this.ultraLowPerfMode
+      ? (mobilePortrait ? 700 : 840)
+      : this.lowPerfMode
+        ? (mobilePortrait ? 860 : 1020)
+        : mobileViewport ? (mobilePortrait ? 1100 : 1300) : 2000;
+    const companionBulletPoolSize = this.ultraLowPerfMode
+      ? 160
+      : this.lowPerfMode
+        ? (mobilePortrait ? 180 : 220)
+        : mobileViewport ? (mobilePortrait ? 220 : 260) : 400;
     this.bullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Sprite, maxSize: bulletPoolSize, defaultKey: 'bullet' });
     this.vsBullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Sprite, maxSize: vsBulletPoolSize, defaultKey: 'bullet' });
     this.companionBullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Sprite, maxSize: companionBulletPoolSize, defaultKey: 'bullet' });
@@ -628,7 +668,10 @@ export default class GameScene extends Phaser.Scene {
     });
 
     // Initialize systems
-    this.weatherSystem = new WeatherSystem(this);
+    this.weatherSystem = new WeatherSystem(this, {
+      lowPerfMode: this.lowPerfMode,
+      ultraLowPerfMode: this.ultraLowPerfMode,
+    });
     this.weatherSystem.enable();
     this.animationSystem = new AnimationSystem(this);
     this.weaponSystem = new WeaponSystem(this, this.bullets, [this.walls, this.turrets], []);
@@ -2659,6 +2702,7 @@ export default class GameScene extends Phaser.Scene {
   // UPDATE LOOP
   // ============================================================
   update(_time: number, delta: number): void {
+    this.frameCounter += 1;
     if (this.isGameOver || this.runEventOpen) {
       this.explorationEdgeIndicators.forEach((indicator) => indicator.setVisible(false));
       return;
@@ -2717,18 +2761,31 @@ export default class GameScene extends Phaser.Scene {
       companionGlobalBonus,
       this.permanentTalentBonuses.companionFireRateMul
     );
-    this.syncCompanionRoster();
+    if (this.time.now >= this.nextCompanionRosterSyncAt) {
+      this.nextCompanionRosterSyncAt = this.time.now + (this.lowPerfMode ? 260 : 120);
+      this.syncCompanionRoster();
+    }
     this.updateNightBaseDefense();
-    this.updateExplorationSpotStatus();
-    this.refreshExplorationMarkerVisibility();
-    this.updateResidentAssistTask();
+    if (this.time.now >= this.nextExplorationUiUpdateAt) {
+      this.nextExplorationUiUpdateAt = this.time.now + (this.lowPerfMode ? 280 : 120);
+      this.updateExplorationSpotStatus();
+      this.refreshExplorationMarkerVisibility();
+    }
+    if (this.time.now >= this.nextResidentAssistUpdateAt) {
+      this.nextResidentAssistUpdateAt = this.time.now + (this.lowPerfMode ? 220 : 120);
+      this.updateResidentAssistTask();
+    }
 
     // Homing bullets
     this.updateHomingBullets();
-    this.updateBulletMotionPatterns(delta);
+    if (!this.lowPerfMode || this.frameCounter % 2 === 0) {
+      this.updateBulletMotionPatterns(delta);
+    }
 
     // Bullet cleanup (prevents pool exhaustion / stuck bullets)
-    this.cleanupBullets();
+    if (!this.lowPerfMode || this.frameCounter % 2 === 0) {
+      this.cleanupBullets();
+    }
     this.updateBulletTrails(delta);
 
     // Build preview
@@ -2747,7 +2804,10 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Lighting
-    this.updateLighting();
+    if (!this.lowPerfMode || this.time.now >= this.nextLightingUpdateAt) {
+      this.nextLightingUpdateAt = this.time.now + (this.ultraLowPerfMode ? 48 : this.lowPerfMode ? 34 : 0);
+      this.updateLighting();
+    }
 
     // Animation
     this.updateV2CharacterAnimations();
@@ -2772,7 +2832,7 @@ export default class GameScene extends Phaser.Scene {
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     if (body) {
       const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
-      if (speed > 150 && Math.random() < 0.3) {
+      if (!this.lowPerfMode && speed > 150 && Math.random() < 0.3) {
         const line = this.add.rectangle(
           this.player.x - body.velocity.x * 0.1 + Phaser.Math.Between(-10, 10),
           this.player.y - body.velocity.y * 0.1 + Phaser.Math.Between(-10, 10),
@@ -3160,13 +3220,15 @@ export default class GameScene extends Phaser.Scene {
   private updateBulletTrails(delta: number): void {
     const mobile = this.mobileViewport;
     this.bulletTrailTick += delta;
-    if (this.bulletTrailTick < (mobile ? 28 : 16)) return;
+    const interval = this.ultraLowPerfMode ? 52 : this.lowPerfMode ? 38 : (mobile ? 28 : 16);
+    if (this.bulletTrailTick < interval) return;
     this.bulletTrailTick = 0;
 
     const emitTrail = (group: Phaser.Physics.Arcade.Group, baseRate: number): void => {
       let emitted = 0;
+      const maxEmit = this.ultraLowPerfMode ? 6 : this.lowPerfMode ? (mobile ? 10 : 16) : (mobile ? 16 : 30);
       group.getChildren().forEach((child) => {
-        if (emitted >= (mobile ? 16 : 30)) return;
+        if (emitted >= maxEmit) return;
         const bullet = child as Phaser.Physics.Arcade.Sprite;
         if (!bullet.active) return;
         const b = bullet as any;
@@ -3181,7 +3243,8 @@ export default class GameScene extends Phaser.Scene {
                   : archetype === 'frost' ? 0.36
                     : archetype === 'chain' ? 0.42
                       : 0.32;
-        if (Math.random() > baseRate * trailChance) return;
+        const perfRate = this.ultraLowPerfMode ? 0.62 : this.lowPerfMode ? 0.82 : 1;
+        if (Math.random() > baseRate * trailChance * perfRate) return;
         const body = bullet.body as Phaser.Physics.Arcade.Body | null;
         const vx = body?.velocity.x ?? 0;
         const vy = body?.velocity.y ?? 0;
@@ -3212,7 +3275,7 @@ export default class GameScene extends Phaser.Scene {
           onComplete: () => trail.destroy(),
         });
 
-        if (archetype === 'flame' || archetype === 'cannon' || archetype === 'chain') {
+        if (!this.lowPerfMode && (archetype === 'flame' || archetype === 'cannon' || archetype === 'chain')) {
           const emberColor = archetype === 'chain' ? 0xd8b4fe : archetype === 'flame' ? 0xfb923c : 0xa855f7;
           const ember = this.add.rectangle(tx, ty, 2, 2, emberColor, 0.7).setDepth(10);
           ember.setBlendMode(Phaser.BlendModes.ADD);
@@ -3225,7 +3288,7 @@ export default class GameScene extends Phaser.Scene {
             onComplete: () => ember.destroy(),
           });
         }
-        if (archetype === 'frost') {
+        if (!this.lowPerfMode && archetype === 'frost') {
           const shard = this.add.rectangle(tx, ty, 2, 6, 0xe0f2fe, 0.65).setDepth(10);
           shard.setBlendMode(Phaser.BlendModes.ADD);
           shard.setRotation(dir + Math.PI / 4);
@@ -3240,10 +3303,11 @@ export default class GameScene extends Phaser.Scene {
       });
     };
 
-    emitTrail(this.bullets, mobile ? 0.62 : 0.78);
-    emitTrail(this.vsBullets, mobile ? 0.72 : 0.88);
-    emitTrail(this.companionBullets, mobile ? 0.58 : 0.7);
-    emitTrail(this.turretBullets, mobile ? 0.64 : 0.82);
+    const baseMul = this.ultraLowPerfMode ? 0.7 : this.lowPerfMode ? 0.84 : 1;
+    emitTrail(this.bullets, (mobile ? 0.62 : 0.78) * baseMul);
+    emitTrail(this.vsBullets, (mobile ? 0.72 : 0.88) * baseMul);
+    emitTrail(this.companionBullets, (mobile ? 0.58 : 0.7) * baseMul);
+    emitTrail(this.turretBullets, (mobile ? 0.64 : 0.82) * baseMul);
   }
 
   private updateBulletMotionPatterns(delta: number): void {
@@ -3359,7 +3423,10 @@ export default class GameScene extends Phaser.Scene {
             : archetype === 'pierce' ? 0x7dd3fc
               : color;
     const coreSize = archetype === 'cannon' ? 8 : archetype === 'pierce' ? 6 : 5;
-    const sparkCount = archetype === 'cannon' ? 8 : archetype === 'scatter' ? 5 : 6;
+    const baseSparkCount = archetype === 'cannon' ? 8 : archetype === 'scatter' ? 5 : 6;
+    const sparkCount = this.ultraLowPerfMode ? Math.max(1, Math.floor(baseSparkCount * 0.35))
+      : this.lowPerfMode ? Math.max(2, Math.floor(baseSparkCount * 0.55))
+        : baseSparkCount;
     const travel = archetype === 'cannon' ? 28 : archetype === 'pierce' ? 22 : 18;
     const duration = archetype === 'cannon' ? 220 : archetype === 'chain' ? 180 : 150;
 
@@ -3392,7 +3459,7 @@ export default class GameScene extends Phaser.Scene {
       });
     }
 
-    if (archetype === 'chain') {
+    if (!this.lowPerfMode && archetype === 'chain') {
       for (let i = 0; i < 2; i++) {
         const bolt = this.add.rectangle(x, y, 3, 12, 0xf5d0fe, 0.72).setDepth(112);
         bolt.setBlendMode(Phaser.BlendModes.ADD);
@@ -3405,7 +3472,7 @@ export default class GameScene extends Phaser.Scene {
           onComplete: () => bolt.destroy(),
         });
       }
-    } else if (archetype === 'frost') {
+    } else if (!this.lowPerfMode && archetype === 'frost') {
       const shard = this.add.rectangle(x, y, 2, 14, 0xe0f2fe, 0.7).setDepth(112);
       shard.setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({
@@ -3443,7 +3510,8 @@ export default class GameScene extends Phaser.Scene {
       onComplete: () => core.destroy(),
     });
 
-    const sparkCount = archetype === 'cannon' ? 4 : 2;
+    if (this.ultraLowPerfMode) return;
+    const sparkCount = this.lowPerfMode ? 1 : (archetype === 'cannon' ? 4 : 2);
     for (let i = 0; i < sparkCount; i++) {
       const spread = Phaser.Math.FloatBetween(-0.35, 0.35);
       const dir = angle + Math.PI + spread;
@@ -3914,10 +3982,14 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private showDamageNumber(x: number, y: number, damage: number, isCrit: boolean): void {
+    if (this.ultraLowPerfMode && !isCrit) return;
+    if (this.lowPerfMode && !isCrit && Math.random() < 0.55) return;
+    if (this.activeDamageNumberCount > (this.ultraLowPerfMode ? 10 : this.lowPerfMode ? 20 : 36)) return;
+    this.activeDamageNumberCount += 1;
     const offsetX = Phaser.Math.Between(-15, 15);
     const text = this.add.text(x + offsetX, y - 20, `${Math.floor(damage)}${isCrit ? '!' : ''}`, {
       fontFamily: this.getUIFontFamily(),
-      fontSize: isCrit ? '24px' : '16px',
+      fontSize: isCrit ? (this.lowPerfMode ? '20px' : '24px') : (this.lowPerfMode ? '14px' : '16px'),
       color: isCrit ? '#fbbf24' : '#ffffff',
       fontStyle: 'bold',
       stroke: '#000000',
@@ -3927,7 +3999,10 @@ export default class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: text, y: y - 60, alpha: 0, duration: 800,
       ease: 'Quad.easeOut',
-      onComplete: () => text.destroy(),
+      onComplete: () => {
+        this.activeDamageNumberCount = Math.max(0, this.activeDamageNumberCount - 1);
+        text.destroy();
+      },
     });
   }
 
@@ -3940,6 +4015,8 @@ export default class GameScene extends Phaser.Scene {
       onComplete: () => flash.destroy(),
     });
 
+    if (this.ultraLowPerfMode) return;
+
     // Outer glow
     const glow = this.add.circle(x, y, 12, 0x38bdf8, 0.3);
     glow.setDepth(99);
@@ -3949,7 +4026,7 @@ export default class GameScene extends Phaser.Scene {
     });
 
     // Small spark particles (2-3)
-    const sparkCount = Phaser.Math.Between(2, 3);
+    const sparkCount = this.lowPerfMode ? 1 : Phaser.Math.Between(2, 3);
     for (let i = 0; i < sparkCount; i++) {
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
       const dist = Phaser.Math.Between(8, 20);
@@ -3974,7 +4051,9 @@ export default class GameScene extends Phaser.Scene {
     });
 
     // Particle burst - small squares flying outward
-    const particleCount = Phaser.Math.Between(4, 8);
+    const particleCount = this.ultraLowPerfMode ? Phaser.Math.Between(2, 3)
+      : this.lowPerfMode ? Phaser.Math.Between(3, 5)
+        : Phaser.Math.Between(4, 8);
     for (let i = 0; i < particleCount; i++) {
       const angle = (i / particleCount) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.3, 0.3);
       const speed = Phaser.Math.Between(60, 140);
@@ -4014,8 +4093,9 @@ export default class GameScene extends Phaser.Scene {
     });
 
     // Explosion particles
-    for (let i = 0; i < 12; i++) {
-      const angle = (i / 12) * Math.PI * 2;
+    const particleCount = this.ultraLowPerfMode ? 5 : this.lowPerfMode ? 8 : 12;
+    for (let i = 0; i < particleCount; i++) {
+      const angle = (i / particleCount) * Math.PI * 2;
       const dist = Phaser.Math.Between(20, radius);
       const p = this.add.circle(x, y, Phaser.Math.Between(2, 5), 0xff6600, 0.8).setDepth(100);
       this.tweens.add({
@@ -4036,7 +4116,7 @@ export default class GameScene extends Phaser.Scene {
     });
 
     // Screen shake
-    this.cameras.main.shake(200, 0.01);
+    this.cameras.main.shake(this.lowPerfMode ? 130 : 200, this.lowPerfMode ? 0.006 : 0.01);
   }
 
   private showFloatingText(x: number, y: number, message: string, color: string, isScreenSpace: boolean = false): void {
