@@ -23,6 +23,7 @@ export default class MenuScene extends Phaser.Scene {
     const portraitLayout = mobileViewport && h > w * 1.2;
     const uiScale = Phaser.Math.Clamp(w / 1280, 0.62, 1);
     const fontSize = (base: number) => `${Math.max(10, Math.round(base * uiScale))}px`;
+    const uiFont = 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
 
     const startGame = () => {
       this.scene.start('GameScene');
@@ -68,13 +69,13 @@ export default class MenuScene extends Phaser.Scene {
       this.add.text(w / 2, h * 0.11, 'INMO AR · AIR X', {
         fontSize: pFont(16),
         color: '#7dd3fc',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         fontStyle: 'bold',
       }).setOrigin(0.5);
       this.add.text(w / 2, h * 0.145, '涌现', {
         fontSize: pFont(58),
         color: '#ffffff',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         fontStyle: 'bold',
         stroke: '#0ea5e9',
         strokeThickness: 3,
@@ -82,7 +83,7 @@ export default class MenuScene extends Phaser.Scene {
       this.add.text(w / 2, h * 0.177, 'EMERGENCE', {
         fontSize: pFont(20),
         color: '#38bdf8',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         letterSpacing: 4,
       }).setOrigin(0.5);
 
@@ -95,7 +96,7 @@ export default class MenuScene extends Phaser.Scene {
       ].join('\n'), {
         fontSize: pFont(14),
         color: '#cbd5e1',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         align: 'center',
         lineSpacing: 7,
       }).setOrigin(0.5, 0);
@@ -103,7 +104,7 @@ export default class MenuScene extends Phaser.Scene {
       const startBtn = this.add.text(w / 2, h * 0.43, '[ 开始觉醒 ]', {
         fontSize: pFont(34),
         color: '#38bdf8',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         fontStyle: 'bold',
         backgroundColor: '#0b1d34',
         padding: { x: 24, y: 12 },
@@ -127,13 +128,14 @@ export default class MenuScene extends Phaser.Scene {
         this.add.text(w / 2, y + 4, chip.text, {
           fontSize: pFont(13),
           color: chip.color,
-          fontFamily: 'Courier New',
+          fontFamily: uiFont,
         }).setOrigin(0.5).setDepth(2);
       });
 
       const lineupY = h * 0.79;
       this.add.image(w * 0.15, lineupY, 'player').setScale(1.9).setDepth(2);
-      this.add.image(w * 0.32, lineupY, 'companion').setScale(1.82).setDepth(2);
+      this.add.image(w * 0.32, lineupY, this.textures.exists('companion_tank') ? 'companion_tank' : 'companion').setScale(1.82).setDepth(2);
+      this.add.image(w * 0.41, lineupY, this.textures.exists('companion_medic') ? 'companion_medic' : 'companion').setScale(1.82).setDepth(2);
       this.add.image(w * 0.5, lineupY, 'zombie').setScale(1.82).setDepth(2);
       this.add.image(w * 0.68, lineupY, 'runner').setScale(1.82).setDepth(2);
       this.add.image(w * 0.85, lineupY, 'tank').setScale(1.36).setDepth(2);
@@ -145,20 +147,20 @@ export default class MenuScene extends Phaser.Scene {
       this.add.text(w / 2, h - 70, '竖屏优化: 单手可玩 | 主按钮居中', {
         fontSize: pFont(16),
         color: '#94a3b8',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         align: 'center',
       }).setOrigin(0.5).setDepth(3);
       this.add.text(w / 2, h - 42, '快捷键: B建造 C制造 Q任务 T基地 V仓库 X交易', {
         fontSize: pFont(14),
         color: '#64748b',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         align: 'center',
       }).setOrigin(0.5).setDepth(3);
 
       const collBtn = this.add.text(w - 84, 26, '[ 图鉴 ]', {
         fontSize: pFont(14),
         color: '#a78bfa',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         fontStyle: 'bold',
         backgroundColor: '#0c1829',
         padding: { x: 8, y: 6 },
@@ -178,14 +180,14 @@ export default class MenuScene extends Phaser.Scene {
     this.add.text(w / 2, 46, 'INMO AR · AIR X', {
       fontSize: fontSize(14),
       color: '#7dd3fc',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
     }).setOrigin(0.5);
 
     this.add.text(w / 2, 82, '涌现', {
       fontSize: fontSize(54),
       color: '#ffffff',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
       stroke: '#0ea5e9',
       strokeThickness: 3,
@@ -194,7 +196,7 @@ export default class MenuScene extends Phaser.Scene {
     this.add.text(w / 2, 114, 'EMERGENCE', {
       fontSize: fontSize(17),
       color: '#38bdf8',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       letterSpacing: 6,
     }).setOrigin(0.5);
 
@@ -207,7 +209,7 @@ export default class MenuScene extends Phaser.Scene {
     ].join('\n'), {
       fontSize: fontSize(13),
       color: '#cbd5e1',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       align: 'center',
       lineSpacing: 6,
     }).setOrigin(0.5, 0);
@@ -215,7 +217,7 @@ export default class MenuScene extends Phaser.Scene {
     const startBtn = this.add.text(w / 2, 294, '[ 开始觉醒 ]', {
       fontSize: fontSize(30),
       color: '#38bdf8',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
       backgroundColor: '#0b1d34',
       padding: { x: 34, y: 14 },
@@ -239,13 +241,14 @@ export default class MenuScene extends Phaser.Scene {
       this.add.text(w / 2, y, chip.text, {
         fontSize: fontSize(13),
         color: chip.color,
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
       }).setOrigin(0.5).setDepth(2);
     });
 
     const lineupY = h - 112;
     this.add.image(w * 0.18, lineupY, 'player').setScale(2.25).setDepth(2);
-    this.add.image(w * 0.34, lineupY, 'companion').setScale(2.2).setDepth(2);
+    this.add.image(w * 0.34, lineupY, this.textures.exists('companion_tank') ? 'companion_tank' : 'companion').setScale(2.2).setDepth(2);
+    this.add.image(w * 0.48, lineupY, this.textures.exists('companion_sniper') ? 'companion_sniper' : 'companion').setScale(2.2).setDepth(2);
     this.add.image(w * 0.62, lineupY, 'zombie').setScale(2.2).setDepth(2);
     this.add.image(w * 0.77, lineupY, 'runner').setScale(2.2).setDepth(2);
     this.add.image(w * 0.9, lineupY, 'tank').setScale(1.55).setDepth(2);
@@ -253,6 +256,7 @@ export default class MenuScene extends Phaser.Scene {
     const lineupLabels: Array<{ x: number; name: string; color: string }> = [
       { x: w * 0.18, name: '觉醒者', color: '#7dd3fc' },
       { x: w * 0.34, name: '伙伴', color: '#93c5fd' },
+      { x: w * 0.48, name: '伙伴', color: '#6ee7b7' },
       { x: w * 0.62, name: '被控体', color: '#86efac' },
       { x: w * 0.77, name: '狂奔体', color: '#fca5a5' },
       { x: w * 0.9, name: '重装体', color: '#d8b4fe' },
@@ -261,7 +265,7 @@ export default class MenuScene extends Phaser.Scene {
       this.add.text(item.x, lineupY + 30, item.name, {
         fontSize: fontSize(11),
         color: item.color,
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
       }).setOrigin(0.5).setDepth(2);
     });
 
@@ -273,20 +277,20 @@ export default class MenuScene extends Phaser.Scene {
     this.add.text(w / 2, h - 39, controlLine, {
       fontSize: fontSize(11),
       color: '#94a3b8',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       align: 'center',
       lineSpacing: 4,
     }).setOrigin(0.5).setDepth(3);
     this.add.text(w / 2, h - 22, '单机独立游戏 · 白天经营 + 夜晚硬核防守', {
       fontSize: fontSize(10),
       color: '#64748b',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
     }).setOrigin(0.5).setDepth(3);
 
     const collBtn = this.add.text(w - 120, 26, '[ AR眼镜图鉴 ]', {
       fontSize: fontSize(15),
       color: '#a78bfa',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
       backgroundColor: '#0c1829',
       padding: { x: 10, y: 6 },

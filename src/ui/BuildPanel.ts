@@ -20,6 +20,7 @@ export class BuildPanel {
   private onClose: (() => void) | null = null;
   private buildingCards: Phaser.GameObjects.Container[] = [];
   private tabs: Phaser.GameObjects.Text[] = [];
+  private tabBgs: Phaser.GameObjects.Rectangle[] = [];
   private tabHotzones: Array<{ id: BuildingCategory; x: number; y: number; w: number; h: number }> = [];
   private cardHotzones: Array<{ id: string; canAfford: boolean; x: number; y: number; w: number; h: number }> = [];
   private selectedBuildingId: string | null = null;
@@ -54,6 +55,23 @@ export class BuildPanel {
     return Math.round(value * this.layoutBoost);
   }
 
+  private getCategoryColor(category: BuildingCategory): number {
+    if (category === 'defense') return 0x38bdf8;
+    if (category === 'turret') return 0xa78bfa;
+    if (category === 'production') return 0x22c55e;
+    if (category === 'utility') return 0xf59e0b;
+    return 0xf43f5e;
+  }
+
+  private getCategoryIconTexture(category: BuildingCategory): string | null {
+    if (category === 'defense' && this.scene.textures.exists('wall')) return 'wall';
+    if (category === 'turret' && this.scene.textures.exists('turret')) return 'turret';
+    if (category === 'production' && this.scene.textures.exists('farm_plot')) return 'farm_plot';
+    if (category === 'utility' && this.scene.textures.exists('workbench')) return 'workbench';
+    if (category === 'special' && this.scene.textures.exists('energy_core')) return 'energy_core';
+    return null;
+  }
+
   toggle(onSelect: (buildingId: string) => void, onClose?: () => void): void {
     if (this.isOpen) {
       this.hide();
@@ -73,7 +91,7 @@ export class BuildPanel {
     const w = this.scene.cameras.main.width;
     const h = this.scene.cameras.main.height;
     const mobile = this.isMobileViewport();
-    this.panelHeight = mobile ? Math.min(420, Math.round(h * 0.42)) : 260;
+    this.panelHeight = mobile ? Math.min(460, Math.round(h * 0.48)) : 320;
     const panelH = this.panelHeight;
     this.computeBoosts(w);
 
@@ -90,12 +108,21 @@ export class BuildPanel {
       event.stopPropagation();
     });
     this.container.add(bg);
+    const bgBand = this.scene.add.rectangle(w / 2, -panelH + this.unit(32), w, this.unit(48), 0x0b223b, 0.72);
+    this.container.add(bgBand);
+    const divider = this.scene.add.rectangle(w / 2, -panelH + this.unit(58), w, 2, 0x22d3ee, 0.52);
+    this.container.add(divider);
 
     // Title
-    const title = this.scene.add.text(this.unit(20), -panelH + this.unit(12), '🏗 AR建造系统', {
-      fontSize: this.fs(20, 14), color: '#0ea5e9', fontFamily: this.uiFont, fontStyle: 'bold',
+    const title = this.scene.add.text(this.unit(18), -panelH + this.unit(10), '🏗 基地建造总控', {
+      fontSize: this.fs(20, 14), color: '#38bdf8', fontFamily: this.uiFont, fontStyle: 'bold',
     });
     this.container.add(title);
+    this.container.add(this.scene.add.text(this.unit(18), -panelH + this.unit(32), '选择分类 -> 选中建筑 -> 回到地图放置', {
+      fontSize: this.fs(11, 10),
+      color: '#93c5fd',
+      fontFamily: this.uiFont,
+    }));
 
     // Close button
     const closeBtn = this.scene.add.text(w - this.unit(20), -panelH + this.unit(12), '✕ 关闭', {
@@ -109,12 +136,26 @@ export class BuildPanel {
 
     // Category tabs
     this.tabs.forEach(t => t.destroy());
+    this.tabBgs.forEach(t => t.destroy());
     this.tabs = [];
+    this.tabBgs = [];
+    const tabCount = BUILD_CATEGORIES.length;
+    const tabGap = this.unit(8);
+    const tabStartX = this.unit(14);
+    const tabTotalW = w - this.unit(28);
+    const tabW = Math.floor((tabTotalW - tabGap * (tabCount - 1)) / tabCount);
+    const tabY = -panelH + this.unit(66);
     BUILD_CATEGORIES.forEach((cat, i) => {
-      const tabX = this.unit(20) + i * this.unit(104);
-      const tabY = -panelH + this.unit(45);
-      this.tabHotzones.push({ id: cat.id as BuildingCategory, x: tabX - this.unit(6), y: tabY - this.unit(6), w: this.unit(96), h: this.unit(32) });
-      const tabHit = this.scene.add.rectangle(tabX - this.unit(6), tabY - this.unit(6), this.unit(96), this.unit(32), 0xffffff, 0.001)
+      const tabX = tabStartX + i * (tabW + tabGap);
+      const tabH = this.unit(28);
+      this.tabHotzones.push({ id: cat.id as BuildingCategory, x: tabX, y: tabY, w: tabW, h: tabH });
+
+      const tabBg = this.scene.add.rectangle(tabX + tabW / 2, tabY + tabH / 2, tabW, tabH, 0x111827, 0.9)
+        .setStrokeStyle(1, 0x334155, 0.95);
+      this.container!.add(tabBg);
+      this.tabBgs.push(tabBg);
+
+      const tabHit = this.scene.add.rectangle(tabX, tabY, tabW, tabH, 0xffffff, 0.001)
         .setOrigin(0, 0)
         .setInteractive({ useHandCursor: true });
       tabHit.setData('catId', cat.id);
@@ -124,14 +165,12 @@ export class BuildPanel {
       });
       this.container!.add(tabHit);
 
-      const tab = this.scene.add.text(tabX, tabY, `${cat.icon} ${cat.nameCN}`, {
-        fontSize: this.fs(14, 11),
+      const tab = this.scene.add.text(tabX + tabW / 2, tabY + tabH / 2, `${cat.icon} ${cat.nameCN}`, {
+        fontSize: this.fs(12, 11),
         color: '#64748b',
         fontFamily: this.uiFont,
         fontStyle: 'normal',
-        backgroundColor: undefined,
-        padding: { x: this.unit(6), y: this.unit(4) },
-      }).setInteractive({ useHandCursor: true });
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
       tab.setData('catId', cat.id);
       tab.on('pointerdown', (_pointer: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
@@ -168,14 +207,24 @@ export class BuildPanel {
   }
 
   private updateTabStyles(): void {
-    this.tabs.forEach(tab => {
+    this.tabs.forEach((tab, idx) => {
       const catId = tab.getData('catId') as BuildingCategory | undefined;
       const isSelected = catId === this.selectedCategory;
       tab.setStyle({
-        color: isSelected ? '#0ea5e9' : '#64748b',
+        color: isSelected ? '#e2e8f0' : '#64748b',
         fontStyle: isSelected ? 'bold' : 'normal',
       });
-      tab.setBackgroundColor(isSelected ? '#1e3a5f' : '');
+      tab.setBackgroundColor('');
+      const bg = this.tabBgs[idx];
+      if (!bg || !catId) return;
+      const accent = this.getCategoryColor(catId);
+      if (isSelected) {
+        bg.setFillStyle(0x0b223b, 0.95);
+        bg.setStrokeStyle(2, accent, 0.95);
+      } else {
+        bg.setFillStyle(0x111827, 0.88);
+        bg.setStrokeStyle(1, 0x334155, 0.95);
+      }
     });
   }
 
@@ -188,49 +237,67 @@ export class BuildPanel {
     if (!this.container) return;
 
     const buildings = getBuildingsForCategory(this.selectedCategory);
-    const startX = this.unit(20);
-    const cardY = -this.unit(140);
-    const cardW = this.unit(160);
-    const cardH = this.unit(132);
-    const gap = this.unit(12);
+    const panelW = this.scene.cameras.main.width;
+    const cardTop = -this.panelHeight + this.unit(102);
+    const cardBottom = -this.unit(8);
+    const gapX = this.unit(10);
+    const gapY = this.unit(10);
+    const availableW = panelW - this.unit(24);
+    const preferredW = this.unit(this.isMobileViewport() ? 168 : 190);
+    let columns = Math.floor((availableW + gapX) / Math.max(1, preferredW + gapX));
+    columns = Phaser.Math.Clamp(columns, 2, 4);
+    const cardW = Math.floor((availableW - gapX * (columns - 1)) / columns);
+    const cardH = this.unit(this.isMobileViewport() ? 146 : 138);
+    const availableH = Math.max(1, Math.abs(cardBottom - cardTop));
+    const maxRows = Math.max(1, Math.floor((availableH + gapY) / (cardH + gapY)));
+    const maxCards = Math.max(columns, columns * maxRows);
+    const shownBuildings = buildings.slice(0, maxCards);
 
-    buildings.forEach((bDef, i) => {
-      const card = this.scene.add.container(startX + i * (cardW + gap), cardY);
+    shownBuildings.forEach((bDef, i) => {
+      const row = Math.floor(i / columns);
+      const col = i % columns;
+      const cardX = this.unit(12) + col * (cardW + gapX);
+      const cardY = cardTop + row * (cardH + gapY);
+      const card = this.scene.add.container(cardX, cardY);
 
-      // Card bg
       const canAfford = gameState.canAfford(bDef.cost as any);
       this.cardHotzones.push({
         id: bDef.id,
         canAfford,
-        x: startX + i * (cardW + gap),
+        x: cardX,
         y: cardY,
         w: cardW,
         h: cardH,
       });
+
       const isSelected = this.selectedBuildingId === bDef.id;
+      const accent = this.getCategoryColor(bDef.category);
       const bg = this.scene.add.rectangle(cardW / 2, cardH / 2, cardW, cardH,
-        canAfford ? 0x1e293b : 0x1a1a2e, 0.9);
-      bg.setStrokeStyle(2, isSelected ? 0x22d3ee : (canAfford ? 0x334155 : 0x333333));
+        canAfford ? 0x1e293b : 0x111827, 0.96);
+      bg.setStrokeStyle(2, isSelected ? 0x22d3ee : (canAfford ? 0x334155 : 0x1f2937), 0.96);
       card.add(bg);
+      card.add(this.scene.add.rectangle(cardW / 2, this.unit(10), cardW - 2, this.unit(18), accent, 0.24));
 
-      // Building icon (colored square)
-      const icon = this.scene.add.rectangle(this.unit(25), this.unit(25), this.unit(30), this.unit(30), bDef.color);
-      icon.setStrokeStyle(1, bDef.secondaryColor);
-      card.add(icon);
+      const iconBox = this.scene.add.rectangle(this.unit(26), this.unit(30), this.unit(36), this.unit(36), 0x0b1220, 0.95)
+        .setStrokeStyle(1, bDef.secondaryColor, 0.95);
+      card.add(iconBox);
+      const iconTexture = this.getCategoryIconTexture(bDef.category);
+      if (iconTexture) {
+        card.add(this.scene.add.image(this.unit(26), this.unit(30), iconTexture).setScale(0.46));
+      } else {
+        const icon = this.scene.add.rectangle(this.unit(26), this.unit(30), this.unit(18), this.unit(18), bDef.color);
+        icon.setStrokeStyle(1, bDef.secondaryColor);
+        card.add(icon);
+      }
 
-      // Name
-      const name = this.scene.add.text(this.unit(55), this.unit(12), bDef.nameCN, {
-        fontSize: this.fs(14, 11), color: '#ffffff', fontFamily: this.uiFont, fontStyle: 'bold',
-      });
-      card.add(name);
+      const descText = bDef.descriptionCN.length > 20 ? `${bDef.descriptionCN.slice(0, 20)}…` : bDef.descriptionCN;
+      card.add(this.scene.add.text(this.unit(50), this.unit(14), bDef.nameCN, {
+        fontSize: this.fs(13, 11), color: '#f8fafc', fontFamily: this.uiFont, fontStyle: 'bold',
+      }));
+      card.add(this.scene.add.text(this.unit(50), this.unit(30), `T${bDef.tier} · HP${bDef.health}`, {
+        fontSize: this.fs(10, 10), color: '#94a3b8', fontFamily: this.uiFont,
+      }));
 
-      // Tier
-      const tierText = this.scene.add.text(this.unit(55), this.unit(30), `T${bDef.tier} · HP:${bDef.health}`, {
-        fontSize: this.fs(11, 10), color: '#64748b', fontFamily: this.uiFont,
-      });
-      card.add(tierText);
-
-      // Cost
       const costParts: string[] = [];
       for (const [res, amt] of Object.entries(bDef.cost)) {
         const names: Record<string, string> = {
@@ -239,24 +306,37 @@ export class BuildPanel {
         };
         costParts.push(`${names[res] || res}${amt}`);
       }
-      const costText = this.scene.add.text(this.unit(10), this.unit(55), costParts.join(' '), {
-        fontSize: this.fs(12, 11), color: canAfford ? '#4ade80' : '#ef4444', fontFamily: this.uiFont,
-      });
-      card.add(costText);
-
-      // Description
-      const desc = this.scene.add.text(this.unit(10), this.unit(75), bDef.descriptionCN, {
-        fontSize: this.fs(10, 10), color: '#94a3b8', fontFamily: this.uiFont,
+      card.add(this.scene.add.text(this.unit(10), this.unit(58), `耗材: ${costParts.join(' ')}`, {
+        fontSize: this.fs(10, 10), color: canAfford ? '#4ade80' : '#ef4444', fontFamily: this.uiFont,
+      }));
+      card.add(this.scene.add.text(this.unit(10), this.unit(76), descText, {
+        fontSize: this.fs(10, 10), color: '#cbd5e1', fontFamily: this.uiFont,
         wordWrap: { width: cardW - this.unit(20) },
-      });
-      card.add(desc);
+      }));
 
-      // Interactive
+      const categoryTag = this.scene.add.text(this.unit(10), cardH - this.unit(26), `${bDef.category.toUpperCase()}`, {
+        fontSize: this.fs(9, 9),
+        color: '#7dd3fc',
+        fontFamily: this.uiFont,
+        backgroundColor: '#0b1220',
+        padding: { x: this.unit(4), y: this.unit(2) },
+      });
+      card.add(categoryTag);
+      const actionLabel = isSelected ? '已选中' : (canAfford ? '点击建造' : '资源不足');
+      card.add(this.scene.add.text(cardW - this.unit(10), cardH - this.unit(26), actionLabel, {
+        fontSize: this.fs(10, 10),
+        color: isSelected ? '#22d3ee' : (canAfford ? '#38bdf8' : '#64748b'),
+        fontFamily: this.uiFont,
+        fontStyle: 'bold',
+        backgroundColor: '#0b1220',
+        padding: { x: this.unit(6), y: this.unit(2) },
+      }).setOrigin(1, 0));
+
       bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerover', () => bg.setStrokeStyle(2, 0x0ea5e9));
+      bg.on('pointerover', () => bg.setStrokeStyle(2, 0x38bdf8, 0.98));
       bg.on('pointerout', () => {
         const selected = this.selectedBuildingId === bDef.id;
-        bg.setStrokeStyle(2, selected ? 0x22d3ee : (canAfford ? 0x334155 : 0x333333));
+        bg.setStrokeStyle(2, selected ? 0x22d3ee : (canAfford ? 0x334155 : 0x1f2937), 0.96);
       });
       bg.on('pointerdown', (_pointer: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
         event.stopPropagation();
@@ -267,11 +347,19 @@ export class BuildPanel {
       this.buildingCards.push(card);
     });
 
+    if (buildings.length > shownBuildings.length) {
+      this.container.add(this.scene.add.text(panelW - this.unit(14), cardBottom - this.unit(14), `+${buildings.length - shownBuildings.length} 项未显示`, {
+        fontSize: this.fs(10, 10),
+        color: '#94a3b8',
+        fontFamily: this.uiFont,
+      }).setOrigin(1, 1));
+    }
+
     // Keep preview in sync when switching categories.
-    if (buildings.length > 0) {
-      const hasSelected = !!this.selectedBuildingId && buildings.some(b => b.id === this.selectedBuildingId);
+    if (shownBuildings.length > 0) {
+      const hasSelected = !!this.selectedBuildingId && shownBuildings.some(b => b.id === this.selectedBuildingId);
       if (!hasSelected) {
-        this.selectBuilding(buildings[0].id, true);
+        this.selectBuilding(shownBuildings[0].id, true);
       }
     } else {
       this.selectedBuildingId = null;
@@ -300,6 +388,7 @@ export class BuildPanel {
         this.container?.destroy();
         this.container = null;
         this.buildingCards = [];
+        this.tabBgs = [];
         this.tabHotzones = [];
         this.cardHotzones = [];
         const callback = this.onClose;
@@ -369,6 +458,7 @@ export class BuildPanel {
     this.container?.destroy();
     this.container = null;
     this.buildingCards = [];
+    this.tabBgs = [];
     this.tabHotzones = [];
     this.cardHotzones = [];
     this.selectedBuildingId = null;

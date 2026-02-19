@@ -412,19 +412,38 @@ export class QuestPanel extends SlidePanel {
     super(scene, 380, 'left');
   }
 
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024 || (navigator.maxTouchPoints || 0) > 1;
+  }
+
+  private getUIFontFamily(): string {
+    return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  }
+
+  private fs(base: number, min: number = 11): string {
+    const w = this.scene.cameras.main.width || 1;
+    const h = this.scene.cameras.main.height || 1;
+    const portrait = h > w;
+    const boost = this.isMobileViewport() ? (portrait ? 1.22 : 1.1) : 1;
+    return `${Math.max(min, Math.round(base * boost))}px`;
+  }
+
   show(): void {
     if (this.isOpen) { this.hide(); return; }
     const container = this.createBase();
     const h = this.scene.cameras.main.height;
+    const uiFont = this.getUIFontFamily();
 
     // Title
     container.add(this.scene.add.text(20, 15, '📋 任务日志', {
-      fontSize: '22px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(22, 18), color: '#fbbf24', fontFamily: uiFont, fontStyle: 'bold',
     }));
 
     // Close
     const close = this.scene.add.text(this.panelWidth - 15, 15, '✕', {
-      fontSize: '20px', color: '#ef4444', fontFamily: 'Courier New',
+      fontSize: this.fs(20, 18), color: '#ef4444', fontFamily: uiFont,
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     close.setDepth(1);
     if (close.input) (close.input as any).priorityID = 2;
@@ -437,20 +456,20 @@ export class QuestPanel extends SlidePanel {
     let y = 55;
 
     container.add(this.scene.add.text(20, y, `进行中任务: ${activeQuests.length}/${maxQuests}`, {
-      fontSize: '13px', color: '#94a3b8', fontFamily: 'Courier New',
+      fontSize: this.fs(13, 11), color: '#94a3b8', fontFamily: uiFont,
     }));
     y += 20;
 
     if (activeQuests.length === 0) {
       container.add(this.scene.add.text(20, y, '暂无进行中的任务\n与NPC对话接受任务', {
-        fontSize: '14px', color: '#64748b', fontFamily: 'Courier New',
+        fontSize: this.fs(14, 12), color: '#64748b', fontFamily: uiFont,
       }));
       y += 50;
     } else {
       activeQuests.forEach(quest => {
         // Quest name
         container.add(this.scene.add.text(20, y, quest.def.nameCN, {
-          fontSize: '16px', color: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
+          fontSize: this.fs(16, 13), color: '#ffffff', fontFamily: uiFont, fontStyle: 'bold',
         }));
         y += 22;
 
@@ -459,7 +478,7 @@ export class QuestPanel extends SlidePanel {
           const done = obj.current >= obj.target;
           container.add(this.scene.add.text(30, y,
             `${done ? '✅' : '⬜'} ${obj.obj.descriptionCN} (${obj.current}/${obj.target})`, {
-            fontSize: '13px', color: done ? '#4ade80' : '#94a3b8', fontFamily: 'Courier New',
+            fontSize: this.fs(13, 11), color: done ? '#4ade80' : '#94a3b8', fontFamily: uiFont,
           }));
           y += 18;
         });
@@ -470,7 +489,7 @@ export class QuestPanel extends SlidePanel {
     // Available quests
     y += 10;
     container.add(this.scene.add.text(20, y, '可接受的任务:', {
-      fontSize: '16px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(16, 13), color: '#fbbf24', fontFamily: uiFont, fontStyle: 'bold',
     }));
     y += 25;
 
@@ -480,7 +499,7 @@ export class QuestPanel extends SlidePanel {
 
     if (activeQuests.length >= maxQuests) {
       container.add(this.scene.add.text(20, y, `任务已满（最多${maxQuests}个），先完成一个再接新任务`, {
-        fontSize: '12px', color: '#ef4444', fontFamily: 'Courier New',
+        fontSize: this.fs(12, 11), color: '#ef4444', fontFamily: uiFont,
       }));
       return;
     }
@@ -491,11 +510,11 @@ export class QuestPanel extends SlidePanel {
       container.add(card);
 
       container.add(this.scene.add.text(25, y + 8, quest.nameCN, {
-        fontSize: '14px', color: '#e2e8f0', fontFamily: 'Courier New',
+        fontSize: this.fs(14, 12), color: '#e2e8f0', fontFamily: uiFont,
       }));
 
       const acceptBtn = this.scene.add.text(this.panelWidth - 25, y + 12, '接受', {
-        fontSize: '13px', color: '#0ea5e9', fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: this.fs(13, 11), color: '#0ea5e9', fontFamily: uiFont, fontStyle: 'bold',
         backgroundColor: '#0c1829', padding: { x: 6, y: 3 },
       }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
       acceptBtn.on('pointerdown', () => {

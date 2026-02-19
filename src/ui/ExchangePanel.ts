@@ -39,6 +39,24 @@ export class ExchangePanel {
     this.show();
   }
 
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024 || (navigator.maxTouchPoints || 0) > 1;
+  }
+
+  private getUIFontFamily(): string {
+    return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  }
+
+  private fs(base: number, min: number = 12): string {
+    const w = this.scene.cameras.main.width || 1;
+    const h = this.scene.cameras.main.height || 1;
+    const portrait = h > w;
+    const boost = this.isMobileViewport() ? (portrait ? 1.24 : 1.12) : 1;
+    return `${Math.max(min, Math.round(base * boost))}px`;
+  }
+
   show(): void {
     if (this.isOpen) return;
     this.isOpen = true;
@@ -49,6 +67,7 @@ export class ExchangePanel {
     const panelH = Math.min(470, h - 40);
     const panelX = (w - panelW) / 2;
     const panelY = (h - panelH) / 2;
+    const uiFont = this.getUIFontFamily();
 
     this.container = this.scene.add.container(0, 0).setScrollFactor(0).setDepth(4200);
 
@@ -61,16 +80,16 @@ export class ExchangePanel {
     this.container.add(bg);
 
     this.container.add(this.scene.add.text(panelX + 16, panelY + 12, '📈 数据交易所', {
-      fontSize: '24px',
+      fontSize: this.fs(24, 19),
       color: '#fbbf24',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
     }));
 
     const close = this.scene.add.text(panelX + panelW - 14, panelY + 8, '✕', {
-      fontSize: '24px',
+      fontSize: this.fs(24, 20),
       color: '#ef4444',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.hide());
@@ -82,9 +101,9 @@ export class ExchangePanel {
 
     this.container.add(this.scene.add.text(panelX + 16, panelY + 46,
       `第${day}天行情  |  眼镜指数 x${market.toFixed(2)}  |  当前₿ ${gameState.data.resources.bitcoin.toFixed(3)}`, {
-      fontSize: '12px',
+      fontSize: this.fs(12, 11),
       color: '#93c5fd',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
     }));
 
     const keys = Object.keys(rates) as ExchangeResource[];
@@ -103,16 +122,16 @@ export class ExchangePanel {
 
       this.container!.add(this.scene.add.text(panelX + 20, y + 11,
         `${name}  持有:${own}  价:${rate.toFixed(3)}₿`, {
-        fontSize: '12px',
+        fontSize: this.fs(12, 11),
         color: '#cbd5e1',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
       }));
 
       const sellBtn = this.scene.add.text(panelX + panelW - 20, y + 9,
         `卖出x${unit} (+₿${gain.toFixed(3)})`, {
-          fontSize: '12px',
+          fontSize: this.fs(12, 11),
           color: own >= unit ? '#22c55e' : '#6b7280',
-          fontFamily: 'Courier New',
+          fontFamily: uiFont,
           backgroundColor: own >= unit ? '#13251a' : '#1f2937',
           padding: { x: 8, y: 4 },
         }).setOrigin(1, 0).setInteractive({ useHandCursor: own >= unit });
@@ -129,9 +148,9 @@ export class ExchangePanel {
 
     this.container.add(this.scene.add.text(panelX + 16, panelY + panelH - 26,
       '说明：每日汇率浮动，优先卖出富余资源换取比特币', {
-      fontSize: '11px',
+      fontSize: this.fs(11, 10),
       color: '#64748b',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
     }));
   }
 
@@ -160,9 +179,9 @@ export class ExchangePanel {
   private flashMessage(message: string, color: string): void {
     const w = this.scene.cameras.main.width;
     const text = this.scene.add.text(w / 2, 120, message, {
-      fontSize: '18px',
+      fontSize: this.fs(18, 16),
       color,
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 3,
@@ -177,4 +196,3 @@ export class ExchangePanel {
     });
   }
 }
-

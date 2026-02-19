@@ -98,10 +98,30 @@ export class LeisurePanel {
     else this.show();
   }
 
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024 || (navigator.maxTouchPoints || 0) > 1;
+  }
+
+  private getUIFontFamily(): string {
+    return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  }
+
+  private fs(base: number, min: number = 12): string {
+    const w = this.scene.cameras.main.width || 1;
+    const h = this.scene.cameras.main.height || 1;
+    const portrait = h > w;
+    const boost = this.isMobileViewport() ? (portrait ? 1.24 : 1.1) : 1;
+    return `${Math.max(min, Math.round(base * boost))}px`;
+  }
+
   show(): void {
     if (this.open) return;
     this.open = true;
+    const w = this.scene.cameras.main.width;
     const h = this.scene.cameras.main.height;
+    this.width = this.isMobileViewport() ? Math.min(w - 8, 500) : 420;
 
     this.container = this.scene.add.container(-this.width, 0).setScrollFactor(0).setDepth(2900);
     const bg = this.scene.add.rectangle(this.width / 2, h / 2, this.width, h, 0x111827, 0.95);
@@ -110,25 +130,25 @@ export class LeisurePanel {
     this.container.add(bg);
 
     const title = this.scene.add.text(20, 16, '基地休闲活动', {
-      fontSize: '22px',
+      fontSize: this.fs(22, 18),
       color: '#38bdf8',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
     });
     this.container.add(title);
 
     const close = this.scene.add.text(this.width - 18, 14, '✕', {
-      fontSize: '20px',
+      fontSize: this.fs(20, 18),
       color: '#ef4444',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.hide());
     this.container.add(close);
 
     const stateText = this.scene.add.text(20, 52, this.getStatusText(), {
-      fontSize: '12px',
+      fontSize: this.fs(12, 11),
       color: '#cbd5e1',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
     });
     this.container.add(stateText);
 
@@ -139,22 +159,22 @@ export class LeisurePanel {
       this.container!.add(card);
 
       this.container!.add(this.scene.add.text(26, y + 10, activity.title, {
-        fontSize: '16px',
+        fontSize: this.fs(16, 13),
         color: activity.color,
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         fontStyle: 'bold',
       }));
 
       this.container!.add(this.scene.add.text(26, y + 34, activity.desc, {
-        fontSize: '12px',
+        fontSize: this.fs(12, 11),
         color: '#94a3b8',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
       }));
 
       const btn = this.scene.add.text(this.width - 30, y + 24, '挑战', {
-        fontSize: '13px',
+        fontSize: this.fs(13, 11),
         color: '#0f172a',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         fontStyle: 'bold',
         backgroundColor: activity.color,
         padding: { x: 8, y: 4 },
@@ -241,17 +261,17 @@ export class LeisurePanel {
     this.miniLayer.add(panelBg);
 
     const title = this.scene.add.text(14, 12, `${activity.title} · 判定挑战`, {
-      fontSize: '16px',
+      fontSize: this.fs(16, 13),
       color: activity.color,
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
     });
     this.miniLayer.add(title);
 
     this.miniRoundText = this.scene.add.text(14, 34, '第1/5轮', {
-      fontSize: '12px',
+      fontSize: this.fs(12, 11),
       color: '#e2e8f0',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
     });
     this.miniLayer.add(this.miniRoundText);
 
@@ -259,24 +279,24 @@ export class LeisurePanel {
       ? '按提示方向键，越快越准奖励越高'
       : '让光标停在亮区，点击“判定”或按 Space';
     this.miniHintText = this.scene.add.text(14, 54, hint, {
-      fontSize: '11px',
+      fontSize: this.fs(11, 10),
       color: '#94a3b8',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
     });
     this.miniLayer.add(this.miniHintText);
 
     this.miniStreakText = this.scene.add.text(panelW - 14, 54, '连击 x0', {
-      fontSize: '11px',
+      fontSize: this.fs(11, 10),
       color: '#a7f3d0',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
     }).setOrigin(1, 0);
     this.miniLayer.add(this.miniStreakText);
 
     this.miniEventText = this.scene.add.text(14, 72, '', {
-      fontSize: '11px',
+      fontSize: this.fs(11, 10),
       color: '#fde68a',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
     });
     this.miniLayer.add(this.miniEventText);
@@ -299,9 +319,9 @@ export class LeisurePanel {
       this.miniLayer.add(this.miniPointer);
     } else {
       this.qtePromptText = this.scene.add.text(panelW / 2, 120, '←', {
-        fontSize: '56px',
+        fontSize: this.fs(56, 46),
         color: '#f8fafc',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         fontStyle: 'bold',
         stroke: '#0b1220',
         strokeThickness: 4,
@@ -317,9 +337,9 @@ export class LeisurePanel {
     }
 
     this.miniResultText = this.scene.add.text(panelW / 2, 158, '', {
-      fontSize: '16px',
+      fontSize: this.fs(16, 13),
       color: '#f8fafc',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       stroke: '#020617',
       strokeThickness: 3,
@@ -328,9 +348,9 @@ export class LeisurePanel {
 
     const judgeLabel = mode === 'qte' ? '方向键判定 [↑↓←→]' : '判定  [SPACE]';
     const judgeBtn = this.scene.add.text(panelW / 2, 194, judgeLabel, {
-      fontSize: '13px',
+      fontSize: this.fs(13, 11),
       color: '#0b1220',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       backgroundColor: mode === 'qte' ? '#38bdf8' : '#22c55e',
       padding: { x: 12, y: 5 },
@@ -341,9 +361,9 @@ export class LeisurePanel {
     this.miniLayer.add(judgeBtn);
 
     const cancelBtn = this.scene.add.text(panelW - 14, 14, '放弃', {
-      fontSize: '12px',
+      fontSize: this.fs(12, 11),
       color: '#ef4444',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     cancelBtn.on('pointerdown', () => {
       this.teardownMiniGame();
@@ -742,9 +762,9 @@ export class LeisurePanel {
     const x = this.scene.cameras.main.width / 2;
     const y = 140;
     const text = this.scene.add.text(x, y, message, {
-      fontSize: '16px',
+      fontSize: this.fs(16, 14),
       color,
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 3,

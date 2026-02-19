@@ -48,6 +48,24 @@ export class GlassesShopPanel {
     this.show();
   }
 
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024 || (navigator.maxTouchPoints || 0) > 1;
+  }
+
+  private getUIFontFamily(): string {
+    return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  }
+
+  private fs(base: number, min: number = 12): string {
+    const w = this.scene.cameras.main.width || 1;
+    const h = this.scene.cameras.main.height || 1;
+    const portrait = h > w;
+    const boost = this.isMobileViewport() ? (portrait ? 1.24 : 1.12) : 1;
+    return `${Math.max(min, Math.round(base * boost))}px`;
+  }
+
   show(): void {
     if (this.isOpen) return;
     this.isOpen = true;
@@ -58,6 +76,7 @@ export class GlassesShopPanel {
     const panelH = Math.min(560, h - 40);
     const panelX = (w - panelW) / 2;
     const panelY = (h - panelH) / 2;
+    const uiFont = this.getUIFontFamily();
 
     this.container = this.scene.add.container(0, 0).setScrollFactor(0).setDepth(4300);
     this.list = this.getShopList();
@@ -71,16 +90,16 @@ export class GlassesShopPanel {
     this.container.add(bg);
 
     this.container.add(this.scene.add.text(panelX + 18, panelY + 12, '🕶 宝岛眼镜店', {
-      fontSize: '25px',
+      fontSize: this.fs(25, 20),
       color: '#38bdf8',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
     }));
 
     const close = this.scene.add.text(panelX + panelW - 14, panelY + 8, '✕', {
-      fontSize: '24px',
+      fontSize: this.fs(24, 20),
       color: '#ef4444',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.hide());
@@ -89,9 +108,9 @@ export class GlassesShopPanel {
     const market = BaseSystem.getDailyGlassesPriceMultiplier();
     this.container.add(this.scene.add.text(panelX + 18, panelY + 48,
       `当前比特币: ₿${gameState.data.resources.bitcoin.toFixed(3)}  |  今日镜价指数 x${market.toFixed(2)}`, {
-      fontSize: '12px',
+      fontSize: this.fs(12, 11),
       color: '#93c5fd',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
     }));
 
     let y = panelY + 76;
@@ -103,26 +122,26 @@ export class GlassesShopPanel {
 
       this.container!.add(this.scene.add.text(panelX + 20, y + 8,
         `${glass.icon} ${glass.nameCN} · ${glass.brand}`, {
-        fontSize: '14px',
+        fontSize: this.fs(14, 12),
         color: '#e2e8f0',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         fontStyle: 'bold',
       }));
 
       const tree = EvolutionSystem.getBrandSkillTreeByBrand(glass.brand);
       this.container!.add(this.scene.add.text(panelX + 20, y + 30, `${tree.treeNameCN}：${tree.summaryCN}`, {
-        fontSize: '11px',
+        fontSize: this.fs(11, 10),
         color: '#94a3b8',
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
       }));
 
       const owned = gameState.data.collectedGlasses.includes(glass.id);
       const price = this.getPrice(glass);
       const btnLabel = owned ? '已拥有' : `购买 ₿${price.toFixed(2)}`;
       const buyBtn = this.scene.add.text(panelX + panelW - 20, y + 18, btnLabel, {
-        fontSize: '12px',
+        fontSize: this.fs(12, 11),
         color: owned ? '#6b7280' : (gameState.data.resources.bitcoin >= price ? '#22c55e' : '#ef4444'),
-        fontFamily: 'Courier New',
+        fontFamily: uiFont,
         backgroundColor: owned ? '#1f2937' : '#13251a',
         padding: { x: 8, y: 5 },
       }).setOrigin(1, 0).setInteractive({ useHandCursor: !owned });
@@ -149,9 +168,9 @@ export class GlassesShopPanel {
 
     this.container.add(this.scene.add.text(panelX + 18, panelY + panelH - 24,
       '提示：不同厂家对应不同弹幕成长树，可在图鉴中设为当前装备', {
-      fontSize: '11px',
+      fontSize: this.fs(11, 10),
       color: '#64748b',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
     }));
   }
 
@@ -207,9 +226,9 @@ export class GlassesShopPanel {
   private flash(message: string, color: string): void {
     const w = this.scene.cameras.main.width;
     const text = this.scene.add.text(w / 2, 112, message, {
-      fontSize: '18px',
+      fontSize: this.fs(18, 16),
       color,
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 3,

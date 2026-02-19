@@ -1,0 +1,500 @@
+{
+  "meta": {
+    "image": "survivor_plus_3zombies_master_32.png",
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "count": 80,
+    "layout": {
+      "cols": 10,
+      "rows": 8
+    },
+    "order": [
+      "hero_8dir_walk",
+      "zombie_walker_4dir_walk",
+      "zombie_runner_4dir_walk",
+      "zombie_brute_4dir_walk"
+    ]
+  },
+  "frames": {
+    "f000_f000_hero_n_walk_0": {
+      "x": 0,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f001_f001_hero_n_walk_1": {
+      "x": 32,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f002_f002_hero_n_walk_2": {
+      "x": 64,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f003_f003_hero_n_walk_3": {
+      "x": 96,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f004_f004_hero_ne_walk_0": {
+      "x": 128,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f005_f005_hero_ne_walk_1": {
+      "x": 160,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f006_f006_hero_ne_walk_2": {
+      "x": 192,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f007_f007_hero_ne_walk_3": {
+      "x": 224,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f008_f008_hero_e_walk_0": {
+      "x": 256,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f009_f009_hero_e_walk_1": {
+      "x": 288,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "f010_f010_hero_e_walk_2": {
+      "x": 0,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f011_f011_hero_e_walk_3": {
+      "x": 32,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f012_f012_hero_se_walk_0": {
+      "x": 64,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f013_f013_hero_se_walk_1": {
+      "x": 96,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f014_f014_hero_se_walk_2": {
+      "x": 128,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f015_f015_hero_se_walk_3": {
+      "x": 160,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f016_f016_hero_s_walk_0": {
+      "x": 192,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f017_f017_hero_s_walk_1": {
+      "x": 224,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f018_f018_hero_s_walk_2": {
+      "x": 256,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f019_f019_hero_s_walk_3": {
+      "x": 288,
+      "y": 32,
+      "w": 32,
+      "h": 32
+    },
+    "f020_f020_hero_sw_walk_0": {
+      "x": 0,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f021_f021_hero_sw_walk_1": {
+      "x": 32,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f022_f022_hero_sw_walk_2": {
+      "x": 64,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f023_f023_hero_sw_walk_3": {
+      "x": 96,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f024_f024_hero_w_walk_0": {
+      "x": 128,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f025_f025_hero_w_walk_1": {
+      "x": 160,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f026_f026_hero_w_walk_2": {
+      "x": 192,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f027_f027_hero_w_walk_3": {
+      "x": 224,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f028_f028_hero_nw_walk_0": {
+      "x": 256,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f029_f029_hero_nw_walk_1": {
+      "x": 288,
+      "y": 64,
+      "w": 32,
+      "h": 32
+    },
+    "f030_f030_hero_nw_walk_2": {
+      "x": 0,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f031_f031_hero_nw_walk_3": {
+      "x": 32,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f032_f000_zombie_walker_n_walk_0": {
+      "x": 64,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f033_f001_zombie_walker_n_walk_1": {
+      "x": 96,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f034_f002_zombie_walker_n_walk_2": {
+      "x": 128,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f035_f003_zombie_walker_n_walk_3": {
+      "x": 160,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f036_f004_zombie_walker_e_walk_0": {
+      "x": 192,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f037_f005_zombie_walker_e_walk_1": {
+      "x": 224,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f038_f006_zombie_walker_e_walk_2": {
+      "x": 256,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f039_f007_zombie_walker_e_walk_3": {
+      "x": 288,
+      "y": 96,
+      "w": 32,
+      "h": 32
+    },
+    "f040_f008_zombie_walker_s_walk_0": {
+      "x": 0,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f041_f009_zombie_walker_s_walk_1": {
+      "x": 32,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f042_f010_zombie_walker_s_walk_2": {
+      "x": 64,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f043_f011_zombie_walker_s_walk_3": {
+      "x": 96,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f044_f012_zombie_walker_w_walk_0": {
+      "x": 128,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f045_f013_zombie_walker_w_walk_1": {
+      "x": 160,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f046_f014_zombie_walker_w_walk_2": {
+      "x": 192,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f047_f015_zombie_walker_w_walk_3": {
+      "x": 224,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f048_f000_zombie_runner_n_walk_0": {
+      "x": 256,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f049_f001_zombie_runner_n_walk_1": {
+      "x": 288,
+      "y": 128,
+      "w": 32,
+      "h": 32
+    },
+    "f050_f002_zombie_runner_n_walk_2": {
+      "x": 0,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f051_f003_zombie_runner_n_walk_3": {
+      "x": 32,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f052_f004_zombie_runner_e_walk_0": {
+      "x": 64,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f053_f005_zombie_runner_e_walk_1": {
+      "x": 96,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f054_f006_zombie_runner_e_walk_2": {
+      "x": 128,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f055_f007_zombie_runner_e_walk_3": {
+      "x": 160,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f056_f008_zombie_runner_s_walk_0": {
+      "x": 192,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f057_f009_zombie_runner_s_walk_1": {
+      "x": 224,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f058_f010_zombie_runner_s_walk_2": {
+      "x": 256,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f059_f011_zombie_runner_s_walk_3": {
+      "x": 288,
+      "y": 160,
+      "w": 32,
+      "h": 32
+    },
+    "f060_f012_zombie_runner_w_walk_0": {
+      "x": 0,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f061_f013_zombie_runner_w_walk_1": {
+      "x": 32,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f062_f014_zombie_runner_w_walk_2": {
+      "x": 64,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f063_f015_zombie_runner_w_walk_3": {
+      "x": 96,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f064_f000_zombie_brute_n_walk_0": {
+      "x": 128,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f065_f001_zombie_brute_n_walk_1": {
+      "x": 160,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f066_f002_zombie_brute_n_walk_2": {
+      "x": 192,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f067_f003_zombie_brute_n_walk_3": {
+      "x": 224,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f068_f004_zombie_brute_e_walk_0": {
+      "x": 256,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f069_f005_zombie_brute_e_walk_1": {
+      "x": 288,
+      "y": 192,
+      "w": 32,
+      "h": 32
+    },
+    "f070_f006_zombie_brute_e_walk_2": {
+      "x": 0,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f071_f007_zombie_brute_e_walk_3": {
+      "x": 32,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f072_f008_zombie_brute_s_walk_0": {
+      "x": 64,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f073_f009_zombie_brute_s_walk_1": {
+      "x": 96,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f074_f010_zombie_brute_s_walk_2": {
+      "x": 128,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f075_f011_zombie_brute_s_walk_3": {
+      "x": 160,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f076_f012_zombie_brute_w_walk_0": {
+      "x": 192,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f077_f013_zombie_brute_w_walk_1": {
+      "x": 224,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f078_f014_zombie_brute_w_walk_2": {
+      "x": 256,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    },
+    "f079_f015_zombie_brute_w_walk_3": {
+      "x": 288,
+      "y": 224,
+      "w": 32,
+      "h": 32
+    }
+  }
+}

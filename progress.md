@@ -1050,3 +1050,346 @@ src/
 ### 备注
 - 当“等级提升”面板处于开启状态时，移动端全局关闭 `✕` 会按设计忽略（避免跳过升级选择）。
 - 普通菜单可通过“同名按钮再次点击（×态）”稳定关闭，符合无键鼠移动端闭环操作。
+
+## 2026-02-18 第一批像素素材产出（主角+3僵尸）
+
+### 需求
+- 主角 + 3 种僵尸
+- 32x32
+- 主角 8 方向行走
+- 敌人 4 方向行走
+- 导出 spritesheet
+
+### 产物
+- 生成脚本：`/Users/fengnian/my-game/scripts/generate_pixel_assets.py`
+- 输出目录：`/Users/fengnian/my-game/assets/generated/pixel_pack_v1/`
+  - `frames/`：逐帧 PNG
+  - `sheets/`：spritesheet + JSON
+  - `preview_4x/`：4x 预览图
+
+### 规格
+- 主角：8向 * 4帧 = 32 帧
+- 每种僵尸：4向 * 4帧 = 16 帧
+- 3种僵尸总计：48 帧
+- 主包：80 帧（主角32 + 僵尸48）
+
+### 输出文件（关键）
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v1/sheets/hero_8dir_walk_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v1/sheets/hero_8dir_walk_32.json`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v1/sheets/zombie_walker_4dir_walk_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v1/sheets/zombie_runner_4dir_walk_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v1/sheets/zombie_brute_4dir_walk_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v1/sheets/survivor_plus_3zombies_master_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v1/sheets/survivor_plus_3zombies_master_32.json`
+
+### 备注
+- 已按像素风约束：固定 32x32、无抗锯齿、透明 PNG。
+- 如需风格靠近你上传参考图，可继续做 V2：增强破损细节、加披风/护具层、提高轮廓对比、补攻击与受击动画。
+
+## 2026-02-18 V2素材迭代：破败末日风 + 攻击/受击/死亡
+
+### 目标
+- 在 V1 基础上强化“破败末日”细节（污渍、破损、血迹、死亡血泊）
+- 补全动画：`walk / attack / hurt / death`
+
+### 生成脚本
+- `/Users/fengnian/my-game/scripts/generate_pixel_assets_v2.py`
+- 复跑命令：
+  - `python3 /Users/fengnian/my-game/scripts/generate_pixel_assets_v2.py`
+
+### V2输出
+- 根目录：`/Users/fengnian/my-game/assets/generated/pixel_pack_v2/`
+  - `frames/`：逐帧PNG
+  - `sheets/`：spritesheet + JSON
+  - `preview_4x/`：4x放大预览
+
+### 角色规格
+- 主角（8向）
+  - walk: 4
+  - attack: 4
+  - hurt: 2
+  - death: 6
+  - 合计：`8 * (4+4+2+6) = 128帧`
+- 每种僵尸（4向，walker/runner/brute）
+  - walk: 4
+  - attack: 4
+  - hurt: 2
+  - death: 5
+  - 合计：`4 * (4+4+2+5) = 60帧/种`
+- 主包总帧数：`128 + 60*3 = 308`
+
+### 关键文件
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v2/sheets/hero_8dir_full_v2_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v2/sheets/hero_8dir_full_v2_32.json`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v2/sheets/zombie_walker_4dir_full_v2_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v2/sheets/zombie_runner_4dir_full_v2_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v2/sheets/zombie_brute_4dir_full_v2_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v2/sheets/survivor_plus_3zombies_master_v2_32.png`
+- `/Users/fengnian/my-game/assets/generated/pixel_pack_v2/sheets/survivor_plus_3zombies_master_v2_32.json`
+
+### 备注
+- JSON内已包含动作分组动画键（按 `entity_direction_action` 组织）。
+- 预览图可在 `preview_4x/` 快速审风格与动作节奏。
+
+## 2026-02-18 (V2 spritesheet runtime integration)
+- Wired V2 spritesheet preload + auto animation registration in `BootScene`:
+  - `hero_v2` and `zombie_v2_{walker|runner|brute}` loaded from `/assets/generated/pixel_pack_v2/sheets/`.
+  - Auto-registered directional `walk/attack/hurt/death` keys via shared config (`src/data/v2SpriteAnims.ts`).
+- Added shared animation config module `src/data/v2SpriteAnims.ts` (keys, paths, frame spans, naming helpers).
+- Game runtime hookup:
+  - Player now prefers `hero_v2` texture (fallback to old `player`) and plays V2 actions.
+  - Enemy spawns prefer V2 textures mapped from legacy types (`zombie->walker`, `runner->runner`, `tank->brute`).
+  - Added per-frame directional walk animation updates for player/enemies.
+  - Triggered action clips: player attack/hurt/death, enemy attack/hurt/death.
+  - Added enemy death guard (`ed.dead`) to prevent repeated kill processing; body disabled before death cleanup.
+  - Disabled `flipX` when using directional V2 enemy/player sprites (to avoid direction mismatch).
+- Deployment path fix:
+  - Copied V2 assets into `public/assets/generated/pixel_pack_v2/sheets` so Netlify/dist serves `/assets/generated/...` paths.
+- Verification:
+  - `npm run build` passed.
+  - Confirmed built output contains `dist/assets/generated/pixel_pack_v2/sheets/*`.
+
+## 2026-02-18（美术重构第二批：基地/地图/NPC/伙伴/UI统一）
+
+### 本轮目标
+- 不再只做局部修补，补齐“基地设计、房屋设计、NPC设计、伙伴设计、地图设计、UI设计”的整体感。
+
+### 已完成（资产层）
+- 文件：`src/scenes/BootScene.ts`
+- 新增地表/地物贴图：
+  - `deco_boulder`、`deco_pine`、`deco_billboard`、`deco_river_pier`、`deco_cave_stalagmite`
+- 新增基地与房屋贴图：
+  - `base_hq_hall`、`base_residence_block`、`base_workshop_block`、`base_clinic_block`
+  - `house_tower_ruin`、`house_block_ruin`、`shop_kiosk_ruin`
+  - `forest_cabin`、`cave_watch_post`
+
+### 已完成（场景接线）
+- 文件：`src/scenes/GameScene.ts`
+- 地图分区重构（白天探索层）：
+  - 河流区新增码头/河边小屋/石块，水域视觉更明确；
+  - 森林区加入松树变体、林间小屋、广告牌遗迹；
+  - 城区改为多种房屋废墟混排（高层/街区/店铺）；
+  - 山洞区加入前哨站与石笋群，探险区辨识度更高。
+- 探索点图标更换为场景对应贴图（不再都是同类点位图标），并补了大图标缩放规则。
+- 基地场景重构：
+  - 指挥厅（HQ）+ 生活区 + 制造区 + 医疗区分区落地；
+  - 基地外围住区与塔楼废墟重新编排；
+  - 分区标签与主招牌字号/可读性同步提升。
+- 伙伴/NPC视觉：
+  - 驻守伙伴增加职业色环（坦/狙/医），标签显示更明确；
+  - 幸存者呼救文本与基地角色标签统一改为高清中文字体。
+- 文本体系统一：
+  - GameScene 中旧 `Courier New` 文本替换为统一中文 UI 字体栈。
+
+### 已完成（UI面板统一）
+- 文件：
+  - `src/scenes/UIScene.ts`
+  - `src/scenes/MenuScene.ts`
+  - `src/ui/ExchangePanel.ts`
+  - `src/ui/GlassesShopPanel.ts`
+  - `src/ui/LeisurePanel.ts`
+  - `src/ui/LevelUpPanel.ts`
+  - `src/ui/CollectionPanel.ts`
+  - `src/ui/StoryOverlay.ts`
+- 统一字体栈：全部切换为 `PingFang/微软雅黑/Noto Sans SC` 系列，移除关键模块中的 `Courier New`。
+- 关键弹窗加入移动端字号放大策略（`fs()`）并提高小屏最小字号下限。
+- 菜单角色阵列加入更多伙伴变体（坦/狙/医）以体现阵容差异。
+- UIScene 的提示文案（装备提示/任务完成/底部操作说明）改为同一字体体系并放大。
+
+### 验证
+- `npm run build` 通过（TypeScript + Vite）。
+- Playwright 目测回归：
+  - 本地 `http://127.0.0.1:4173` 可正常渲染；
+  - 新基地分区、地图新地物与探索点标签可见；
+  - console `error` 为 0。
+
+### 下一步建议
+- 第三批可继续做“基地内装+功能房间可进入层”（宿舍/医务/工坊各自内部小场景）。
+- 地图可再加“道路断桥、地下通道入口、城市街区分块命名”提升探索叙事。
+
+## 2026-02-18（美术重构第三批：基地建筑扩容 + 地图地标 + 建造UI改版）
+
+### 本轮目标
+- 继续补足“基地/房屋/NPC/伙伴/地图/UI”缺口，做可见的整体提升，不是仅调字号。
+
+### 已完成（素材层扩展）
+- 文件：`src/scenes/BootScene.ts`
+- 新增地图地标贴图：
+  - `deco_wreck_car`、`deco_barricade`、`deco_radio_tower`
+  - `deco_bridge_broken`、`deco_river_boat`
+  - `deco_forest_shrine`、`deco_cave_gate`
+- 新增基地建筑贴图：
+  - `base_command_center`、`base_market_arcade`
+  - `base_training_yard`、`base_drone_hangar`
+- 新增房屋废墟贴图：
+  - `house_duplex_ruin`、`house_factory_ruin`、`house_clinic_ruin`
+- 新增NPC与伙伴变体贴图：
+  - NPC：`npc_guard`、`npc_doctor`、`npc_engineer`、`npc_scout`
+  - 伙伴：`companion_engineer`、`companion_raider`、`companion_support`
+
+### 已完成（场景接线）
+- 文件：`src/scenes/GameScene.ts`
+- `createExplorationWorld()` 新地标落地：
+  - 河流区新增断桥、河船、路障；
+  - 森林区新增祭坛与通信塔；
+  - 城区新增多类废墟楼体（双拼/厂房/诊所）+ 报废车辆与路障散布；
+  - 山洞区新增洞门与中继塔，强化“探险入口”识别。
+- 白天点位扩容：
+  - 新增 `river_fishing_2`（旧桥渔点）
+  - 新增 `city_scavenge_3`（坍塌诊所）
+  - 新增 `cave_explore_2`（深层裂隙）
+- 基地 `createVillageScenery()` 扩容：
+  - 加入指挥区/后勤区面片与分区标识；
+  - 接入新增基地建筑（指挥中心、市场长廊、训练区、无人机库）；
+  - 两侧外缘增加更多废墟房屋层次；
+  - 追加基地杂物（路障/报废车）与环境细节；
+  - 增加环境NPC（侦察员、维修师、医务官、巡逻兵）和驻守伙伴展示位。
+- 伙伴视觉差异增强：
+  - `getCompanionRoleTexture(role, seed)` 改为按角色+ID稳定选取变体贴图；
+  - 基地驻守和幸存者池都可出现新增伙伴外观。
+
+### 已完成（UI设计）
+- 文件：`src/ui/BuildPanel.ts`
+- 建造面板改版：
+  - 头部视觉层次重做（标题带、说明带、分区带）；
+  - 分类TAB改为等宽芯片按钮（选中高亮边框+分类色）；
+  - 建筑卡片改为网格布局（多列多行），不再一行平铺；
+  - 卡片增加类别色条、图标框、耗材行、状态行（已选中/点击建造/资源不足）；
+  - 低端口径保留指针热区逻辑，兼容原点击行为。
+
+### 验证
+- `npm run build` 通过。
+- Playwright 运行检查：
+  - 菜单和游戏场景均可进入；
+  - 新基地建筑、NPC点位、地图地标均可见；
+  - 控制台 `error` 为 0。
+
+## 2026-02-18（基地清爽化修正）
+
+### 用户反馈
+- “基地一片混乱，贴图一片混乱”。
+
+### 修正动作
+- 文件：`src/scenes/GameScene.ts`
+- `createVillageScenery()` 做减法重排：
+  - 删除基地内部大部分冗余贴图堆叠（多余废墟/路障/报废车/环境NPC）；
+  - 保留核心骨架：商店主体 + 左生活区 + 右制造区 + 下医疗区 + 上指挥区；
+  - 调整区块遮罩与分区标签位置，降低视觉噪声。
+- 新增探索点降噪逻辑：
+  - `refreshExplorationMarkerVisibility()`：
+    - 玩家在基地区域时，远处探索点标记自动隐藏；
+    - 仅在靠近时显示，避免标记压住基地主视图。
+  - 已接入 `update()` 循环。
+
+### 验证
+- `npm run build` 通过。
+- Playwright 实机截图确认基地主画面已明显简化，UI可读性提升。
+- 控制台 `error` 为 0。
+
+## 2026-02-18（基地/地图/UI 第四轮重构：去混乱与空间逻辑重排）
+
+### 用户反馈
+- “基地也要重新设计”
+- “地图背景不自然，贴图没有逻辑”
+- “整体UI需要统一”
+
+### 本轮改动
+- 文件：`src/scenes/BootScene.ts`
+  - `generateTerrainTextures()` 重排地形底图：
+    - 河流主干与分支整体左移，避免穿过基地核心视野。
+    - 城区/荒野/森林/洞穴分布重新平衡，减少硬切割感。
+    - 路网左侧支路重排，使“基地中轴 + 外围区块”关系更清晰。
+
+- 文件：`src/scenes/GameScene.ts`
+  - `createExplorationWorld()` 重写布局逻辑：
+    - 河流改为“多椭圆水体拼接”，去掉大矩形水块边界。
+    - 城区贴图重排到左上，收窄边界，避免压入基地中心。
+    - 森林/洞穴保持远端分区，并统一阴影+色调规则。
+    - 白天探索点位坐标重排（河流/城区）以匹配新地形。
+  - `isInsideRiver()`、`getWorldZoneAt()` 同步新地形范围。
+  - `refreshExplorationMarkerVisibility()` 在基地内进一步收紧显示半径，减少标记噪声。
+  - `createVillageScenery()` 二次重构：
+    - 基地改为“中轴大厅 + 左右功能区 + 下部后勤”结构。
+    - 减少大面积遮罩块，改为轻量分区引导线。
+    - 调整任务官/NPC/设施点位，减少标签互相遮挡。
+    - 去除易被HUD遮挡的“指挥区”顶部标签。
+
+- 文件：`src/scenes/UIScene.ts`
+  - HUD统一风格与可读性：
+    - 顶栏加高与分隔线增强。
+    - 左侧资源区、右侧状态区、底部控制说明统一配色与层次。
+    - 资源格与右状态行字号放大。
+  - 小地图重绘：
+    - 从硬矩形分区改为椭圆分区+道路+河流组合，更贴合新地图逻辑。
+
+### 验证
+- `npm run build` 通过（多次回归）。
+- Playwright截图目测：
+  - 基地中心区明显更干净，外部探索区与基地区分更清楚。
+  - 地图分区视觉逻辑更连贯，不再是“硬块贴图叠加”观感。
+- Playwright console `error`：0。
+
+### 下一步建议
+- 用真正的地面 tile 套件替换当前程序化地块（砖地/泥地/草地/沥青）可再提升一档。
+- 基地内可加入“可进入子房间”切场景，进一步增强基地设计完成度。
+
+## 2026-02-18（风格定向：生活营地风，降低硬核感）
+
+### 用户方向
+- “生活营地风（有生活感、没那么硬核）”
+
+### 本轮改动
+- 文件：`src/scenes/BootScene.ts`
+  - `generateVillageTextures()` 调整基础地表色系：
+    - `village_ground` 从冷蓝网格改为偏泥土/苔藓的生活化底色。
+    - `village_path` 改为更暖的木土路径纹理。
+  - 新增生活营地贴图：
+    - `camp_tent`（帐篷）
+    - `camp_garden_box`（菜箱）
+    - `camp_clothesline`（晾衣绳）
+    - `camp_table`（营地餐桌）
+    - `camp_string_lights`（串灯）
+
+- 文件：`src/scenes/GameScene.ts`
+  - `createBackground()` 基地环形背景由冷蓝改为暖色土黄系。
+  - `createVillageScenery()` 营地风落地：
+    - 基地中心区加入帐篷/菜箱/餐桌/晾衣等生活化陈设。
+    - 主建筑前增加串灯与暖色光晕，营造“居住中的营地”氛围。
+    - 区块线条和建筑 tint 由冷蓝改为更柔和暖色。
+    - 基地主牌改为 “生活营地 · 安全区”。
+
+- 文件：`src/scenes/UIScene.ts`
+  - HUD 色调软化：
+    - 顶栏分隔线、最小地图边框、控制提示文字改为暖色强调。
+    - 左右信息板背景改为更柔和的深灰棕系，降低“军工蓝”硬感。
+    - 保留原信息结构，避免交互习惯被破坏。
+
+### 验证
+- `npm run build` 通过。
+- Playwright 实机截图确认：基地出现明显生活设施（串灯、菜箱、帐篷等），视觉更接近生活营地。
+- console `error` 为 0。
+
+### 后续可继续
+- 增加“白天营地活动动画”（晾衣摆动、炉火炊烟、伙伴围桌）可进一步强化生活感。
+- 将任务/基地/仓库面板也换成同一营地UI皮肤（木框+暖灯）可做到风格闭环。
+
+## 最新进展（2026-02-18）
+- [x] 人物可视尺寸重做：玩家、出战伙伴、基地驻守伙伴、NPC、敌人/Boss 统一改为像素友好的整数缩放（2x/3x），并将主相机缩放固定为整数 `1`，减少像素拉伸模糊。
+- [x] 子弹弹幕重构：主武器/VS/炮塔/驻守伙伴子弹补充统一的 `bulletTextureKey + sway` 轨迹数据，新增蛇形/脉冲/链式等弹道摆动，增强弹幕辨识度。
+- [x] 轨迹特效重做：`updateBulletTrails` 从圆点改为像素矩形尾迹（按 bullet archetype 区分），火焰/连锁/冰冻增加附加粒子。
+- [x] 命中特效重做：`createBulletImpactVfx` 改为按弹种分型（炮击/链电/冰冻/贯穿等）并增加命中碎片与扩散层。
+- [x] 投射物贴图重画：`BootScene.generateProjectileSprites()` 改为硬边像素形体（避免软圆糊边），强化每种子弹视觉差异。
+- [x] 编译验证：`npm run build` 通过。
+- [x] 自动化实机验证：`npm run test:game` 与多轮 Playwright 回放通过，`errors-0.json` 无报错；夜战场景状态捕获到 `bullets: 25`，说明弹幕逻辑与特效链路已实跑。
+
+### 待继续
+- [ ] 继续做“生活营地风”地图美术重构：基地建筑布局、街区/河岸/森林叙事层次统一。
+- [ ] 补一轮移动端真机触控回归（按钮布局 + 竖屏密度 + 文本可读性）。
+- [x] 左上资源 HUD 紧凑化：面板宽高收敛、资源格缩小，减少遮挡地图与视野。
+- [x] 左上 HUD 增加一键折叠：新增“收起/展开”按钮，折叠后隐藏资源格/波次/任务，仅保留血量与击杀。
+- [x] 已验证：`npm run build` 通过；Playwright 点击验证折叠交互可用，控制台无错误。
+- [x] 左上HUD折叠修正：折叠态面板改为窄条宽度，按钮随状态重定位，不再保留整块灰色底框。
+- [x] 左上HUD可读性：折叠时隐藏血条图形与次级信息，保留核心数字；展开态继续显示完整资源/波次/任务。
+- [x] 建筑贴图美化二轮：`wall/turret/barricade/kitchen/workbench/guard_post` 增加旧化细节、灯条反光、阴影层和警示色。
+- [x] 子弹表现增强二轮：新增发射口 `muzzle flash`（玩家/炮塔/驻守伙伴）并按弹种分型。
+- [x] 验证：`npm run build` 通过；Playwright 折叠点击与渲染正常，`errors-0.json` 为空。

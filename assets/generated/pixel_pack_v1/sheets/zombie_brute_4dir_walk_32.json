@@ -1,0 +1,190 @@
+{
+  "meta": {
+    "image": "zombie_brute_4dir_walk_32.png",
+    "size": {
+      "w": 128,
+      "h": 128
+    },
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "directions": [
+      "n",
+      "e",
+      "s",
+      "w"
+    ],
+    "framesPerDirection": 4
+  },
+  "frames": {
+    "f000_zombie_brute_n_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f001_zombie_brute_n_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f002_zombie_brute_n_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f003_zombie_brute_n_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f004_zombie_brute_e_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f005_zombie_brute_e_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f006_zombie_brute_e_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f007_zombie_brute_e_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f008_zombie_brute_s_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f009_zombie_brute_s_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f010_zombie_brute_s_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f011_zombie_brute_s_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f012_zombie_brute_w_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f013_zombie_brute_w_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f014_zombie_brute_w_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f015_zombie_brute_w_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    }
+  },
+  "animations": {
+    "zombie_brute_walk_n": [
+      "f000_zombie_brute_n_walk_0",
+      "f001_zombie_brute_n_walk_1",
+      "f002_zombie_brute_n_walk_2",
+      "f003_zombie_brute_n_walk_3"
+    ],
+    "zombie_brute_walk_e": [
+      "f004_zombie_brute_e_walk_0",
+      "f005_zombie_brute_e_walk_1",
+      "f006_zombie_brute_e_walk_2",
+      "f007_zombie_brute_e_walk_3"
+    ],
+    "zombie_brute_walk_s": [
+      "f008_zombie_brute_s_walk_0",
+      "f009_zombie_brute_s_walk_1",
+      "f010_zombie_brute_s_walk_2",
+      "f011_zombie_brute_s_walk_3"
+    ],
+    "zombie_brute_walk_w": [
+      "f012_zombie_brute_w_walk_0",
+      "f013_zombie_brute_w_walk_1",
+      "f014_zombie_brute_w_walk_2",
+      "f015_zombie_brute_w_walk_3"
+    ]
+  }
+}

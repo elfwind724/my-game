@@ -16,6 +16,24 @@ export class LevelUpPanel {
     this.scene = scene;
   }
 
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024 || (navigator.maxTouchPoints || 0) > 1;
+  }
+
+  private getUIFontFamily(): string {
+    return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  }
+
+  private fs(base: number, min: number = 12): string {
+    const w = this.scene.cameras.main.width || 1;
+    const h = this.scene.cameras.main.height || 1;
+    const portrait = h > w;
+    const boost = this.isMobileViewport() ? (portrait ? 1.2 : 1.08) : 1;
+    return `${Math.max(min, Math.round(base * boost))}px`;
+  }
+
   show(onChoice: (choice: LevelUpChoice) => void): void {
     if (this.isOpen) return;
     this.isOpen = true;
@@ -34,21 +52,23 @@ export class LevelUpPanel {
 
     // Title
     const title = this.scene.add.text(w / 2, 40, '⬆ 等级提升 ⬆', {
-      fontSize: '36px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(36, 24), color: '#fbbf24', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5);
     this.container.add(title);
 
     const subtitle = this.scene.add.text(w / 2, 78, '选择一项强化', {
-      fontSize: '18px', color: '#94a3b8', fontFamily: 'Courier New',
+      fontSize: this.fs(18, 14), color: '#94a3b8', fontFamily: this.getUIFontFamily(),
     }).setOrigin(0.5);
     this.container.add(subtitle);
 
     // Generate choices
     const choices = EvolutionSystem.generateLevelUpChoices(3);
-    const cardWidth = 220;
-    const cardHeight = 328;
-    const gap = 30;
+    const mobile = this.isMobileViewport();
+    const portrait = h > w;
+    const cardWidth = mobile ? (portrait ? 198 : 212) : 220;
+    const cardHeight = mobile ? (portrait ? 320 : 326) : 328;
+    const gap = mobile ? (portrait ? 18 : 24) : 30;
     const totalWidth = choices.length * cardWidth + (choices.length - 1) * gap;
     const startX = (w - totalWidth) / 2 + cardWidth / 2;
 
@@ -83,7 +103,7 @@ export class LevelUpPanel {
       new_passive: '新被动', upgrade_passive: '被动升级',
     };
     const badge = this.scene.add.text(x, y - h / 2 + 20, typeLabels[choice.type] || '', {
-      fontSize: '12px', color: '#000000', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(12, 11), color: '#000000', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       backgroundColor: `#${rarityColor.toString(16).padStart(6, '0')}`,
       padding: { x: 8, y: 3 },
     }).setOrigin(0.5);
@@ -97,7 +117,7 @@ export class LevelUpPanel {
 
     // Name
     const name = this.scene.add.text(x, y + 20, choice.nameCN, {
-      fontSize: '20px', color: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(20, 16), color: '#ffffff', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
     }).setOrigin(0.5);
     this.container.add(name);
 
@@ -105,14 +125,14 @@ export class LevelUpPanel {
     let levelText: Phaser.GameObjects.Text | null = null;
     if (choice.currentLevel) {
       levelText = this.scene.add.text(x, y + 48, `Lv.${choice.currentLevel} → Lv.${choice.currentLevel + 1}`, {
-        fontSize: '14px', color: '#fbbf24', fontFamily: 'Courier New',
+        fontSize: this.fs(14, 12), color: '#fbbf24', fontFamily: this.getUIFontFamily(),
       }).setOrigin(0.5);
       this.container.add(levelText);
     }
 
     // Description
     const desc = this.scene.add.text(x, y + 75, choice.descriptionCN, {
-      fontSize: '13px', color: '#94a3b8', fontFamily: 'Courier New',
+      fontSize: this.fs(13, 11), color: '#94a3b8', fontFamily: this.getUIFontFamily(),
       wordWrap: { width: w - 24 }, align: 'center',
     }).setOrigin(0.5);
     this.container.add(desc);
@@ -120,9 +140,9 @@ export class LevelUpPanel {
     let preview: Phaser.GameObjects.Text | null = null;
     if (choice.previewTextCN) {
       preview = this.scene.add.text(x, y + h / 2 - 34, choice.previewTextCN, {
-        fontSize: '11px',
+        fontSize: this.fs(11, 10),
         color: choice.previewDpsDelta && choice.previewDpsDelta >= 0 ? '#22c55e' : '#f87171',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         fontStyle: 'bold',
         align: 'center',
         wordWrap: { width: w - 16 },

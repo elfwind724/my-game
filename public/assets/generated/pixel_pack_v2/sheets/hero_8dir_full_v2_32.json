@@ -1,0 +1,1382 @@
+{
+  "meta": {
+    "image": "hero_8dir_full_v2_32.png",
+    "size": {
+      "w": 512,
+      "h": 256
+    },
+    "frameWidth": 32,
+    "frameHeight": 32,
+    "directions": [
+      "n",
+      "ne",
+      "e",
+      "se",
+      "s",
+      "sw",
+      "w",
+      "nw"
+    ],
+    "actions": [
+      "walk",
+      "attack",
+      "hurt",
+      "death"
+    ],
+    "framesPerDirection": 16,
+    "actionFrames": {
+      "walk": 4,
+      "attack": 4,
+      "hurt": 2,
+      "death": 6
+    }
+  },
+  "frames": {
+    "f0000_hero_n_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0001_hero_n_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0002_hero_n_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0003_hero_n_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0004_hero_n_attack_0": {
+      "frame": {
+        "x": 128,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0005_hero_n_attack_1": {
+      "frame": {
+        "x": 160,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0006_hero_n_attack_2": {
+      "frame": {
+        "x": 192,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0007_hero_n_attack_3": {
+      "frame": {
+        "x": 224,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0008_hero_n_hurt_0": {
+      "frame": {
+        "x": 256,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0009_hero_n_hurt_1": {
+      "frame": {
+        "x": 288,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0010_hero_n_death_0": {
+      "frame": {
+        "x": 320,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0011_hero_n_death_1": {
+      "frame": {
+        "x": 352,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0012_hero_n_death_2": {
+      "frame": {
+        "x": 384,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0013_hero_n_death_3": {
+      "frame": {
+        "x": 416,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0014_hero_n_death_4": {
+      "frame": {
+        "x": 448,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0015_hero_n_death_5": {
+      "frame": {
+        "x": 480,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0016_hero_ne_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0017_hero_ne_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0018_hero_ne_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0019_hero_ne_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0020_hero_ne_attack_0": {
+      "frame": {
+        "x": 128,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0021_hero_ne_attack_1": {
+      "frame": {
+        "x": 160,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0022_hero_ne_attack_2": {
+      "frame": {
+        "x": 192,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0023_hero_ne_attack_3": {
+      "frame": {
+        "x": 224,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0024_hero_ne_hurt_0": {
+      "frame": {
+        "x": 256,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0025_hero_ne_hurt_1": {
+      "frame": {
+        "x": 288,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0026_hero_ne_death_0": {
+      "frame": {
+        "x": 320,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0027_hero_ne_death_1": {
+      "frame": {
+        "x": 352,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0028_hero_ne_death_2": {
+      "frame": {
+        "x": 384,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0029_hero_ne_death_3": {
+      "frame": {
+        "x": 416,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0030_hero_ne_death_4": {
+      "frame": {
+        "x": 448,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0031_hero_ne_death_5": {
+      "frame": {
+        "x": 480,
+        "y": 32,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0032_hero_e_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0033_hero_e_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0034_hero_e_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0035_hero_e_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0036_hero_e_attack_0": {
+      "frame": {
+        "x": 128,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0037_hero_e_attack_1": {
+      "frame": {
+        "x": 160,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0038_hero_e_attack_2": {
+      "frame": {
+        "x": 192,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0039_hero_e_attack_3": {
+      "frame": {
+        "x": 224,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0040_hero_e_hurt_0": {
+      "frame": {
+        "x": 256,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0041_hero_e_hurt_1": {
+      "frame": {
+        "x": 288,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0042_hero_e_death_0": {
+      "frame": {
+        "x": 320,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0043_hero_e_death_1": {
+      "frame": {
+        "x": 352,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0044_hero_e_death_2": {
+      "frame": {
+        "x": 384,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0045_hero_e_death_3": {
+      "frame": {
+        "x": 416,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0046_hero_e_death_4": {
+      "frame": {
+        "x": 448,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0047_hero_e_death_5": {
+      "frame": {
+        "x": 480,
+        "y": 64,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0048_hero_se_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0049_hero_se_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0050_hero_se_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0051_hero_se_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0052_hero_se_attack_0": {
+      "frame": {
+        "x": 128,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0053_hero_se_attack_1": {
+      "frame": {
+        "x": 160,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0054_hero_se_attack_2": {
+      "frame": {
+        "x": 192,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0055_hero_se_attack_3": {
+      "frame": {
+        "x": 224,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0056_hero_se_hurt_0": {
+      "frame": {
+        "x": 256,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0057_hero_se_hurt_1": {
+      "frame": {
+        "x": 288,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0058_hero_se_death_0": {
+      "frame": {
+        "x": 320,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0059_hero_se_death_1": {
+      "frame": {
+        "x": 352,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0060_hero_se_death_2": {
+      "frame": {
+        "x": 384,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0061_hero_se_death_3": {
+      "frame": {
+        "x": 416,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0062_hero_se_death_4": {
+      "frame": {
+        "x": 448,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0063_hero_se_death_5": {
+      "frame": {
+        "x": 480,
+        "y": 96,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0064_hero_s_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0065_hero_s_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0066_hero_s_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0067_hero_s_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0068_hero_s_attack_0": {
+      "frame": {
+        "x": 128,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0069_hero_s_attack_1": {
+      "frame": {
+        "x": 160,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0070_hero_s_attack_2": {
+      "frame": {
+        "x": 192,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0071_hero_s_attack_3": {
+      "frame": {
+        "x": 224,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0072_hero_s_hurt_0": {
+      "frame": {
+        "x": 256,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0073_hero_s_hurt_1": {
+      "frame": {
+        "x": 288,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0074_hero_s_death_0": {
+      "frame": {
+        "x": 320,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0075_hero_s_death_1": {
+      "frame": {
+        "x": 352,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0076_hero_s_death_2": {
+      "frame": {
+        "x": 384,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0077_hero_s_death_3": {
+      "frame": {
+        "x": 416,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0078_hero_s_death_4": {
+      "frame": {
+        "x": 448,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0079_hero_s_death_5": {
+      "frame": {
+        "x": 480,
+        "y": 128,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0080_hero_sw_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0081_hero_sw_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0082_hero_sw_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0083_hero_sw_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0084_hero_sw_attack_0": {
+      "frame": {
+        "x": 128,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0085_hero_sw_attack_1": {
+      "frame": {
+        "x": 160,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0086_hero_sw_attack_2": {
+      "frame": {
+        "x": 192,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0087_hero_sw_attack_3": {
+      "frame": {
+        "x": 224,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0088_hero_sw_hurt_0": {
+      "frame": {
+        "x": 256,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0089_hero_sw_hurt_1": {
+      "frame": {
+        "x": 288,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0090_hero_sw_death_0": {
+      "frame": {
+        "x": 320,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0091_hero_sw_death_1": {
+      "frame": {
+        "x": 352,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0092_hero_sw_death_2": {
+      "frame": {
+        "x": 384,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0093_hero_sw_death_3": {
+      "frame": {
+        "x": 416,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0094_hero_sw_death_4": {
+      "frame": {
+        "x": 448,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0095_hero_sw_death_5": {
+      "frame": {
+        "x": 480,
+        "y": 160,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0096_hero_w_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0097_hero_w_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0098_hero_w_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0099_hero_w_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0100_hero_w_attack_0": {
+      "frame": {
+        "x": 128,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0101_hero_w_attack_1": {
+      "frame": {
+        "x": 160,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0102_hero_w_attack_2": {
+      "frame": {
+        "x": 192,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0103_hero_w_attack_3": {
+      "frame": {
+        "x": 224,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0104_hero_w_hurt_0": {
+      "frame": {
+        "x": 256,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0105_hero_w_hurt_1": {
+      "frame": {
+        "x": 288,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0106_hero_w_death_0": {
+      "frame": {
+        "x": 320,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0107_hero_w_death_1": {
+      "frame": {
+        "x": 352,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0108_hero_w_death_2": {
+      "frame": {
+        "x": 384,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0109_hero_w_death_3": {
+      "frame": {
+        "x": 416,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0110_hero_w_death_4": {
+      "frame": {
+        "x": 448,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0111_hero_w_death_5": {
+      "frame": {
+        "x": 480,
+        "y": 192,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0112_hero_nw_walk_0": {
+      "frame": {
+        "x": 0,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0113_hero_nw_walk_1": {
+      "frame": {
+        "x": 32,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0114_hero_nw_walk_2": {
+      "frame": {
+        "x": 64,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0115_hero_nw_walk_3": {
+      "frame": {
+        "x": 96,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0116_hero_nw_attack_0": {
+      "frame": {
+        "x": 128,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0117_hero_nw_attack_1": {
+      "frame": {
+        "x": 160,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0118_hero_nw_attack_2": {
+      "frame": {
+        "x": 192,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0119_hero_nw_attack_3": {
+      "frame": {
+        "x": 224,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0120_hero_nw_hurt_0": {
+      "frame": {
+        "x": 256,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0121_hero_nw_hurt_1": {
+      "frame": {
+        "x": 288,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0122_hero_nw_death_0": {
+      "frame": {
+        "x": 320,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0123_hero_nw_death_1": {
+      "frame": {
+        "x": 352,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0124_hero_nw_death_2": {
+      "frame": {
+        "x": 384,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0125_hero_nw_death_3": {
+      "frame": {
+        "x": 416,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0126_hero_nw_death_4": {
+      "frame": {
+        "x": 448,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    },
+    "f0127_hero_nw_death_5": {
+      "frame": {
+        "x": 480,
+        "y": 224,
+        "w": 32,
+        "h": 32
+      },
+      "duration": 120
+    }
+  },
+  "animations": {
+    "hero_n_walk": [
+      "f0000_hero_n_walk_0",
+      "f0001_hero_n_walk_1",
+      "f0002_hero_n_walk_2",
+      "f0003_hero_n_walk_3"
+    ],
+    "hero_n_attack": [
+      "f0004_hero_n_attack_0",
+      "f0005_hero_n_attack_1",
+      "f0006_hero_n_attack_2",
+      "f0007_hero_n_attack_3"
+    ],
+    "hero_n_hurt": [
+      "f0008_hero_n_hurt_0",
+      "f0009_hero_n_hurt_1"
+    ],
+    "hero_n_death": [
+      "f0010_hero_n_death_0",
+      "f0011_hero_n_death_1",
+      "f0012_hero_n_death_2",
+      "f0013_hero_n_death_3",
+      "f0014_hero_n_death_4",
+      "f0015_hero_n_death_5"
+    ],
+    "hero_ne_walk": [
+      "f0016_hero_ne_walk_0",
+      "f0017_hero_ne_walk_1",
+      "f0018_hero_ne_walk_2",
+      "f0019_hero_ne_walk_3"
+    ],
+    "hero_ne_attack": [
+      "f0020_hero_ne_attack_0",
+      "f0021_hero_ne_attack_1",
+      "f0022_hero_ne_attack_2",
+      "f0023_hero_ne_attack_3"
+    ],
+    "hero_ne_hurt": [
+      "f0024_hero_ne_hurt_0",
+      "f0025_hero_ne_hurt_1"
+    ],
+    "hero_ne_death": [
+      "f0026_hero_ne_death_0",
+      "f0027_hero_ne_death_1",
+      "f0028_hero_ne_death_2",
+      "f0029_hero_ne_death_3",
+      "f0030_hero_ne_death_4",
+      "f0031_hero_ne_death_5"
+    ],
+    "hero_e_walk": [
+      "f0032_hero_e_walk_0",
+      "f0033_hero_e_walk_1",
+      "f0034_hero_e_walk_2",
+      "f0035_hero_e_walk_3"
+    ],
+    "hero_e_attack": [
+      "f0036_hero_e_attack_0",
+      "f0037_hero_e_attack_1",
+      "f0038_hero_e_attack_2",
+      "f0039_hero_e_attack_3"
+    ],
+    "hero_e_hurt": [
+      "f0040_hero_e_hurt_0",
+      "f0041_hero_e_hurt_1"
+    ],
+    "hero_e_death": [
+      "f0042_hero_e_death_0",
+      "f0043_hero_e_death_1",
+      "f0044_hero_e_death_2",
+      "f0045_hero_e_death_3",
+      "f0046_hero_e_death_4",
+      "f0047_hero_e_death_5"
+    ],
+    "hero_se_walk": [
+      "f0048_hero_se_walk_0",
+      "f0049_hero_se_walk_1",
+      "f0050_hero_se_walk_2",
+      "f0051_hero_se_walk_3"
+    ],
+    "hero_se_attack": [
+      "f0052_hero_se_attack_0",
+      "f0053_hero_se_attack_1",
+      "f0054_hero_se_attack_2",
+      "f0055_hero_se_attack_3"
+    ],
+    "hero_se_hurt": [
+      "f0056_hero_se_hurt_0",
+      "f0057_hero_se_hurt_1"
+    ],
+    "hero_se_death": [
+      "f0058_hero_se_death_0",
+      "f0059_hero_se_death_1",
+      "f0060_hero_se_death_2",
+      "f0061_hero_se_death_3",
+      "f0062_hero_se_death_4",
+      "f0063_hero_se_death_5"
+    ],
+    "hero_s_walk": [
+      "f0064_hero_s_walk_0",
+      "f0065_hero_s_walk_1",
+      "f0066_hero_s_walk_2",
+      "f0067_hero_s_walk_3"
+    ],
+    "hero_s_attack": [
+      "f0068_hero_s_attack_0",
+      "f0069_hero_s_attack_1",
+      "f0070_hero_s_attack_2",
+      "f0071_hero_s_attack_3"
+    ],
+    "hero_s_hurt": [
+      "f0072_hero_s_hurt_0",
+      "f0073_hero_s_hurt_1"
+    ],
+    "hero_s_death": [
+      "f0074_hero_s_death_0",
+      "f0075_hero_s_death_1",
+      "f0076_hero_s_death_2",
+      "f0077_hero_s_death_3",
+      "f0078_hero_s_death_4",
+      "f0079_hero_s_death_5"
+    ],
+    "hero_sw_walk": [
+      "f0080_hero_sw_walk_0",
+      "f0081_hero_sw_walk_1",
+      "f0082_hero_sw_walk_2",
+      "f0083_hero_sw_walk_3"
+    ],
+    "hero_sw_attack": [
+      "f0084_hero_sw_attack_0",
+      "f0085_hero_sw_attack_1",
+      "f0086_hero_sw_attack_2",
+      "f0087_hero_sw_attack_3"
+    ],
+    "hero_sw_hurt": [
+      "f0088_hero_sw_hurt_0",
+      "f0089_hero_sw_hurt_1"
+    ],
+    "hero_sw_death": [
+      "f0090_hero_sw_death_0",
+      "f0091_hero_sw_death_1",
+      "f0092_hero_sw_death_2",
+      "f0093_hero_sw_death_3",
+      "f0094_hero_sw_death_4",
+      "f0095_hero_sw_death_5"
+    ],
+    "hero_w_walk": [
+      "f0096_hero_w_walk_0",
+      "f0097_hero_w_walk_1",
+      "f0098_hero_w_walk_2",
+      "f0099_hero_w_walk_3"
+    ],
+    "hero_w_attack": [
+      "f0100_hero_w_attack_0",
+      "f0101_hero_w_attack_1",
+      "f0102_hero_w_attack_2",
+      "f0103_hero_w_attack_3"
+    ],
+    "hero_w_hurt": [
+      "f0104_hero_w_hurt_0",
+      "f0105_hero_w_hurt_1"
+    ],
+    "hero_w_death": [
+      "f0106_hero_w_death_0",
+      "f0107_hero_w_death_1",
+      "f0108_hero_w_death_2",
+      "f0109_hero_w_death_3",
+      "f0110_hero_w_death_4",
+      "f0111_hero_w_death_5"
+    ],
+    "hero_nw_walk": [
+      "f0112_hero_nw_walk_0",
+      "f0113_hero_nw_walk_1",
+      "f0114_hero_nw_walk_2",
+      "f0115_hero_nw_walk_3"
+    ],
+    "hero_nw_attack": [
+      "f0116_hero_nw_attack_0",
+      "f0117_hero_nw_attack_1",
+      "f0118_hero_nw_attack_2",
+      "f0119_hero_nw_attack_3"
+    ],
+    "hero_nw_hurt": [
+      "f0120_hero_nw_hurt_0",
+      "f0121_hero_nw_hurt_1"
+    ],
+    "hero_nw_death": [
+      "f0122_hero_nw_death_0",
+      "f0123_hero_nw_death_1",
+      "f0124_hero_nw_death_2",
+      "f0125_hero_nw_death_3",
+      "f0126_hero_nw_death_4",
+      "f0127_hero_nw_death_5"
+    ]
+  }
+}

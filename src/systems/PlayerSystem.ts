@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { events, GameEvents } from '../utils/EventBus';
 import { EvolutionSystem } from './EvolutionSystem';
+import { HERO_V2_TEXTURE_KEY } from '../data/v2SpriteAnims';
 
 export class PlayerSystem {
     private scene: Phaser.Scene;
@@ -88,8 +89,10 @@ export class PlayerSystem {
             moveY /= length;
         }
         body.setVelocity(moveX * moveSpeed, moveY * moveSpeed);
-        if (moveX < -0.05) this.player.setFlipX(true);
-        else if (moveX > 0.05) this.player.setFlipX(false);
+        if (this.player.texture?.key !== HERO_V2_TEXTURE_KEY) {
+            if (moveX < -0.05) this.player.setFlipX(true);
+            else if (moveX > 0.05) this.player.setFlipX(false);
+        }
 
         const regenPerSecond = Math.max(0, (computed.regen || 0) + (this.upgrades.healthRegen || 0) * 0.35);
         if (regenPerSecond > 0 && this.currentHealth > 0 && this.currentHealth < this.maxHealth) {

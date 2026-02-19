@@ -408,28 +408,20 @@ export class WeaponSystem {
         bullet.setActive(true);
         bullet.setVisible(true);
         bullet.setAlpha(1);
-        bullet.setScale(1);
         let tint = config.color;
-        let bulletScale = 1.35;
+        let bulletScale = this.getPixelBulletScale(bulletTexture);
         if (specialValue === 'burn') {
             tint = 0xff6b1a;
-            bulletScale = 1.5;
         } else if (specialValue === 'pierce') {
             tint = 0x7dd3fc;
-            bulletScale = 1.45;
         } else if (specialValue === 'explode') {
             tint = 0xa855f7;
-            bulletScale = 1.75;
+            bulletScale = 3;
         } else if (specialValue === 'chain') {
             tint = 0xc084fc;
-            bulletScale = 1.6;
         } else if (brandTint != null) {
             tint = brandTint;
         }
-        if (bulletTexture === 'bullet_scatter') bulletScale = Math.max(bulletScale, 1.45);
-        if (bulletTexture === 'bullet_pulse') bulletScale = Math.max(bulletScale, 1.4);
-        if (bulletTexture === 'bullet_frost') bulletScale = Math.max(bulletScale, 1.5);
-        if (bulletTexture === 'bullet_cannon') bulletScale = Math.max(bulletScale, 1.75);
         bullet.setTint(tint);
         bullet.setScale(bulletScale);
         bullet.setAlpha(0.96);
@@ -460,6 +452,19 @@ export class WeaponSystem {
         anyBullet.isHoming = !!homingEnabled;
         anyBullet.homingTarget = null;
         anyBullet.homingStrength = homingEnabled ? 0.16 : null;
+        anyBullet.bulletTextureKey = bulletTexture;
+        anyBullet.baseVelocityX = vx;
+        anyBullet.baseVelocityY = vy;
+        const swayAmp = bulletTexture === 'bullet_pulse'
+            ? 18
+            : bulletTexture === 'bullet_chain'
+                ? 14
+                : bulletTexture === 'bullet_flame'
+                    ? 10
+                    : 0;
+        anyBullet.swayAmplitude = swayAmp;
+        anyBullet.swayFrequency = swayAmp > 0 ? (bulletTexture === 'bullet_flame' ? 0.02 : 0.013) : 0;
+        anyBullet.swayPhase = Math.random() * Math.PI * 2;
 
         // Cleanup: disable for pooling
         if (anyBullet.lifetimeTimer) {
@@ -483,6 +488,12 @@ export class WeaponSystem {
                 anyBullet.isHoming = false;
                 anyBullet.homingTarget = null;
                 anyBullet.homingStrength = null;
+                anyBullet.bulletTextureKey = null;
+                anyBullet.baseVelocityX = null;
+                anyBullet.baseVelocityY = null;
+                anyBullet.swayAmplitude = null;
+                anyBullet.swayFrequency = null;
+                anyBullet.swayPhase = null;
                 bullet.setVelocity(0, 0);
                 bullet.disableBody(true, true);
             }
@@ -504,6 +515,11 @@ export class WeaponSystem {
       if (weaponType === 'laser') return 'bullet_pierce';
       if (weaponType === 'rocket') return 'bullet_cannon';
       return 'bullet';
+    }
+
+    private getPixelBulletScale(textureKey: string): number {
+        if (textureKey === 'bullet_cannon') return 3;
+        return 2;
     }
 
     private acquireBullet(x: number, y: number): Phaser.Physics.Arcade.Sprite | null {
@@ -550,6 +566,12 @@ export class WeaponSystem {
         anyBullet.isHoming = false;
         anyBullet.homingTarget = null;
         anyBullet.homingStrength = null;
+        anyBullet.bulletTextureKey = null;
+        anyBullet.baseVelocityX = null;
+        anyBullet.baseVelocityY = null;
+        anyBullet.swayAmplitude = null;
+        anyBullet.swayFrequency = null;
+        anyBullet.swayPhase = null;
         anyBullet.spawnTime = null;
         anyBullet.maxLifetime = null;
         bullet.setVelocity(0, 0);

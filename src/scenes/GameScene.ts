@@ -24,6 +24,22 @@ import { BASE_POWER_PER_TURRET } from '../data/base';
 import { BUILDING_DEFS } from '../data/buildings';
 import { WEAPON_DEFS } from '../data/weapons';
 import { CompanionConfig } from '../types/SkillTypes';
+import {
+  HERO_V2_TEXTURE_KEY,
+  HERO_V2_ACTIONS,
+  ENEMY_V2_ACTIONS,
+  ENEMY_V2_TEXTURE_KEYS,
+  type HeroV2Direction,
+  type EnemyV2Direction,
+  type V2Action,
+  type EnemyV2Archetype,
+  getHeroFrameIndex,
+  getEnemyFrameIndex,
+  heroAnimKey,
+  enemyAnimKey,
+  getActionDurationMs,
+  mapLegacyEnemyTypeToV2Archetype,
+} from '../data/v2SpriteAnims';
 
 interface CampInteractable {
   sprite: Phaser.GameObjects.Sprite;
@@ -83,6 +99,7 @@ type DamageSource =
   | { type: 'player'; weaponType?: WeaponType | null }
   | { type: 'companion'; companionId?: string | null }
   | { type: 'turret'; turretId?: string | null };
+type BulletVfxArchetype = 'kinetic' | 'scatter' | 'pulse' | 'flame' | 'pierce' | 'cannon' | 'frost' | 'chain';
 
 interface RunMutatorEffects {
   playerDamageMul: number;
@@ -415,6 +432,8 @@ export default class GameScene extends Phaser.Scene {
   private arOverdrivePulseAt: number = 0;
   private currentPowerTier: 1 | 2 | 3 = 1;
   private mobileViewport: boolean = false;
+  private playerFacingDir: HeroV2Direction = 's';
+  private playerActionLockUntil: number = 0;
 
   constructor() {
     super({ key: 'GameScene' });
@@ -424,6 +443,22 @@ export default class GameScene extends Phaser.Scene {
     if (typeof window === 'undefined') return false;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
     return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 900;
+  }
+
+  private isMobilePortraitViewport(): boolean {
+    return this.mobileViewport && this.scale.height > this.scale.width;
+  }
+
+  private getPlayerVisualScale(): number {
+    return this.isMobilePortraitViewport() ? 3 : 2;
+  }
+
+  private getNpcVisualScale(): number {
+    return this.isMobilePortraitViewport() ? 3 : 2;
+  }
+
+  private getResidentVisualScale(): number {
+    return this.isMobilePortraitViewport() ? 3 : 2;
   }
 
   private getUIFontFamily(): string {
@@ -495,6 +530,8 @@ export default class GameScene extends Phaser.Scene {
     this.arOverdriveActiveUntil = 0;
     this.arOverdrivePulseAt = 0;
     this.currentPowerTier = 1;
+    this.playerFacingDir = 's';
+    this.playerActionLockUntil = 0;
     if (this.baseLifePulseTimer) {
       this.baseLifePulseTimer.remove(false);
       this.baseLifePulseTimer = null;
@@ -538,10 +575,12 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Player
-    this.player = this.physics.add.sprite(1000, 750, 'player');
-    const playerFrame = this.player.frame;
-    const nativeH = Math.max(1, playerFrame?.height || 32);
-    const playerScale = Phaser.Math.Clamp(34 / nativeH, 1.0, 1.45);
+    const playerTexture = this.textures.exists(HERO_V2_TEXTURE_KEY) ? HERO_V2_TEXTURE_KEY : 'player';
+    this.player = this.physics.add.sprite(1000, 750, playerTexture);
+    if (playerTexture === HERO_V2_TEXTURE_KEY) {
+      this.player.setFrame(getHeroFrameIndex('s', 'walk', 0));
+    }
+    const playerScale = this.getPlayerVisualScale();
     this.player.setScale(playerScale);
     this.player.setData('baseScaleX', playerScale);
     this.player.setData('baseScaleY', playerScale);
@@ -551,9 +590,8 @@ export default class GameScene extends Phaser.Scene {
     playerBody.setOffset(8, 10);
     playerBody.setMaxVelocity(200);
     this.cameras.main.startFollow(this.player);
-    const portraitAspect = this.scale.height / Math.max(1, this.scale.width);
-    const portraitZoom = portraitAspect >= 1.9 ? 1.32 : 1.26;
-    this.cameras.main.setZoom(mobileViewport ? (mobilePortrait ? portraitZoom : 0.98) : 1);
+    // Keep camera zoom integer to preserve crisp pixel edges on all displays.
+    this.cameras.main.setZoom(1);
 
     // Physics groups
     this.enemies = this.physics.add.group();
@@ -609,6 +647,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Event listeners
     events.on(GameEvents.GAME_OVER, this.gameOver, this);
+    events.on(GameEvents.PLAYER_HIT, this.onPlayerHitAnimation, this);
     events.on(GameEvents.NIGHT_START, this.onNightStart, this);
     events.on(GameEvents.DAY_START, this.onDayStart, this);
     events.on(GameEvents.PLAYER_LEVEL_UP, this.onLevelUp, this);
@@ -915,14 +954,14 @@ export default class GameScene extends Phaser.Scene {
     container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 24, eventDef.titleCN, {
       fontSize: '24px',
       color: eventDef.period === 'night' ? '#fdba74' : '#7dd3fc',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
     }).setOrigin(0.5, 0));
 
     container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 64, eventDef.descCN, {
       fontSize: '14px',
       color: '#cbd5e1',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       align: 'center',
       wordWrap: { width: panelW - 42 },
     }).setOrigin(0.5, 0));
@@ -930,7 +969,7 @@ export default class GameScene extends Phaser.Scene {
     container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 108, `词缀联动：奖励 x${rewardMul.toFixed(2)} · 风险 x${riskMul.toFixed(2)}`, {
       fontSize: '12px',
       color: '#fbbf24',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
     }).setOrigin(0.5, 0));
 
@@ -952,20 +991,20 @@ export default class GameScene extends Phaser.Scene {
       container.add(this.add.text(cx, btnY - 78, choice.titleCN, {
         fontSize: '18px',
         color: '#e2e8f0',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         fontStyle: 'bold',
       }).setOrigin(0.5, 0));
       container.add(this.add.text(cx, btnY - 48, choice.detailCN, {
         fontSize: '12px',
         color: '#94a3b8',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         align: 'center',
         wordWrap: { width: buttonW - 20 },
       }).setOrigin(0.5, 0));
       container.add(this.add.text(cx, btnY - 6, preview, {
         fontSize: '12px',
         color: '#cbd5e1',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         align: 'center',
         wordWrap: { width: buttonW - 24 },
         lineSpacing: 4,
@@ -973,7 +1012,7 @@ export default class GameScene extends Phaser.Scene {
       container.add(this.add.text(cx, btnY + buttonH / 2 - 24, '点击选择', {
         fontSize: '11px',
         color: '#64748b',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
       }).setOrigin(0.5, 0.5));
 
       const clickZone = this.add.zone(cx, btnY, buttonW, buttonH)
@@ -1183,141 +1222,204 @@ export default class GameScene extends Phaser.Scene {
     const worldW = 2000;
     const worldH = 1500;
     this.add.image(worldW / 2, worldH / 2, 'world_base_map').setDepth(-30);
-    // Keep world texture readable; avoid giant haze blobs on top of map tiles.
-    this.add.rectangle(worldW / 2, worldH / 2, worldW, worldH, 0x030712, 0.06).setDepth(-29);
+    this.add.rectangle(worldW / 2, worldH / 2, worldW, worldH, 0x030712, 0.05).setDepth(-29);
 
-    const baseOuter = this.add.rectangle(1000, 750, 470, 470, 0x0f172a, 0.08);
-    baseOuter.setStrokeStyle(2, 0x64748b, 0.22);
-    baseOuter.setDepth(-9);
-    const baseInner = this.add.rectangle(1000, 750, 438, 438, 0x020617, 0.08);
-    baseInner.setStrokeStyle(1, 0x94a3b8, 0.25);
-    baseInner.setDepth(-9);
-    this.add.text(1000, 540, '觉醒者基地', {
-      fontSize: '13px',
-      color: '#dbeafe',
-      fontFamily: 'Courier New',
+    const baseRing = this.add.ellipse(1000, 750, 540, 430, 0x2a2119, 0.08);
+    baseRing.setStrokeStyle(2, 0xb08968, 0.24);
+    baseRing.setDepth(-9);
+    const baseCore = this.add.ellipse(1000, 750, 468, 356, 0x312417, 0.07);
+    baseCore.setStrokeStyle(1, 0xfbbf24, 0.2);
+    baseCore.setDepth(-9);
+    this.add.rectangle(1000, 750, 388, 2, 0xb08968, 0.16).setDepth(-9);
+    this.add.rectangle(1000, 750, 2, 288, 0xb08968, 0.16).setDepth(-9);
+    this.add.text(1000, 536, '基地中枢', {
+      fontSize: this.worldFs(14, 13),
+      color: '#fef3c7',
+      fontFamily: this.getUIFontFamily(),
       stroke: '#0b1220',
       strokeThickness: 3,
-    }).setOrigin(0.5).setAlpha(0.30).setDepth(-8);
+    }).setOrigin(0.5).setAlpha(0.3).setDepth(-8);
   }
 
   private createExplorationWorld(): void {
     this.worldFeatureLayer = this.add.container(0, 0).setDepth(-18);
 
-    // River lanes (left vertical trunk + lower branch)
-    const riverSegments = [
-      { x: 560, y: 760, w: 190, h: 1260 },
-      { x: 760, y: 1110, w: 360, h: 160 },
-      { x: 650, y: 340, w: 210, h: 220 },
-    ];
-    riverSegments.forEach((segment, idx) => {
-      const water = this.add.rectangle(segment.x, segment.y, segment.w, segment.h, 0x0ea5e9, idx === 0 ? 0.18 : 0.16);
-      water.setStrokeStyle(1, 0x7dd3fc, 0.28);
-      const foam = this.add.rectangle(segment.x, segment.y, segment.w * 0.92, segment.h * 0.92, 0x93c5fd, 0.08);
-      this.worldFeatureLayer.add(water);
-      this.worldFeatureLayer.add(foam);
-    });
-    for (let i = 0; i < 14; i += 1) {
-      const ripple = this.add.ellipse(
-        Phaser.Math.Between(485, 870),
+    const addShadowedStructure = (key: string, x: number, y: number, scale: number, tint?: number) => {
+      if (!this.textures.exists(key)) return;
+      const shadow = this.add.ellipse(x, y + 12, 52 * scale, 13 * scale, 0x000000, 0.22);
+      const sprite = this.add.image(x, y, key).setScale(scale);
+      if (tint) sprite.setTint(tint);
+      this.worldFeatureLayer.add([shadow, sprite]);
+    };
+
+    // River biome: organic blobs instead of hard rectangles.
+    for (let y = 112; y <= 1400; y += 96) {
+      const cx = 392 + Math.sin(y * 0.009) * 14;
+      const water = this.add.ellipse(cx, y, 148 + Math.cos(y * 0.01) * 12, 158, 0x0ea5e9, 0.14);
+      const foam = this.add.ellipse(cx + 6, y, 114, 118, 0x93c5fd, 0.06);
+      this.worldFeatureLayer.add([water, foam]);
+    }
+    for (let x = 412; x <= 716; x += 70) {
+      const cy = 1110 + Math.sin(x * 0.03) * 10;
+      this.worldFeatureLayer.add(this.add.ellipse(x, cy, 128, 66, 0x0ea5e9, 0.12));
+      this.worldFeatureLayer.add(this.add.ellipse(x + 8, cy + 2, 96, 44, 0x93c5fd, 0.05));
+    }
+    for (let x = 356; x <= 560; x += 54) {
+      const cy = 336 + Math.sin(x * 0.06) * 8;
+      this.worldFeatureLayer.add(this.add.ellipse(x, cy, 112, 58, 0x0ea5e9, 0.12));
+      this.worldFeatureLayer.add(this.add.ellipse(x + 8, cy, 84, 40, 0x93c5fd, 0.05));
+    }
+    this.worldFeatureLayer.add(this.add.ellipse(392, 122, 156, 50, 0x7dd3fc, 0.08));
+    this.worldFeatureLayer.add(this.add.ellipse(392, 1392, 164, 54, 0x7dd3fc, 0.08));
+    this.worldFeatureLayer.add(this.add.ellipse(706, 1112, 100, 36, 0x7dd3fc, 0.07));
+    for (let i = 0; i < 15; i += 1) {
+      this.worldFeatureLayer.add(this.add.ellipse(
+        Phaser.Math.Between(318, 700),
         Phaser.Math.Between(150, 1360),
         Phaser.Math.Between(18, 34),
         Phaser.Math.Between(6, 12),
         0xbfe8ff,
-        0.14
-      );
-      this.worldFeatureLayer.add(ripple);
+        0.13
+      ));
     }
+    addShadowedStructure('deco_river_pier', 428, 468, 1.0, 0xb08968);
+    addShadowedStructure('deco_river_pier', 504, 898, 1.04, 0xa67c52);
+    addShadowedStructure('deco_bridge_broken', 448, 286, 0.82, 0x9a7c5a);
+    addShadowedStructure('deco_river_boat', 390, 710, 0.86, 0x8fa9c8);
+    addShadowedStructure('forest_cabin', 350, 1116, 0.74, 0xcbd5e1);
+    addShadowedStructure('deco_boulder', 616, 656, 0.84, 0x94a3b8);
+    addShadowedStructure('deco_barricade', 576, 1010, 0.7, 0x8f6a48);
 
-    // Forest biome (top-right)
-    const forestArea = this.add.rectangle(1570, 420, 580, 620, 0x14532d, 0.14);
-    forestArea.setStrokeStyle(1, 0x22c55e, 0.2);
+    // Forest biome (top-right).
+    const forestArea = this.add.ellipse(1605, 410, 640, 660, 0x14532d, 0.1);
+    forestArea.setStrokeStyle(1, 0x22c55e, 0.14);
     this.worldFeatureLayer.add(forestArea);
-    for (let i = 0; i < 28; i += 1) {
-      const tree = this.add.image(
-        Phaser.Math.Between(1280, 1880),
-        Phaser.Math.Between(120, 730),
-        'deco_tree'
-      ).setScale(Phaser.Math.FloatBetween(0.78, 1.12));
-      this.worldFeatureLayer.add(tree);
+    for (let i = 0; i < 30; i += 1) {
+      const key = Phaser.Math.Between(0, 4) > 0 && this.textures.exists('deco_pine') ? 'deco_pine' : 'deco_tree';
+      this.worldFeatureLayer.add(this.add.image(
+        Phaser.Math.Between(1320, 1890),
+        Phaser.Math.Between(120, 742),
+        key
+      ).setScale(Phaser.Math.FloatBetween(0.78, 1.12)));
     }
     for (let i = 0; i < 10; i += 1) {
-      const bush = this.add.circle(
-        Phaser.Math.Between(1300, 1860),
+      this.worldFeatureLayer.add(this.add.circle(
+        Phaser.Math.Between(1330, 1860),
         Phaser.Math.Between(150, 740),
         Phaser.Math.Between(8, 16),
         0x166534,
         0.34
-      );
-      this.worldFeatureLayer.add(bush);
+      ));
     }
+    addShadowedStructure('forest_cabin', 1486, 286, 0.86, 0xd1d5db);
+    addShadowedStructure('forest_cabin', 1762, 442, 0.78, 0xbdd7c2);
+    addShadowedStructure('deco_billboard', 1638, 214, 0.58, 0xa3e635);
+    addShadowedStructure('deco_forest_shrine', 1548, 562, 0.76, 0x95cf9c);
+    addShadowedStructure('deco_radio_tower', 1860, 232, 0.58, 0x94a3b8);
+    addShadowedStructure('deco_boulder', 1818, 688, 0.92, 0x7f8ea3);
 
-    // City biome (top-left): ruined houses + small shops
-    const cityArea = this.add.rectangle(430, 400, 620, 610, 0x334155, 0.1);
-    cityArea.setStrokeStyle(1, 0x94a3b8, 0.25);
+    // City biome (top-left) with stricter boundary so it doesn't invade base visuals.
+    const cityArea = this.add.ellipse(322, 396, 544, 584, 0x334155, 0.1);
+    cityArea.setStrokeStyle(1, 0x94a3b8, 0.16);
     this.worldFeatureLayer.add(cityArea);
     const cityBlocks = [
-      { x: 250, y: 220, s: 0.88 },
-      { x: 390, y: 240, s: 0.92 },
-      { x: 540, y: 210, s: 0.82 },
-      { x: 660, y: 270, s: 0.78 },
-      { x: 300, y: 430, s: 0.86 },
-      { x: 500, y: 470, s: 0.84 },
-      { x: 660, y: 520, s: 0.8 },
+      { key: 'house_tower_ruin', x: 160, y: 172, s: 0.56, tint: 0x95a2b5 },
+      { key: 'house_apartment', x: 236, y: 210, s: 0.62, tint: 0x9aa6b8 },
+      { key: 'house_shop_ruin', x: 356, y: 246, s: 0.74, tint: 0xa5afbf },
+      { key: 'house_duplex_ruin', x: 262, y: 296, s: 0.66, tint: 0x9eaab9 },
+      { key: 'house_block_ruin', x: 472, y: 194, s: 0.7, tint: 0x98a4b5 },
+      { key: 'shop_kiosk_ruin', x: 520, y: 292, s: 0.7, tint: 0xa5afbf },
+      { key: 'house_factory_ruin', x: 150, y: 402, s: 0.6, tint: 0x97a3b4 },
+      { key: 'house_shop_ruin', x: 286, y: 432, s: 0.7, tint: 0xb0bac8 },
+      { key: 'house_block_ruin', x: 414, y: 462, s: 0.78, tint: 0x9ca3af },
+      { key: 'house_clinic_ruin', x: 522, y: 402, s: 0.64, tint: 0xaeb6c4 },
+      { key: 'deco_ruin', x: 486, y: 506, s: 0.8, tint: 0x9ca3af },
+      { key: 'house_tower_ruin', x: 570, y: 480, s: 0.5, tint: 0x95a2b5 },
     ];
-    cityBlocks.forEach((block, idx) => {
-      const ruin = this.add.image(block.x, block.y, 'deco_ruin').setScale(block.s);
-      if (idx % 2 === 0) ruin.setTint(0x9ca3af);
-      this.worldFeatureLayer.add(ruin);
-      if (idx % 3 === 0) {
-        const shop = this.add.image(block.x + 34, block.y + 18, 'store_counter').setScale(0.65);
-        shop.setTint(0x64748b);
-        this.worldFeatureLayer.add(shop);
-      }
-    });
-    for (let i = 0; i < 11; i += 1) {
+    cityBlocks.forEach((block) => addShadowedStructure(block.key, block.x, block.y, block.s, block.tint));
+    for (let i = 0; i < 10; i += 1) {
       const machine = this.add.image(
-        Phaser.Math.Between(170, 720),
-        Phaser.Math.Between(160, 670),
+        Phaser.Math.Between(150, 610),
+        Phaser.Math.Between(156, 666),
         'deco_machine'
-      ).setScale(Phaser.Math.FloatBetween(0.52, 0.85));
+      ).setScale(Phaser.Math.FloatBetween(0.52, 0.82));
       machine.setTint(0x6b7280);
       this.worldFeatureLayer.add(machine);
     }
+    addShadowedStructure('deco_billboard', 262, 320, 0.58, 0x94a3b8);
+    addShadowedStructure('deco_billboard', 520, 360, 0.5, 0x94a3b8);
+    for (let i = 0; i < 11; i += 1) {
+      this.worldFeatureLayer.add(this.add.rectangle(
+        Phaser.Math.Between(140, 620),
+        Phaser.Math.Between(164, 688),
+        Phaser.Math.Between(12, 24),
+        Phaser.Math.Between(4, 8),
+        0x475569,
+        0.55
+      ).setRotation(Phaser.Math.FloatBetween(-0.4, 0.4)));
+    }
+    for (let i = 0; i < 4; i += 1) {
+      if (!this.textures.exists('deco_wreck_car')) break;
+      const car = this.add.image(
+        Phaser.Math.Between(160, 600),
+        Phaser.Math.Between(208, 652),
+        'deco_wreck_car'
+      ).setScale(Phaser.Math.FloatBetween(0.45, 0.64)).setRotation(Phaser.Math.FloatBetween(-0.18, 0.18));
+      car.setTint(0x8f9bae);
+      this.worldFeatureLayer.add(car);
+    }
+    for (let i = 0; i < 4; i += 1) {
+      if (!this.textures.exists('deco_barricade')) break;
+      const barricade = this.add.image(
+        Phaser.Math.Between(170, 610),
+        Phaser.Math.Between(188, 676),
+        'deco_barricade'
+      ).setScale(Phaser.Math.FloatBetween(0.52, 0.74));
+      barricade.setTint(0x9b7f5b);
+      this.worldFeatureLayer.add(barricade);
+    }
 
-    // Cave biome (bottom-right)
-    const caveArea = this.add.rectangle(1670, 1160, 360, 320, 0x1f2937, 0.2);
-    caveArea.setStrokeStyle(1, 0x64748b, 0.35);
+    // Cave biome (bottom-right).
+    const caveArea = this.add.ellipse(1670, 1160, 390, 336, 0x1f2937, 0.16);
+    caveArea.setStrokeStyle(1, 0x64748b, 0.24);
     this.worldFeatureLayer.add(caveArea);
-    const caveMouth = this.add.ellipse(1650, 1168, 170, 98, 0x020617, 0.88);
-    const caveInner = this.add.ellipse(1654, 1172, 104, 54, 0x000000, 0.78);
-    const caveGlow = this.add.ellipse(1654, 1144, 126, 44, 0x334155, 0.22);
-    this.worldFeatureLayer.add(caveMouth);
-    this.worldFeatureLayer.add(caveInner);
-    this.worldFeatureLayer.add(caveGlow);
+    this.worldFeatureLayer.add(this.add.ellipse(1650, 1168, 170, 98, 0x020617, 0.88));
+    this.worldFeatureLayer.add(this.add.ellipse(1654, 1172, 104, 54, 0x000000, 0.78));
+    this.worldFeatureLayer.add(this.add.ellipse(1654, 1144, 126, 44, 0x334155, 0.22));
+    addShadowedStructure('deco_cave_gate', 1650, 1168, 0.78, 0x8d99ad);
+    addShadowedStructure('cave_watch_post', 1764, 1088, 0.72, 0x8b95a9);
+    addShadowedStructure('deco_radio_tower', 1818, 1230, 0.54, 0x8b95a9);
+    for (let i = 0; i < 9; i += 1) {
+      if (!this.textures.exists('deco_cave_stalagmite')) break;
+      const stalagmite = this.add.image(
+        Phaser.Math.Between(1520, 1820),
+        Phaser.Math.Between(1030, 1350),
+        'deco_cave_stalagmite'
+      ).setScale(Phaser.Math.FloatBetween(0.56, 0.9)).setTint(0x73819a);
+      this.worldFeatureLayer.add(stalagmite);
+    }
     for (let i = 0; i < 8; i += 1) {
-      const crater = this.add.image(
+      this.worldFeatureLayer.add(this.add.image(
         Phaser.Math.Between(1510, 1830),
         Phaser.Math.Between(1010, 1370),
         'deco_crater'
-      ).setScale(Phaser.Math.FloatBetween(0.65, 1.0));
-      this.worldFeatureLayer.add(crater);
+      ).setScale(Phaser.Math.FloatBetween(0.65, 1.0)));
     }
 
-    // Zone labels (readability-first on mobile portrait)
-    this.spawnWorldZoneLabel({ x: 545, y: 260, text: '河流区', color: '#22d3ee' });
-    this.spawnWorldZoneLabel({ x: 360, y: 252, text: '城区', color: '#f8fafc' });
-    this.spawnWorldZoneLabel({ x: 1560, y: 252, text: '森林区', color: '#86efac' });
+    // Zone labels.
+    this.spawnWorldZoneLabel({ x: 398, y: 246, text: '河流区', color: '#22d3ee' });
+    this.spawnWorldZoneLabel({ x: 278, y: 246, text: '城区', color: '#f8fafc' });
+    this.spawnWorldZoneLabel({ x: 1590, y: 250, text: '森林区', color: '#86efac' });
     this.spawnWorldZoneLabel({ x: 1650, y: 974, text: '山洞区', color: '#c4b5fd' });
 
-    // Exploration points for day-life gameplay
+    // Exploration points for day-life gameplay.
     this.spawnExplorationSpot({
       id: 'river_fishing_1',
       zone: 'river',
       actionType: 'fish',
       name: '河岸钓点',
       hint: '河流钓鱼',
-      x: 610,
+      x: 430,
       y: 520,
       radius: 90,
       cooldown: 12000,
@@ -1330,12 +1432,25 @@ export default class GameScene extends Phaser.Scene {
       actionType: 'swim',
       name: '浅滩水域',
       hint: '河流游泳',
-      x: 670,
+      x: 462,
       y: 900,
       radius: 86,
       cooldown: 10000,
       iconKey: 'loot_water',
       color: 0x60a5fa,
+    });
+    this.spawnExplorationSpot({
+      id: 'river_fishing_2',
+      zone: 'river',
+      actionType: 'fish',
+      name: '旧桥渔点',
+      hint: '河流钓鱼',
+      x: 388,
+      y: 720,
+      radius: 88,
+      cooldown: 12000,
+      iconKey: 'deco_river_boat',
+      color: 0x22d3ee,
     });
     this.spawnExplorationSpot({
       id: 'forest_hunt_1',
@@ -1347,7 +1462,7 @@ export default class GameScene extends Phaser.Scene {
       y: 360,
       radius: 92,
       cooldown: 14000,
-      iconKey: 'deco_tree',
+      iconKey: 'deco_pine',
       color: 0x22c55e,
     });
     this.spawnExplorationSpot({
@@ -1360,7 +1475,7 @@ export default class GameScene extends Phaser.Scene {
       y: 590,
       radius: 92,
       cooldown: 14000,
-      iconKey: 'deco_tree',
+      iconKey: 'forest_cabin',
       color: 0x4ade80,
     });
     this.spawnExplorationSpot({
@@ -1369,11 +1484,11 @@ export default class GameScene extends Phaser.Scene {
       actionType: 'scavenge',
       name: '破败小店',
       hint: '城区搜刮',
-      x: 430,
+      x: 258,
       y: 320,
       radius: 88,
       cooldown: 13000,
-      iconKey: 'loot_medical',
+      iconKey: 'shop_kiosk_ruin',
       color: 0xf59e0b,
     });
     this.spawnExplorationSpot({
@@ -1382,12 +1497,25 @@ export default class GameScene extends Phaser.Scene {
       actionType: 'scavenge',
       name: '废墟民宅',
       hint: '城区搜刮',
-      x: 610,
-      y: 540,
+      x: 470,
+      y: 526,
       radius: 88,
       cooldown: 13000,
-      iconKey: 'deco_ruin',
+      iconKey: 'house_block_ruin',
       color: 0xf97316,
+    });
+    this.spawnExplorationSpot({
+      id: 'city_scavenge_3',
+      zone: 'city',
+      actionType: 'scavenge',
+      name: '坍塌诊所',
+      hint: '城区搜刮',
+      x: 522,
+      y: 404,
+      radius: 86,
+      cooldown: 13500,
+      iconKey: 'house_clinic_ruin',
+      color: 0xfb7185,
     });
     this.spawnExplorationSpot({
       id: 'cave_explore_1',
@@ -1399,22 +1527,35 @@ export default class GameScene extends Phaser.Scene {
       y: 1170,
       radius: 104,
       cooldown: 22000,
-      iconKey: 'loot_core',
+      iconKey: 'cave_watch_post',
       color: 0xa78bfa,
+    });
+    this.spawnExplorationSpot({
+      id: 'cave_explore_2',
+      zone: 'cave',
+      actionType: 'cave_explore',
+      name: '深层裂隙',
+      hint: '山洞探险',
+      x: 1734,
+      y: 1260,
+      radius: 96,
+      cooldown: 22000,
+      iconKey: 'deco_cave_gate',
+      color: 0xc4b5fd,
     });
     this.updateExplorationSpotStatus(true);
   }
 
   private spawnWorldZoneLabel(def: { x: number; y: number; text: string; color: string }): void {
     this.add.text(def.x, def.y, def.text, {
-      fontSize: this.worldFs(13, 12),
+      fontSize: this.worldFs(14, 13),
       color: def.color,
       fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       stroke: '#020617',
       strokeThickness: 4,
-      backgroundColor: '#0b1220',
-      padding: { left: 10, right: 10, top: 4, bottom: 4 },
+      backgroundColor: '#071227c8',
+      padding: { left: 8, right: 8, top: 4, bottom: 4 },
     }).setOrigin(0.5).setDepth(-5);
   }
 
@@ -1573,11 +1714,36 @@ export default class GameScene extends Phaser.Scene {
     const zoneName = this.getWorldZoneNameCN(def.zone);
     const uiFont = this.getUIFontFamily();
     const marker = this.add.container(def.x, def.y).setDepth(6);
-    const halo = this.add.circle(0, 0, 16, 0x0b1220, 0.82).setStrokeStyle(2, def.color, 0.95);
+    const halo = this.add.circle(0, 0, 15, 0x0b1220, 0.82).setStrokeStyle(2, def.color, 0.95);
     marker.add(halo);
 
     if (this.textures.exists(def.iconKey)) {
-      const iconBase = def.iconKey === 'deco_tree' || def.iconKey === 'deco_ruin' ? 0.42 : 0.8;
+      const smallWorldIcons = new Set([
+        'deco_tree',
+        'deco_pine',
+        'deco_ruin',
+        'deco_boulder',
+        'deco_barricade',
+        'loot_core',
+        'loot_food',
+        'loot_water',
+      ]);
+      const mediumWorldIcons = new Set([
+        'deco_river_pier',
+        'deco_river_boat',
+        'forest_cabin',
+        'deco_forest_shrine',
+        'shop_kiosk_ruin',
+        'house_block_ruin',
+        'house_clinic_ruin',
+        'deco_cave_gate',
+        'cave_watch_post',
+      ]);
+      const iconBase = smallWorldIcons.has(def.iconKey)
+        ? 0.42
+        : mediumWorldIcons.has(def.iconKey)
+          ? 0.32
+          : 0.8;
       const icon = this.add.image(0, 0, def.iconKey).setScale(iconBase * iconMul);
       marker.add(icon);
     } else {
@@ -1590,32 +1756,20 @@ export default class GameScene extends Phaser.Scene {
       }).setOrigin(0.5));
     }
 
-    const zoneTag = this.add.text(0, -26, zoneName, {
-      fontSize: this.worldFs(10, 9),
-      color: '#93c5fd',
-      fontFamily: uiFont,
-      fontStyle: 'bold',
-      stroke: '#020617',
-      strokeThickness: 3,
-      backgroundColor: '#0b1220',
-      padding: { left: 6, right: 6, top: 1, bottom: 1 },
-    }).setOrigin(0.5, 1);
-    marker.add(zoneTag);
-
-    const label = this.add.text(0, -11, def.name, {
+    const label = this.add.text(0, -13, `${zoneName}·${def.name}`, {
       fontSize: this.worldFs(12, 11),
       color: '#cbd5e1',
       fontFamily: uiFont,
       fontStyle: 'bold',
       stroke: '#020617',
-      strokeThickness: 4,
+      strokeThickness: 3,
       backgroundColor: '#0b1220',
-      padding: { left: 7, right: 7, top: 2, bottom: 2 },
+      padding: { left: 6, right: 6, top: 2, bottom: 2 },
     }).setOrigin(0.5, 1);
     marker.add(label);
 
     const statusText = this.add.text(0, 16, '0/0', {
-      fontSize: this.worldFs(10, 9),
+      fontSize: this.worldFs(11, 10),
       color: '#64748b',
       fontFamily: uiFont,
       stroke: '#020617',
@@ -1656,9 +1810,9 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private isInsideRiver(x: number, y: number): boolean {
-    const main = x >= 465 && x <= 650 && y >= 100 && y <= 1410;
-    const branch = x >= 560 && x <= 940 && y >= 1020 && y <= 1190;
-    const upper = x >= 540 && x <= 760 && y >= 180 && y <= 470;
+    const main = x >= 300 && x <= 480 && y >= 100 && y <= 1410;
+    const branch = x >= 380 && x <= 720 && y >= 1020 && y <= 1190;
+    const upper = x >= 350 && x <= 590 && y >= 180 && y <= 470;
     return main || branch || upper;
   }
 
@@ -1667,7 +1821,7 @@ export default class GameScene extends Phaser.Scene {
     if (this.isInsideRiver(x, y)) return 'river';
     if (x >= 1470 && x <= 1860 && y >= 980 && y <= 1400) return 'cave';
     if (x >= 1260 && x <= 1910 && y >= 100 && y <= 760) return 'forest';
-    if (x >= 100 && x <= 760 && y >= 100 && y <= 730) return 'city';
+    if (x >= 80 && x <= 620 && y >= 100 && y <= 730) return 'city';
     return 'wasteland';
   }
 
@@ -1746,6 +1900,23 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  private refreshExplorationMarkerVisibility(): void {
+    const zone = this.getWorldZoneAt(this.player.x, this.player.y);
+    const hideFarMarkersInBase = zone === 'base';
+    this.explorationSpots.forEach((spot) => {
+      if (!spot.marker?.active) return;
+      if (!hideFarMarkersInBase) {
+        spot.marker.setVisible(true);
+        spot.marker.setAlpha(1);
+        return;
+      }
+      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, spot.x, spot.y);
+      const keepVisible = distance <= Math.max(88, spot.radius * 0.75);
+      spot.marker.setVisible(keepVisible);
+      spot.marker.setAlpha(keepVisible ? 1 : 0);
+    });
+  }
+
   private getExplorationHintText(spot: ExplorationSpot): string {
     if (gameState.data.isNight) {
       return `[E] ${spot.name} · 夜间封锁`;
@@ -1786,110 +1957,153 @@ export default class GameScene extends Phaser.Scene {
   private createVillageScenery(): void {
     this.villageLayer = this.add.container(0, 0).setDepth(-3);
     this.villageLights = [];
+    const uiFont = this.getUIFontFamily();
 
     const tileSize = 64;
     const cols = 8;
     const rows = 7;
     const startX = 1000 - (cols * tileSize) / 2;
     const startY = 750 - (rows * tileSize) / 2;
+    const centerX = startX + cols * tileSize * 0.5;
+    const hallY = startY + tileSize * 2.02;
 
-    // Ground tiles inside base
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const tex = row >= 2 && row <= 4 ? 'village_path' : 'village_ground';
+    // Ground: cross-lane path + district boards, keep geometry readable.
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        const crossPath = (row >= 2 && row <= 4) || (col >= 3 && col <= 4);
+        const tex = crossPath ? 'village_path' : 'village_ground';
         const tile = this.add.image(startX + col * tileSize + tileSize / 2, startY + row * tileSize + tileSize / 2, tex).setDepth(-4);
         this.villageLayer.add(tile);
       }
     }
+    const plaza = this.add.rectangle(centerX, startY + tileSize * 3.54, 356, 246, 0x2a2119, 0.18).setDepth(-5);
+    plaza.setStrokeStyle(1, 0xf59e0b, 0.2);
+    this.villageLayer.add(plaza);
 
-    // Storefront center piece
-    const storeCenterX = startX + cols * tileSize * 0.5;
-    const storeY = startY + tileSize * 1.8;
-    const store = this.add.image(storeCenterX, storeY, 'store_front').setDepth(-2);
-    this.villageLayer.add(store);
-    const signBoard = this.add.image(storeCenterX, storeY - 88, 'store_sign_board').setDepth(-1);
+    const districtPads = [
+      { x: centerX, y: startY + tileSize * 0.98, w: 334, h: 96, stroke: 0xfbbf24, tag: '指挥区' },
+      { x: centerX - 220, y: startY + tileSize * 3.12, w: 174, h: 188, stroke: 0x86efac, tag: '生活区' },
+      { x: centerX + 220, y: startY + tileSize * 3.12, w: 174, h: 188, stroke: 0xf59e0b, tag: '制造区' },
+      { x: centerX, y: startY + tileSize * 5.18, w: 304, h: 108, stroke: 0x22d3ee, tag: '后勤区' },
+    ];
+    districtPads.forEach((pad) => {
+      const lane = this.add.rectangle(pad.x, pad.y + pad.h * 0.4, pad.w * 0.62, 1, pad.stroke, 0.28).setDepth(-5);
+      this.villageLayer.add(lane);
+    });
+
+    const placeStructure = (key: string, x: number, y: number, scale: number, tint = 0xffffff, depth = -2) => {
+      if (!this.textures.exists(key)) return;
+      const shadow = this.add.ellipse(x, y + 14, 74 * scale, 15 * scale, 0x000000, 0.2).setDepth(depth - 1);
+      const sprite = this.add.image(x, y, key).setScale(scale).setTint(tint).setDepth(depth);
+      this.villageLayer.add([shadow, sprite]);
+    };
+
+    // Command layer + main hall.
+    placeStructure('base_command_center', centerX, startY + tileSize * 0.72, 0.7, 0xd7c4a2, -3);
+    const hall = this.add.image(centerX, hallY, 'store_front').setDepth(-2).setScale(0.98);
+    this.villageLayer.add(hall);
+    const signBoard = this.add.image(centerX, hallY - 84, 'store_sign_board').setDepth(-1).setScale(1.02);
     this.villageLayer.add(signBoard);
-    const signText = this.add.text(storeCenterX, storeY - 88, '影目AR眼镜体验中心', {
-      fontSize: '16px',
+    this.villageLayer.add(this.add.text(centerX, hallY - 84, '影目AR眼镜体验中心', {
+      fontSize: this.worldFs(17, 16),
       color: '#f8fafc',
-      fontFamily: 'Courier New',
+      fontFamily: uiFont,
       fontStyle: 'bold',
       stroke: '#0f172a',
       strokeThickness: 4,
-    }).setOrigin(0.5).setDepth(0);
-    this.villageLayer.add(signText);
+    }).setOrigin(0.5).setDepth(0));
 
-    // Counter and props
-    this.villageLayer.add(this.add.image(storeCenterX - 86, startY + tileSize * 3.15, 'store_counter').setDepth(-1));
-    this.villageLayer.add(this.add.image(storeCenterX + 86, startY + tileSize * 3.15, 'store_counter').setDepth(-1));
+    // Core district buildings only.
+    placeStructure('base_residence_block', centerX - 220, startY + tileSize * 2.8, 0.82, 0xc9d5b2);
+    placeStructure('base_workshop_block', centerX + 220, startY + tileSize * 2.8, 0.82, 0xcfb99c);
+    placeStructure('base_clinic_block', centerX, startY + tileSize * 4.9, 0.78, 0xd4cfbf);
+    placeStructure('base_drone_hangar', centerX, startY + tileSize * 5.56, 0.56, 0xbec8bf);
+
+    // Light perimeter silhouettes.
+    placeStructure('house_tower_ruin', centerX - 402, startY + tileSize * 1.48, 0.48, 0x918a7f, -4);
+    placeStructure('house_tower_ruin', centerX + 402, startY + tileSize * 1.48, 0.48, 0x918a7f, -4);
+
+    // Core props.
+    this.villageLayer.add(this.add.image(centerX - 86, startY + tileSize * 3.22, 'store_counter').setDepth(-1));
+    this.villageLayer.add(this.add.image(centerX + 86, startY + tileSize * 3.22, 'store_counter').setDepth(-1));
     [
-      { x: storeCenterX - 170, y: startY + tileSize * 4.2, s: 0.95 },
-      { x: storeCenterX + 170, y: startY + tileSize * 4.2, s: 0.95 },
-      { x: storeCenterX + 10, y: startY + tileSize * 5.0, s: 1.0 },
-    ].forEach(p => {
+      { x: centerX - 146, y: startY + tileSize * 4.2, s: 0.86 },
+      { x: centerX + 146, y: startY + tileSize * 4.2, s: 0.86 },
+    ].forEach((p) => {
       const crate = this.add.image(p.x, p.y, 'supply_crate').setDepth(-1).setScale(p.s);
-      const shadow = this.add.ellipse(p.x, p.y + 12, 38 * p.s, 12 * p.s, 0x000000, 0.24).setDepth(-2);
-      this.villageLayer.add(shadow);
-      this.villageLayer.add(crate);
+      const shadow = this.add.ellipse(p.x, p.y + 11, 34 * p.s, 10 * p.s, 0x000000, 0.22).setDepth(-2);
+      this.villageLayer.add([shadow, crate]);
     });
 
-    // Lamps and lighting
+    // Living-camp props: tents / crops / clothesline / dining table.
+    placeStructure('camp_tent', centerX - 280, startY + tileSize * 4.42, 0.76, 0xffffff, -2);
+    placeStructure('camp_tent', centerX + 280, startY + tileSize * 4.42, 0.76, 0xffffff, -2);
+    placeStructure('camp_garden_box', centerX - 230, startY + tileSize * 5.4, 0.92, 0xffffff, -2);
+    placeStructure('camp_garden_box', centerX + 230, startY + tileSize * 5.4, 0.92, 0xffffff, -2);
+    placeStructure('camp_table', centerX, startY + tileSize * 4.34, 0.86, 0xffffff, -2);
+    placeStructure('camp_clothesline', centerX - 4, startY + tileSize * 5.62, 0.86, 0xffffff, -2);
+    placeStructure('farm_plot', centerX - 324, startY + tileSize * 5.08, 0.62, 0xffffff, -3);
+    placeStructure('farm_plot', centerX + 324, startY + tileSize * 5.08, 0.62, 0xffffff, -3);
+
+    if (this.textures.exists('camp_string_lights')) {
+      const upperLights = this.add.image(centerX, hallY - 54, 'camp_string_lights').setDepth(-1);
+      const lowerLights = this.add.image(centerX, startY + tileSize * 4.92, 'camp_string_lights').setDepth(-1);
+      lowerLights.setScale(0.9);
+      this.villageLayer.add([upperLights, lowerLights]);
+      this.villageLayer.add(this.add.circle(centerX - 76, hallY - 48, 22, 0xffd27a, 0.1).setDepth(-2));
+      this.villageLayer.add(this.add.circle(centerX + 82, hallY - 48, 22, 0xffd27a, 0.1).setDepth(-2));
+    }
+
+    // Lamps + fire core.
     [
       { x: startX + tileSize * 0.5, y: startY + tileSize * 0.5 },
       { x: startX + tileSize * (cols - 0.5), y: startY + tileSize * 0.5 },
       { x: startX + tileSize * 0.5, y: startY + tileSize * (rows - 0.5) },
       { x: startX + tileSize * (cols - 0.5), y: startY + tileSize * (rows - 0.5) },
-    ].forEach(pos => {
+    ].forEach((pos) => {
       this.villageLayer.add(this.add.image(pos.x, pos.y, 'street_lamp').setDepth(-1));
-      this.villageLayer.add(this.add.circle(pos.x, pos.y + 16, 26, 0xfff3b0, 0.12).setDepth(-2));
-      this.villageLights.push({ x: pos.x, y: pos.y + 10, scale: 0.7 });
+      this.villageLayer.add(this.add.circle(pos.x, pos.y + 16, 24, 0xfff3b0, 0.1).setDepth(-2));
+      this.villageLights.push({ x: pos.x, y: pos.y + 10, scale: 0.68 });
     });
+    const fire = this.add.sprite(centerX, startY + tileSize * 3.56, 'campfire').setDepth(-1);
+    this.villageLayer.add(fire);
+    this.villageLayer.add(this.add.circle(fire.x, fire.y, 34, 0xffa94a, 0.16).setDepth(-2));
+    this.villageLights.push({ x: fire.x, y: fire.y, scale: 1.04 });
 
-    // Plaza campfire
-    const cf = this.add.sprite(storeCenterX, startY + tileSize * 3.55, 'campfire').setDepth(-1);
-    this.villageLayer.add(cf);
-    this.villageLayer.add(this.add.circle(cf.x, cf.y, 36, 0xffa94a, 0.18).setDepth(-2));
-    this.villageLights.push({ x: cf.x, y: cf.y, scale: 1.1 });
-
-    // Info board
-    const board = this.add.rectangle(storeCenterX, startY + tileSize * 5.35, 152, 34, 0x2b2117, 0.94);
-    board.setStrokeStyle(2, 0xfacc15);
-    this.villageLayer.add(board);
-    const bText = this.add.text(board.x, board.y, '觉醒者基地安全区', {
-      fontSize: '13px',
-      color: '#facc15',
-      fontFamily: 'Courier New',
-      align: 'center',
-    }).setOrigin(0.5).setDepth(-1);
-    this.villageLayer.add(bText);
-
-    const labelStyle: Phaser.Types.GameObjects.Text.TextStyle = {
-      fontSize: '12px',
-      color: '#f8fafc',
-      fontFamily: 'Courier New',
+    // Minimal labels.
+    const districtStyle: Phaser.Types.GameObjects.Text.TextStyle = {
+      fontSize: this.worldFs(12, 11),
+      color: '#fef3c7',
+      fontFamily: uiFont,
       fontStyle: 'bold',
       stroke: '#020617',
       strokeThickness: 3,
-      backgroundColor: 'rgba(15, 23, 42, 0.78)',
-      padding: { left: 8, right: 8, top: 4, bottom: 4 },
+      backgroundColor: '#2a2014cc',
+      padding: { left: 6, right: 6, top: 2, bottom: 2 },
     };
-    const signs = [
-      { x: storeCenterX - 145, y: startY + tileSize * 1.35, text: '数据交易区' },
-      { x: storeCenterX + 145, y: startY + tileSize * 1.35, text: '眼镜体验区' },
-      { x: storeCenterX, y: startY + tileSize * 4.15, text: '任务中心' },
-    ];
-    signs.forEach((s) => {
-      const t = this.add.text(s.x, s.y, s.text, labelStyle).setOrigin(0.5).setDepth(-1);
-      this.villageLayer.add(t);
+    districtPads.forEach((pad) => {
+      if (pad.tag === '指挥区') return;
+      const yOffset = pad.tag === '后勤区' ? -36 : -42;
+      const tag = this.add.text(pad.x, pad.y + yOffset, pad.tag, districtStyle).setOrigin(0.5).setDepth(-1);
+      this.villageLayer.add(tag);
     });
+    const board = this.add.rectangle(centerX, startY + tileSize * 5.74, 172, 34, 0x2b2117, 0.92);
+    board.setStrokeStyle(2, 0xfacc15);
+    this.villageLayer.add(board);
+    this.villageLayer.add(this.add.text(board.x, board.y, '生活营地 · 安全区', {
+      fontSize: this.worldFs(14, 13),
+      color: '#facc15',
+      fontFamily: uiFont,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(-1));
 
     // Walls around base
     this.createBaseWalls(startX, startY, tileSize, cols, rows);
 
     // NPCs
-    this.spawnNPC(storeCenterX - 80, startY + tileSize * 1.95, 'merchant', '数据交易员');
-    this.spawnNPC(storeCenterX, startY + tileSize * 5.2, 'commander', '任务官');
-    this.spawnNPC(storeCenterX + 80, startY + tileSize * 1.95, 'weaponsmith', '宝岛眼镜店');
+    this.spawnNPC(centerX - 74, startY + tileSize * 1.98, 'merchant', '数据交易员');
+    this.spawnNPC(centerX + 74, startY + tileSize * 1.98, 'weaponsmith', '宝岛眼镜店');
+    this.spawnNPC(centerX, startY + tileSize * 4.62, 'commander', '任务官');
 
     // Day-life facilities (enterable)
     this.spawnFacility({
@@ -1897,12 +2111,12 @@ export default class GameScene extends Phaser.Scene {
       name: '炊事台',
       action: '做饭',
       texture: 'kitchen_station',
-      x: storeCenterX - 74,
-      y: startY + tileSize * 3.95,
-      enterX: storeCenterX - 76,
-      enterY: startY + tileSize * 3.55,
-      exitX: storeCenterX - 120,
-      exitY: startY + tileSize * 4.25,
+      x: centerX - 132,
+      y: startY + tileSize * 4.24,
+      enterX: centerX - 132,
+      enterY: startY + tileSize * 3.9,
+      exitX: centerX - 164,
+      exitY: startY + tileSize * 4.34,
       radius: 88,
     });
     this.spawnFacility({
@@ -1910,12 +2124,12 @@ export default class GameScene extends Phaser.Scene {
       name: '宿舍房间',
       action: '休息',
       texture: 'room_quarters',
-      x: storeCenterX + 84,
-      y: startY + tileSize * 4.1,
-      enterX: storeCenterX + 84,
-      enterY: startY + tileSize * 3.72,
-      exitX: storeCenterX + 120,
-      exitY: startY + tileSize * 4.28,
+      x: centerX - 40,
+      y: startY + tileSize * 5.28,
+      enterX: centerX - 40,
+      enterY: startY + tileSize * 4.92,
+      exitX: centerX - 74,
+      exitY: startY + tileSize * 5.36,
       radius: 92,
     });
     this.spawnFacility({
@@ -1923,12 +2137,12 @@ export default class GameScene extends Phaser.Scene {
       name: '哨岗',
       action: '站岗',
       texture: 'guard_post',
-      x: storeCenterX + 176,
-      y: startY + tileSize * 4.28,
-      enterX: storeCenterX + 176,
-      enterY: startY + tileSize * 4.05,
-      exitX: storeCenterX + 148,
-      exitY: startY + tileSize * 4.35,
+      x: centerX + 42,
+      y: startY + tileSize * 5.28,
+      enterX: centerX + 42,
+      enterY: startY + tileSize * 4.92,
+      exitX: centerX + 74,
+      exitY: startY + tileSize * 5.36,
       radius: 78,
     });
     this.spawnFacility({
@@ -1936,12 +2150,12 @@ export default class GameScene extends Phaser.Scene {
       name: '工作台',
       action: '加工',
       texture: 'workbench',
-      x: storeCenterX - 168,
-      y: startY + tileSize * 4.25,
-      enterX: storeCenterX - 168,
-      enterY: startY + tileSize * 4.0,
-      exitX: storeCenterX - 142,
-      exitY: startY + tileSize * 4.35,
+      x: centerX + 132,
+      y: startY + tileSize * 4.24,
+      enterX: centerX + 132,
+      enterY: startY + tileSize * 3.9,
+      exitX: centerX + 164,
+      exitY: startY + tileSize * 4.34,
       radius: 78,
     });
   }
@@ -2124,21 +2338,68 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private spawnNPC(x: number, y: number, type: CampInteractable['type'], name: string): void {
-    const sprite = this.add.sprite(x, y, 'companion');
+    const sprite = this.add.sprite(x, y, this.getNpcTextureKey(type));
+    const npcScale = this.getNpcVisualScale();
+    sprite.setScale(npcScale);
     sprite.setDepth(3);
     const colors: Record<string, number> = { merchant: 0xfbbf24, commander: 0x0ea5e9, weaponsmith: 0xef4444 };
-    sprite.setTint(colors[type] || 0xffffff);
+    if (sprite.texture?.key === 'companion') {
+      sprite.setTint(colors[type] || 0xffffff);
+    }
     this.villageLayer.add(sprite);
 
-    this.tweens.add({ targets: sprite, scale: { from: 1, to: 1.08 }, duration: 800, yoyo: true, repeat: -1 });
+    this.tweens.add({
+      targets: sprite,
+      y: { from: y, to: y - 2 },
+      duration: 820,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
 
-    const label = this.add.text(x, y - 26, name, {
-      fontSize: '13px', color: '#fef08a', fontFamily: 'Courier New', fontStyle: 'bold',
+    const label = this.add.text(x, y - 40, name, {
+      fontSize: this.worldFs(14, 13),
+      color: '#fef08a',
+      fontFamily: this.getUIFontFamily(),
+      fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5).setDepth(3);
     this.villageLayer.add(label);
 
     this.interactables.push({ sprite, type, name, cooldown: 1000, lastInteract: 0 });
+  }
+
+  private getNpcTextureKey(type: CampInteractable['type']): string {
+    if (type === 'merchant' && this.textures.exists('npc_merchant')) return 'npc_merchant';
+    if (type === 'commander' && this.textures.exists('npc_commander')) return 'npc_commander';
+    if (type === 'weaponsmith' && this.textures.exists('npc_weaponsmith')) return 'npc_weaponsmith';
+    return 'companion';
+  }
+
+  private getCompanionRoleTexture(role?: string, seedKey?: string): string {
+    const fallback = this.textures.exists('companion') ? 'companion' : '';
+    const candidates: string[] = [];
+    if (role === 'tank') {
+      if (this.textures.exists('companion_tank')) candidates.push('companion_tank');
+      if (this.textures.exists('companion_engineer')) candidates.push('companion_engineer');
+    } else if (role === 'sniper') {
+      if (this.textures.exists('companion_sniper')) candidates.push('companion_sniper');
+      if (this.textures.exists('companion_raider')) candidates.push('companion_raider');
+    } else if (role === 'medic') {
+      if (this.textures.exists('companion_medic')) candidates.push('companion_medic');
+      if (this.textures.exists('companion_support')) candidates.push('companion_support');
+    }
+    if (candidates.length <= 0) return fallback || 'companion';
+    if (!seedKey) return candidates[0];
+    const hash = Array.from(seedKey).reduce((acc, ch) => (acc * 33 + ch.charCodeAt(0)) >>> 0, 7);
+    return candidates[hash % candidates.length];
+  }
+
+  private getCompanionRoleColor(role?: string): number {
+    if (role === 'tank') return 0x38bdf8;
+    if (role === 'sniper') return 0x22c55e;
+    if (role === 'medic') return 0xf472b6;
+    return 0x93c5fd;
   }
 
   private setupCollisions(): void {
@@ -2245,9 +2506,153 @@ export default class GameScene extends Phaser.Scene {
     const sh = this.cameras.main.height;
 
     this.interactionHint = this.add.text(sw / 2, sh - 70, '', {
-      fontSize: '20px', color: '#facc15', fontFamily: 'Courier New',
+      fontSize: this.worldFs(20, 18),
+      color: '#facc15',
+      fontFamily: this.getUIFontFamily(),
       backgroundColor: '#111827cc', padding: { x: 16, y: 8 },
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(1200).setVisible(false);
+  }
+
+  private hasPlayerV2Texture(): boolean {
+    return this.player?.texture?.key === HERO_V2_TEXTURE_KEY;
+  }
+
+  private resolveHeroDirection(vx: number, vy: number, fallback: HeroV2Direction): HeroV2Direction {
+    if (Math.abs(vx) < 0.01 && Math.abs(vy) < 0.01) return fallback;
+    const angleDeg = Phaser.Math.RadToDeg(Math.atan2(vy, vx));
+    if (angleDeg >= -22.5 && angleDeg < 22.5) return 'e';
+    if (angleDeg >= 22.5 && angleDeg < 67.5) return 'se';
+    if (angleDeg >= 67.5 && angleDeg < 112.5) return 's';
+    if (angleDeg >= 112.5 && angleDeg < 157.5) return 'sw';
+    if (angleDeg >= 157.5 || angleDeg < -157.5) return 'w';
+    if (angleDeg >= -157.5 && angleDeg < -112.5) return 'nw';
+    if (angleDeg >= -112.5 && angleDeg < -67.5) return 'n';
+    return 'ne';
+  }
+
+  private resolveEnemyDirection(vx: number, vy: number, fallback: EnemyV2Direction): EnemyV2Direction {
+    if (Math.abs(vx) < 0.01 && Math.abs(vy) < 0.01) return fallback;
+    if (Math.abs(vx) >= Math.abs(vy)) return vx >= 0 ? 'e' : 'w';
+    return vy >= 0 ? 's' : 'n';
+  }
+
+  private updateV2CharacterAnimations(): void {
+    this.updatePlayerV2WalkAnimation();
+    this.updateEnemyV2WalkAnimation();
+  }
+
+  private updatePlayerV2WalkAnimation(): void {
+    if (!this.hasPlayerV2Texture() || !this.player.active) return;
+    const body = this.player.body as Phaser.Physics.Arcade.Body | null;
+    if (!body) return;
+    const vx = body.velocity.x;
+    const vy = body.velocity.y;
+    this.playerFacingDir = this.resolveHeroDirection(vx, vy, this.playerFacingDir);
+    if (Math.hypot(vx, vy) > 8) {
+      if (this.time.now >= this.playerActionLockUntil) {
+        this.playPlayerAction('walk');
+      }
+      return;
+    }
+    if (this.time.now < this.playerActionLockUntil) return;
+    this.player.anims.stop();
+    this.player.setFrame(getHeroFrameIndex(this.playerFacingDir, 'walk', 0));
+  }
+
+  private updateEnemyV2WalkAnimation(): void {
+    const now = this.time.now;
+    this.enemies.getChildren().forEach((child) => {
+      const enemy = child as Phaser.Physics.Arcade.Sprite;
+      if (!enemy.active) return;
+      const ed = enemy as any;
+      if (ed.dead || ed.isBoss) return;
+      const archetype = (ed.enemyAnimArchetype as EnemyV2Archetype | undefined)
+        || mapLegacyEnemyTypeToV2Archetype(String(ed.enemyType || 'zombie'));
+      const textureKey = ENEMY_V2_TEXTURE_KEYS[archetype];
+      if (enemy.texture?.key !== textureKey) return;
+
+      const body = enemy.body as Phaser.Physics.Arcade.Body | null;
+      const vx = body?.velocity.x || 0;
+      const vy = body?.velocity.y || 0;
+      const prevDir = (enemy.getData('v2FacingDir') as EnemyV2Direction | undefined) || 's';
+      const dir = this.resolveEnemyDirection(vx, vy, prevDir);
+      enemy.setData('v2FacingDir', dir);
+
+      const actionLock = (enemy.getData('v2ActionLockUntil') as number | undefined) || 0;
+      if (now < actionLock) return;
+
+      if (Math.hypot(vx, vy) > 8) {
+        this.playEnemyAction(enemy, 'walk');
+        return;
+      }
+
+      enemy.anims.stop();
+      enemy.setFrame(getEnemyFrameIndex(dir, 'walk', 0));
+    });
+  }
+
+  private playPlayerAction(action: V2Action, force = false, lockMsOverride?: number): number {
+    if (!this.hasPlayerV2Texture() || !this.player.active) return 0;
+    const def = HERO_V2_ACTIONS[action];
+    const key = heroAnimKey(this.playerFacingDir, action);
+    if (!this.anims.exists(key)) return 0;
+    if (def.repeat === -1) {
+      if (this.player.anims.currentAnim?.key !== key || !this.player.anims.isPlaying) {
+        this.player.anims.play(key, true);
+      }
+      return 0;
+    }
+    const now = this.time.now;
+    if (!force && now < this.playerActionLockUntil) return 0;
+    if (!force && this.player.anims.currentAnim?.key === key && this.player.anims.isPlaying) return 0;
+    this.player.anims.play(key, true);
+    const duration = lockMsOverride ?? getActionDurationMs(def);
+    this.playerActionLockUntil = Math.max(this.playerActionLockUntil, now + duration);
+    return duration;
+  }
+
+  private playEnemyAction(
+    enemy: Phaser.Physics.Arcade.Sprite,
+    action: V2Action,
+    force = false,
+    lockMsOverride?: number
+  ): number {
+    if (!enemy.active) return 0;
+    const ed = enemy as any;
+    const archetype = (ed.enemyAnimArchetype as EnemyV2Archetype | undefined)
+      || mapLegacyEnemyTypeToV2Archetype(String(ed.enemyType || 'zombie'));
+    const textureKey = ENEMY_V2_TEXTURE_KEYS[archetype];
+    if (enemy.texture?.key !== textureKey) return 0;
+
+    const def = ENEMY_V2_ACTIONS[action];
+    const body = enemy.body as Phaser.Physics.Arcade.Body | null;
+    const prevDir = (enemy.getData('v2FacingDir') as EnemyV2Direction | undefined) || 's';
+    const dir = this.resolveEnemyDirection(body?.velocity.x || 0, body?.velocity.y || 0, prevDir);
+    enemy.setData('v2FacingDir', dir);
+
+    const key = enemyAnimKey(archetype, dir, action);
+    if (!this.anims.exists(key)) return 0;
+
+    if (def.repeat === -1) {
+      if (enemy.anims.currentAnim?.key !== key || !enemy.anims.isPlaying) {
+        enemy.anims.play(key, true);
+      }
+      return 0;
+    }
+
+    const now = this.time.now;
+    const lockUntil = (enemy.getData('v2ActionLockUntil') as number | undefined) || 0;
+    if (!force && now < lockUntil) return 0;
+    if (!force && enemy.anims.currentAnim?.key === key && enemy.anims.isPlaying) return 0;
+    enemy.anims.play(key, true);
+    const duration = lockMsOverride ?? getActionDurationMs(def);
+    enemy.setData('v2ActionLockUntil', now + duration);
+    return duration;
+  }
+
+  private onPlayerHitAnimation(): void {
+    if (this.isGameOver) return;
+    this.playPlayerAction('hurt', true, 180);
   }
 
   // ============================================================
@@ -2315,10 +2720,12 @@ export default class GameScene extends Phaser.Scene {
     this.syncCompanionRoster();
     this.updateNightBaseDefense();
     this.updateExplorationSpotStatus();
+    this.refreshExplorationMarkerVisibility();
     this.updateResidentAssistTask();
 
     // Homing bullets
     this.updateHomingBullets();
+    this.updateBulletMotionPatterns(delta);
 
     // Bullet cleanup (prevents pool exhaustion / stuck bullets)
     this.cleanupBullets();
@@ -2343,6 +2750,7 @@ export default class GameScene extends Phaser.Scene {
     this.updateLighting();
 
     // Animation
+    this.updateV2CharacterAnimations();
     if (this.player?.active) {
       this.animationSystem.updateSquashAndStretch(this.player);
     }
@@ -2400,6 +2808,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Fire primary weapon
     const didFire = this.weaponSystem.fire(this.player.x, this.player.y, nearest.x, nearest.y, brandMods);
+    let didAnyShot = didFire;
     if (didFire) {
       this.animationSystem.playRecoil(this.player, 0.12);
       this.createMuzzleFlash(this.player.x + 20, this.player.y);
@@ -2424,6 +2833,7 @@ export default class GameScene extends Phaser.Scene {
 
       const firedCount = this.fireVSWeapon(weapon.def, nearest, brandMods);
       if (firedCount > 0) {
+        didAnyShot = true;
         this.weaponTimers.set(timerKey, now);
       } else {
         // If bullet pool was saturated, retry faster to prevent "one shot then stop".
@@ -2434,6 +2844,9 @@ export default class GameScene extends Phaser.Scene {
     Array.from(this.weaponTimers.keys()).forEach(key => {
       if (!activeTimerKeys.has(key)) this.weaponTimers.delete(key);
     });
+    if (didAnyShot) {
+      this.playPlayerAction('attack', true, 120);
+    }
   }
 
   private getPlayerCombatBoost(): {
@@ -2567,27 +2980,42 @@ export default class GameScene extends Phaser.Scene {
       body.setCollideWorldBounds(false);
       body.setBounce(0, 0);
       body.setDrag(0, 0);
-      body.setVelocity(Math.cos(bulletAngle) * speed, Math.sin(bulletAngle) * speed);
+      const baseVelocityX = Math.cos(bulletAngle) * speed;
+      const baseVelocityY = Math.sin(bulletAngle) * speed;
+      body.setVelocity(baseVelocityX, baseVelocityY);
       bullet.setRotation(bulletAngle + Math.PI / 2);
+      this.createBulletMuzzleVfx(this.player.x, this.player.y, bulletAngle, visualTint, bulletTexture);
 
       // Store weapon data on bullet
-      (bullet as any).weaponDamage = damage;
-      (bullet as any).weaponSpecial = finalSpecial;
-      (bullet as any).weaponRange = weaponDef.range || 400;
-      (bullet as any).originX = this.player.x;
-      (bullet as any).originY = this.player.y;
-      (bullet as any).isHoming = !!(enableGlobalHoming || mods.homing);
-      (bullet as any).homingTarget = (enableGlobalHoming || mods.homing) ? target : null;
-      (bullet as any).brandDamageApplied = true;
+      const anyBullet = bullet as any;
+      anyBullet.weaponDamage = damage;
+      anyBullet.weaponSpecial = finalSpecial;
+      anyBullet.weaponRange = weaponDef.range || 400;
+      anyBullet.originX = this.player.x;
+      anyBullet.originY = this.player.y;
+      anyBullet.isHoming = !!(enableGlobalHoming || mods.homing);
+      anyBullet.homingTarget = (enableGlobalHoming || mods.homing) ? target : null;
+      anyBullet.brandDamageApplied = true;
+      anyBullet.bulletTextureKey = bulletTexture;
+      anyBullet.baseVelocityX = baseVelocityX;
+      anyBullet.baseVelocityY = baseVelocityY;
+      const swayArchetype = this.resolveBulletVfxArchetype(bulletTexture, finalSpecial);
+      const swayAmp =
+        swayArchetype === 'pulse' ? 22
+          : swayArchetype === 'chain' ? 18
+            : swayArchetype === 'flame' ? 14
+              : 0;
+      anyBullet.swayAmplitude = swayAmp;
+      anyBullet.swayFrequency = swayAmp > 0 ? (swayArchetype === 'flame' ? 0.02 : 0.014) : 0;
+      anyBullet.swayPhase = Math.random() * Math.PI * 2;
       if (finalSpecial === 'pierce') {
-        (bullet as any).pierceLeft = 1 + (mods.pierceBonus || 0);
+        anyBullet.pierceLeft = 1 + (mods.pierceBonus || 0);
       } else {
-        (bullet as any).pierceLeft = null;
+        anyBullet.pierceLeft = null;
       }
 
       // Auto-destroy after range
       const lifetime = (weaponDef.range || 400) / speed * 1000;
-      const anyBullet = bullet as any;
       anyBullet.spawnTime = this.time.now;
       anyBullet.maxLifetime = lifetime + 200;
       if (anyBullet.vsLifetimeTimer) {
@@ -2601,18 +3029,7 @@ export default class GameScene extends Phaser.Scene {
       anyBullet.vsLifetimeTimer = this.time.delayedCall(lifetime, () => {
         anyBullet.vsLifetimeTimer = null;
         if (bullet.active) {
-          anyBullet.weaponDamage = null;
-          anyBullet.weaponSpecial = null;
-          anyBullet.damage = null;
-          anyBullet.special = null;
-          anyBullet.bulletEffect = null;
-          anyBullet.pierceLeft = null;
-          anyBullet.brandDamageApplied = null;
-          anyBullet.isHoming = false;
-          anyBullet.homingTarget = null;
-          anyBullet.homingStrength = null;
-          bullet.setVelocity(0, 0);
-          bullet.disableBody(true, true);
+          this.disableBullet(bullet);
         }
       });
     }
@@ -2635,14 +3052,27 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private getVSBulletScale(texture: string): number {
-    if (texture === 'bullet_cannon') return 1.9;
-    if (texture === 'bullet_chain') return 1.72;
-    if (texture === 'bullet_flame') return 1.68;
-    if (texture === 'bullet_frost') return 1.66;
-    if (texture === 'bullet_pierce') return 1.62;
-    if (texture === 'bullet_pulse') return 1.58;
-    if (texture === 'bullet_scatter') return 1.64;
-    return 1.52;
+    if (texture === 'bullet_cannon') return 3;
+    return 2;
+  }
+
+  private resolveBulletVfxArchetype(textureKey: string | undefined, special: string | undefined): BulletVfxArchetype {
+    const normalizedSpecial = String(special || '').toLowerCase();
+    if (normalizedSpecial === 'burn' || normalizedSpecial === 'burning') return 'flame';
+    if (normalizedSpecial === 'explode' || normalizedSpecial === 'explosive') return 'cannon';
+    if (normalizedSpecial === 'chain') return 'chain';
+    if (normalizedSpecial === 'pierce' || normalizedSpecial === 'piercing') return 'pierce';
+    if (normalizedSpecial === 'slow' || normalizedSpecial === 'frozen') return 'frost';
+
+    const key = String(textureKey || '').toLowerCase();
+    if (key.includes('scatter')) return 'scatter';
+    if (key.includes('pulse')) return 'pulse';
+    if (key.includes('flame')) return 'flame';
+    if (key.includes('pierce')) return 'pierce';
+    if (key.includes('cannon')) return 'cannon';
+    if (key.includes('frost')) return 'frost';
+    if (key.includes('chain')) return 'chain';
+    return 'kinetic';
   }
 
   private acquireBulletFromGroup(
@@ -2705,7 +3135,13 @@ export default class GameScene extends Phaser.Scene {
     } else {
       this.disableBullet(bullet);
     }
-    this.createBulletImpactVfx(enemy.x, enemy.y, special, bullet.tintTopLeft || 0x7dd3fc);
+    this.createBulletImpactVfx(
+      enemy.x,
+      enemy.y,
+      special,
+      bullet.tintTopLeft || 0x7dd3fc,
+      (bullet as any).bulletTextureKey || bullet.texture?.key
+    );
 
     const source: DamageSource = bulletData.ownerType === 'companion'
       ? { type: 'companion', companionId: bulletData.ownerId || null }
@@ -2724,33 +3160,124 @@ export default class GameScene extends Phaser.Scene {
   private updateBulletTrails(delta: number): void {
     const mobile = this.mobileViewport;
     this.bulletTrailTick += delta;
-    if (this.bulletTrailTick < (mobile ? 34 : 20)) return;
+    if (this.bulletTrailTick < (mobile ? 28 : 16)) return;
     this.bulletTrailTick = 0;
 
-    const emitTrail = (group: Phaser.Physics.Arcade.Group, rate: number, radius: number): void => {
+    const emitTrail = (group: Phaser.Physics.Arcade.Group, baseRate: number): void => {
       let emitted = 0;
       group.getChildren().forEach((child) => {
-        if (emitted >= (mobile ? 10 : 18)) return;
+        if (emitted >= (mobile ? 16 : 30)) return;
         const bullet = child as Phaser.Physics.Arcade.Sprite;
-        if (!bullet.active || Math.random() > rate) return;
-        emitted += 1;
+        if (!bullet.active) return;
+        const b = bullet as any;
+        const textureKey = b.bulletTextureKey || bullet.texture?.key;
+        const special = b.weaponSpecial ?? b.special ?? b.bulletEffect?.type;
+        const archetype = this.resolveBulletVfxArchetype(textureKey, special);
+        const trailChance = archetype === 'scatter' ? 0.34
+          : archetype === 'pulse' ? 0.44
+            : archetype === 'flame' ? 0.48
+              : archetype === 'pierce' ? 0.4
+                : archetype === 'cannon' ? 0.3
+                  : archetype === 'frost' ? 0.36
+                    : archetype === 'chain' ? 0.42
+                      : 0.32;
+        if (Math.random() > baseRate * trailChance) return;
+        const body = bullet.body as Phaser.Physics.Arcade.Body | null;
+        const vx = body?.velocity.x ?? 0;
+        const vy = body?.velocity.y ?? 0;
+        const speed = Math.max(1, Math.hypot(vx, vy));
+        const dir = Math.atan2(vy, vx);
         const tint = (bullet.tintTopLeft && bullet.tintTopLeft !== 0xffffff) ? bullet.tintTopLeft : 0x7dd3fc;
-        const trail = this.add.circle(bullet.x, bullet.y, radius, tint, 0.28).setDepth(9);
+        const length = archetype === 'pierce' ? 11
+          : archetype === 'pulse' ? 9
+            : archetype === 'cannon' ? 8
+              : 6;
+        const width = archetype === 'cannon' ? 4 : archetype === 'scatter' ? 2 : 3;
+        const alpha = archetype === 'flame' ? 0.46 : archetype === 'chain' ? 0.42 : 0.38;
+        const life = archetype === 'cannon' ? 170 : archetype === 'frost' ? 150 : 130;
+        const backOffset = Phaser.Math.Clamp(speed * 0.008, 4, 10);
+        const tx = bullet.x - Math.cos(dir) * backOffset + Phaser.Math.FloatBetween(-1, 1);
+        const ty = bullet.y - Math.sin(dir) * backOffset + Phaser.Math.FloatBetween(-1, 1);
+
+        emitted += 1;
+        const trail = this.add.rectangle(tx, ty, length, width, tint, alpha).setDepth(9);
         trail.setBlendMode(Phaser.BlendModes.ADD);
+        trail.setRotation(dir + Math.PI / 2);
         this.tweens.add({
           targets: trail,
           alpha: 0,
-          scale: 1.85,
-          duration: 140,
+          scaleX: 0.4,
+          scaleY: archetype === 'cannon' ? 1.5 : 1.2,
+          duration: life,
           onComplete: () => trail.destroy(),
         });
+
+        if (archetype === 'flame' || archetype === 'cannon' || archetype === 'chain') {
+          const emberColor = archetype === 'chain' ? 0xd8b4fe : archetype === 'flame' ? 0xfb923c : 0xa855f7;
+          const ember = this.add.rectangle(tx, ty, 2, 2, emberColor, 0.7).setDepth(10);
+          ember.setBlendMode(Phaser.BlendModes.ADD);
+          this.tweens.add({
+            targets: ember,
+            x: tx - Math.cos(dir) * Phaser.Math.Between(5, 10),
+            y: ty - Math.sin(dir) * Phaser.Math.Between(5, 10),
+            alpha: 0,
+            duration: life + 30,
+            onComplete: () => ember.destroy(),
+          });
+        }
+        if (archetype === 'frost') {
+          const shard = this.add.rectangle(tx, ty, 2, 6, 0xe0f2fe, 0.65).setDepth(10);
+          shard.setBlendMode(Phaser.BlendModes.ADD);
+          shard.setRotation(dir + Math.PI / 4);
+          this.tweens.add({
+            targets: shard,
+            alpha: 0,
+            scaleY: 0.2,
+            duration: 150,
+            onComplete: () => shard.destroy(),
+          });
+        }
       });
     };
 
-    emitTrail(this.bullets, mobile ? 0.2 : 0.30, 2.8);
-    emitTrail(this.vsBullets, mobile ? 0.24 : 0.36, 3.2);
-    emitTrail(this.companionBullets, mobile ? 0.18 : 0.28, 2.9);
-    emitTrail(this.turretBullets, mobile ? 0.2 : 0.32, 3.1);
+    emitTrail(this.bullets, mobile ? 0.62 : 0.78);
+    emitTrail(this.vsBullets, mobile ? 0.72 : 0.88);
+    emitTrail(this.companionBullets, mobile ? 0.58 : 0.7);
+    emitTrail(this.turretBullets, mobile ? 0.64 : 0.82);
+  }
+
+  private updateBulletMotionPatterns(delta: number): void {
+    const updateGroup = (group: Phaser.Physics.Arcade.Group): void => {
+      group.getChildren().forEach((child) => {
+        const bullet = child as Phaser.Physics.Arcade.Sprite;
+        if (!bullet.active) return;
+        const b = bullet as any;
+        if (b.isHoming) return;
+        const swayAmp = b.swayAmplitude ?? 0;
+        const swayFrequency = b.swayFrequency ?? 0;
+        if (swayAmp <= 0 || swayFrequency <= 0) return;
+        const body = bullet.body as Phaser.Physics.Arcade.Body | null;
+        if (!body) return;
+        const baseVX = b.baseVelocityX ?? body.velocity.x;
+        const baseVY = b.baseVelocityY ?? body.velocity.y;
+        const baseSpeed = Math.max(1, Math.hypot(baseVX, baseVY));
+        b.swayPhase = (b.swayPhase ?? 0) + delta * swayFrequency;
+        const nx = baseVX / baseSpeed;
+        const ny = baseVY / baseSpeed;
+        const px = -ny;
+        const py = nx;
+        const sway = Math.sin(b.swayPhase) * swayAmp;
+        const finalVX = baseVX + px * sway;
+        const finalVY = baseVY + py * sway;
+        body.setVelocity(finalVX, finalVY);
+        bullet.setRotation(Math.atan2(finalVY, finalVX) + Math.PI / 2);
+      });
+    };
+
+    updateGroup(this.bullets);
+    updateGroup(this.vsBullets);
+    updateGroup(this.companionBullets);
+    updateGroup(this.turretBullets);
   }
 
   private cleanupBulletGroup(group: Phaser.Physics.Arcade.Group): void {
@@ -2805,46 +3332,137 @@ export default class GameScene extends Phaser.Scene {
     anyBullet.homingStrength = null;
     anyBullet.ownerType = null;
     anyBullet.ownerId = null;
+    anyBullet.bulletTextureKey = null;
+    anyBullet.baseVelocityX = null;
+    anyBullet.baseVelocityY = null;
+    anyBullet.swayAmplitude = null;
+    anyBullet.swayFrequency = null;
+    anyBullet.swayPhase = null;
     anyBullet.spawnTime = null;
     anyBullet.maxLifetime = null;
     bullet.setVelocity(0, 0);
     bullet.disableBody(true, true);
   }
 
-  private createBulletImpactVfx(x: number, y: number, special: string | undefined, color: number): void {
-    const ringColor = special === 'explode' || special === 'explosive' ? 0xfb923c
-      : special === 'chain' ? 0xa78bfa
-        : special === 'slow' || special === 'frozen' ? 0x93c5fd
-          : special === 'burn' || special === 'burning' ? 0xf97316
-            : color;
+  private createBulletImpactVfx(
+    x: number,
+    y: number,
+    special: string | undefined,
+    color: number,
+    textureKey?: string
+  ): void {
+    const archetype = this.resolveBulletVfxArchetype(textureKey, special);
+    const ringColor = archetype === 'cannon' ? 0xfb923c
+      : archetype === 'chain' ? 0xd8b4fe
+        : archetype === 'frost' ? 0x93c5fd
+          : archetype === 'flame' ? 0xf97316
+            : archetype === 'pierce' ? 0x7dd3fc
+              : color;
+    const coreSize = archetype === 'cannon' ? 8 : archetype === 'pierce' ? 6 : 5;
+    const sparkCount = archetype === 'cannon' ? 8 : archetype === 'scatter' ? 5 : 6;
+    const travel = archetype === 'cannon' ? 28 : archetype === 'pierce' ? 22 : 18;
+    const duration = archetype === 'cannon' ? 220 : archetype === 'chain' ? 180 : 150;
 
-    const core = this.add.circle(x, y, 4, ringColor, 0.75).setDepth(110);
+    const core = this.add.rectangle(x, y, coreSize, coreSize, ringColor, 0.86).setDepth(110);
     core.setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({
       targets: core,
       alpha: 0,
-      scale: 2.4,
-      duration: 130,
+      scaleX: archetype === 'pierce' ? 2.4 : 2,
+      scaleY: archetype === 'pierce' ? 1.2 : 2,
+      duration,
       onComplete: () => core.destroy(),
     });
 
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < sparkCount; i++) {
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const dist = Phaser.Math.Between(8, 18);
-      const spark = this.add.rectangle(x, y, 2, 2, ringColor, 0.9).setDepth(111);
+      const dist = Phaser.Math.Between(Math.floor(travel * 0.45), travel);
+      const sparkW = archetype === 'pierce' ? 5 : 3;
+      const sparkH = archetype === 'pierce' ? 2 : 3;
+      const spark = this.add.rectangle(x, y, sparkW, sparkH, ringColor, 0.94).setDepth(111);
       spark.setBlendMode(Phaser.BlendModes.ADD);
+      spark.setRotation(angle + Math.PI / 2);
       this.tweens.add({
         targets: spark,
         x: x + Math.cos(angle) * dist,
         y: y + Math.sin(angle) * dist,
         alpha: 0,
-        duration: 170,
+        duration: duration + Phaser.Math.Between(20, 70),
+        onComplete: () => spark.destroy(),
+      });
+    }
+
+    if (archetype === 'chain') {
+      for (let i = 0; i < 2; i++) {
+        const bolt = this.add.rectangle(x, y, 3, 12, 0xf5d0fe, 0.72).setDepth(112);
+        bolt.setBlendMode(Phaser.BlendModes.ADD);
+        bolt.setRotation(Phaser.Math.FloatBetween(-0.8, 0.8));
+        this.tweens.add({
+          targets: bolt,
+          alpha: 0,
+          scaleY: 0.2,
+          duration: 160,
+          onComplete: () => bolt.destroy(),
+        });
+      }
+    } else if (archetype === 'frost') {
+      const shard = this.add.rectangle(x, y, 2, 14, 0xe0f2fe, 0.7).setDepth(112);
+      shard.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: shard,
+        alpha: 0,
+        angle: 70,
+        duration: 180,
+        onComplete: () => shard.destroy(),
+      });
+    }
+  }
+
+  private createBulletMuzzleVfx(
+    x: number,
+    y: number,
+    angle: number,
+    tint: number,
+    textureKey?: string
+  ): void {
+    const archetype = this.resolveBulletVfxArchetype(textureKey, undefined);
+    const dist = archetype === 'cannon' ? 14 : 10;
+    const fxX = x + Math.cos(angle) * dist;
+    const fxY = y + Math.sin(angle) * dist;
+    const coreW = archetype === 'pierce' ? 10 : archetype === 'cannon' ? 9 : 7;
+    const coreH = archetype === 'pierce' ? 4 : 6;
+    const core = this.add.rectangle(fxX, fxY, coreW, coreH, tint, 0.78).setDepth(109);
+    core.setBlendMode(Phaser.BlendModes.ADD);
+    core.setRotation(angle + Math.PI / 2);
+    this.tweens.add({
+      targets: core,
+      alpha: 0,
+      scaleX: 0.3,
+      scaleY: 1.35,
+      duration: archetype === 'cannon' ? 110 : 80,
+      onComplete: () => core.destroy(),
+    });
+
+    const sparkCount = archetype === 'cannon' ? 4 : 2;
+    for (let i = 0; i < sparkCount; i++) {
+      const spread = Phaser.Math.FloatBetween(-0.35, 0.35);
+      const dir = angle + Math.PI + spread;
+      const spark = this.add.rectangle(fxX, fxY, 2, 2, 0xf8fafc, 0.8).setDepth(109);
+      spark.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: spark,
+        x: fxX + Math.cos(dir) * Phaser.Math.Between(6, 12),
+        y: fxY + Math.sin(dir) * Phaser.Math.Between(6, 12),
+        alpha: 0,
+        duration: 90,
         onComplete: () => spark.destroy(),
       });
     }
   }
 
   private damageEnemy(enemy: Phaser.Physics.Arcade.Sprite, damage: number, source: DamageSource = { type: 'player' }): void {
+    const ed = enemy as any;
+    if (ed.dead) return;
     const stats = EvolutionSystem.getComputedStats();
     const level = Math.max(1, gameState.data.playerLevel || 1);
     const week = Math.max(1, gameState.data.currentWeek || 1);
@@ -2879,7 +3497,6 @@ export default class GameScene extends Phaser.Scene {
     const isCrit = Math.random() * 100 < stats.critChance;
     if (isCrit) finalDamage *= stats.critDamage / 100;
 
-    const ed = enemy as any;
     if (ed.isBoss) {
       finalDamage *= gameState.getBitcoinPerkBonuses().bossDamageMul || 1;
     }
@@ -2908,6 +3525,9 @@ export default class GameScene extends Phaser.Scene {
 
     // Hit effect
     this.animationSystem.playHitEffect(enemy);
+    if (ed.health > 0) {
+      this.playEnemyAction(enemy, 'hurt', true, 170);
+    }
 
     // Combo
     this.comboCount++;
@@ -2938,6 +3558,13 @@ export default class GameScene extends Phaser.Scene {
 
   private onEnemyKilled(enemy: Phaser.Physics.Arcade.Sprite, source: DamageSource = { type: 'player' }): void {
     const ed = enemy as any;
+    if (ed.dead) return;
+    ed.dead = true;
+    const body = enemy.body as Phaser.Physics.Arcade.Body | null;
+    if (body) {
+      body.setVelocity(0, 0);
+      body.enable = false;
+    }
 
     // XP gem
     const xpValue = ed.xpValue || 5;
@@ -3017,7 +3644,14 @@ export default class GameScene extends Phaser.Scene {
     events.emit(GameEvents.ENEMY_KILLED, { enemyType: ed.enemyType, reward: xpValue });
 
     if (!ed.isBoss) {
-      enemy.destroy();
+      const deathDuration = this.playEnemyAction(enemy, 'death', true, 620);
+      if (deathDuration > 0) {
+        this.time.delayedCall(deathDuration, () => {
+          if (enemy.active) enemy.destroy();
+        });
+      } else {
+        enemy.destroy();
+      }
     }
   }
 
@@ -3255,7 +3889,7 @@ export default class GameScene extends Phaser.Scene {
         this.comboText = null;
       }
       this.comboText = this.add.text(sw - 80, 180, '', {
-        fontSize: '28px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: '28px', color: '#fbbf24', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 4,
       }).setOrigin(0.5).setScrollFactor(0).setDepth(1500);
     }
@@ -3282,7 +3916,7 @@ export default class GameScene extends Phaser.Scene {
   private showDamageNumber(x: number, y: number, damage: number, isCrit: boolean): void {
     const offsetX = Phaser.Math.Between(-15, 15);
     const text = this.add.text(x + offsetX, y - 20, `${Math.floor(damage)}${isCrit ? '!' : ''}`, {
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontSize: isCrit ? '24px' : '16px',
       color: isCrit ? '#fbbf24' : '#ffffff',
       fontStyle: 'bold',
@@ -3407,7 +4041,7 @@ export default class GameScene extends Phaser.Scene {
 
   private showFloatingText(x: number, y: number, message: string, color: string, isScreenSpace: boolean = false): void {
     const text = this.add.text(x, y, message, {
-      fontFamily: 'Courier New', fontSize: '22px', color,
+      fontFamily: this.getUIFontFamily(), fontSize: '22px', color,
       fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
       align: 'center',
     }).setOrigin(0.5).setDepth(2000);
@@ -3522,18 +4156,31 @@ export default class GameScene extends Phaser.Scene {
       bulletData.pierceLeft -= 1;
       if (bulletData.pierceLeft > 0) {
         this.damageEnemy(enemy, damage, source);
-        this.createBulletImpactVfx(enemy.x, enemy.y, effect, bullet.tintTopLeft || 0x93c5fd);
+        this.createBulletImpactVfx(
+          enemy.x,
+          enemy.y,
+          effect,
+          bullet.tintTopLeft || 0x93c5fd,
+          (bullet as any).bulletTextureKey || bullet.texture?.key
+        );
         return;
       }
     }
 
     this.disableBullet(bullet);
-    this.createBulletImpactVfx(enemy.x, enemy.y, effect, bullet.tintTopLeft || 0x93c5fd);
+    this.createBulletImpactVfx(
+      enemy.x,
+      enemy.y,
+      effect,
+      bullet.tintTopLeft || 0x93c5fd,
+      (bullet as any).bulletTextureKey || bullet.texture?.key
+    );
     this.damageEnemy(enemy, damage, source);
   }
 
   private enemyHitPlayer(_enemy: any, _player: any): void {
     const ed = _enemy as any;
+    this.playEnemyAction(_enemy as Phaser.Physics.Arcade.Sprite, 'attack', true, 170);
     const rawDamage = ed.damage || 10;
     const guardBuffActive = (this.player.getData('guardedUntil') || 0) > this.time.now;
     const guardedDamage = guardBuffActive ? Math.max(1, Math.round(rawDamage * 0.72)) : rawDamage;
@@ -3902,6 +4549,7 @@ export default class GameScene extends Phaser.Scene {
     if (!ed.lastBuildingAttack) ed.lastBuildingAttack = 0;
     if (now - ed.lastBuildingAttack < 700) return;
     ed.lastBuildingAttack = now;
+    this.playEnemyAction(enemy, 'attack', true, 180);
     const structureDamageMul = ed.isBoss ? 1.85 : 1.15;
     bd.health = (bd.health || 100) - Math.max(1, Math.round((ed.damage || 10) * structureDamageMul));
     building.setAlpha(Math.max(0.3, bd.health / (bd.maxHealth || 100)));
@@ -3968,16 +4616,27 @@ export default class GameScene extends Phaser.Scene {
         const bullet = this.turretBullets.create(turret.x, turret.y, 'bullet') as Phaser.Physics.Arcade.Sprite;
         if (bullet) {
           bullet.setTexture('bullet_pulse');
-          bullet.setScale(1.45 + Math.min(0.65, ((td.level || 1) - 1) * 0.03));
+          const bulletScale = (td.level || 1) >= 20 ? 3 : 2;
+          bullet.setScale(bulletScale);
           bullet.setTint(td.levelColor || 0x22d3ee);
           bullet.setBlendMode(Phaser.BlendModes.ADD);
           bullet.setDepth(10);
           const bulletSpeed = td.bulletSpeed || 350;
-          bullet.setVelocity(Math.cos(angle) * bulletSpeed, Math.sin(angle) * bulletSpeed);
-          (bullet as any).damage = td.damage || 15;
-          (bullet as any).ownerType = 'turret';
-          (bullet as any).ownerId = td.runtimeId || null;
-          this.time.delayedCall(1500, () => { if (bullet.active) bullet.destroy(); });
+          const velocityX = Math.cos(angle) * bulletSpeed;
+          const velocityY = Math.sin(angle) * bulletSpeed;
+          bullet.setVelocity(velocityX, velocityY);
+          const b = bullet as any;
+          b.damage = td.damage || 15;
+          b.ownerType = 'turret';
+          b.ownerId = td.runtimeId || null;
+          b.bulletTextureKey = 'bullet_pulse';
+          b.baseVelocityX = velocityX;
+          b.baseVelocityY = velocityY;
+          b.swayAmplitude = 14;
+          b.swayFrequency = 0.012;
+          b.swayPhase = Math.random() * Math.PI * 2;
+          this.createBulletMuzzleVfx(turret.x, turret.y, angle, td.levelColor || 0x22d3ee, 'bullet_pulse');
+          this.time.delayedCall(1500, () => { if (bullet.active) this.disableBullet(bullet); });
         }
       }
     });
@@ -3987,8 +4646,14 @@ export default class GameScene extends Phaser.Scene {
     if (!bullet.active || !enemy.active) return;
     const damage = (bullet as any).damage || 15;
     const source: DamageSource = { type: 'turret', turretId: (bullet as any).ownerId || null };
-    this.createBulletImpactVfx(enemy.x, enemy.y, 'pulse', bullet.tintTopLeft || 0x22d3ee);
-    bullet.destroy();
+    this.createBulletImpactVfx(
+      enemy.x,
+      enemy.y,
+      'pulse',
+      bullet.tintTopLeft || 0x22d3ee,
+      (bullet as any).bulletTextureKey || bullet.texture?.key
+    );
+    this.disableBullet(bullet);
     this.damageEnemy(enemy, damage, source);
   }
 
@@ -4332,14 +4997,22 @@ export default class GameScene extends Phaser.Scene {
     // Don't spawn inside base
     if (x > 780 && x < 1220 && y > 530 && y < 970) return;
 
-    const survivor = this.survivors.create(x, y, 'companion') as Phaser.Physics.Arcade.Sprite;
+    const survivorKeys = ['companion', 'companion_tank', 'companion_sniper', 'companion_medic', 'companion_engineer', 'companion_raider', 'companion_support']
+      .filter((key) => this.textures.exists(key));
+    const survivor = this.survivors.create(
+      x,
+      y,
+      survivorKeys.length > 0 ? Phaser.Utils.Array.GetRandom(survivorKeys) : 'companion'
+    ) as Phaser.Physics.Arcade.Sprite;
     if (!survivor) return;
     survivor.setTint(0x60a5fa);
     survivor.setDepth(5);
     this.tweens.add({ targets: survivor, alpha: { from: 0.5, to: 1 }, duration: 600, yoyo: true, repeat: -1 });
 
     const helpText = this.add.text(x, y - 25, '💬 救救我！', {
-      fontSize: '13px', color: '#fbbf24', fontFamily: 'Courier New',
+      fontSize: this.worldFs(13, 12),
+      color: '#fbbf24',
+      fontFamily: this.getUIFontFamily(),
       stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5).setDepth(6);
 
@@ -4510,16 +5183,24 @@ export default class GameScene extends Phaser.Scene {
       container.setData('preferredBehavior', behavior);
       container.setData('residentName', comp.name.split('(')[0]);
       container.setData('residentMode', 'idle' as ResidentMode);
-      const sprite = this.add.sprite(0, 0, 'companion');
-      sprite.setScale(0.95);
+      const roleColor = this.getCompanionRoleColor(comp.role);
+      const aura = this.add.circle(0, 12, 20, roleColor, 0.18);
+      const ring = this.add.circle(0, 12, 21, 0x000000, 0).setStrokeStyle(1, roleColor, 0.88);
+      container.add(aura);
+      container.add(ring);
+      const roleTexture = this.getCompanionRoleTexture(comp.role, comp.id);
+      const sprite = this.add.sprite(0, 0, roleTexture);
+      const texScale = this.getResidentVisualScale();
+      sprite.setScale(texScale);
       container.add(sprite);
       container.setData('spriteObj', sprite);
 
       const name = comp.name.split('(')[0];
-      const label = this.add.text(0, -24, `${name}·${behaviorName[behavior]}`, {
-        fontSize: '10px',
+      const roleTag = comp.role === 'tank' ? '坦' : comp.role === 'sniper' ? '狙' : comp.role === 'medic' ? '医' : '伴';
+      const label = this.add.text(0, -40, `${name}[${roleTag}]·${behaviorName[behavior]}`, {
+        fontSize: this.worldFs(11, 10),
         color: '#e2e8f0',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         stroke: '#0b1220',
         strokeThickness: 2,
       }).setOrigin(0.5);
@@ -5122,24 +5803,35 @@ export default class GameScene extends Phaser.Scene {
     bullet.setTexture(texture);
     bullet.setTint(color);
     bullet.setAlpha(1);
-    bullet.setScale(texture === 'bullet_pulse' ? 1.45 : 1.3);
+    const bulletScale = level >= 20 ? 3 : 2;
+    bullet.setScale(bulletScale);
     bullet.setDepth(10);
     bullet.setBlendMode(Phaser.BlendModes.ADD);
 
     const body = bullet.body as Phaser.Physics.Arcade.Body;
     body.reset(container.x, container.y);
     body.setAllowGravity(false);
-    body.setCircle(5, bullet.width / 2 - 5, bullet.height / 2 - 5);
+    const hitRadius = bulletScale >= 3 ? 7 : 6;
+    body.setCircle(hitRadius, bullet.width / 2 - hitRadius, bullet.height / 2 - hitRadius);
     body.setBounce(0, 0);
     body.setDrag(0, 0);
-    body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    const velocityX = Math.cos(angle) * speed;
+    const velocityY = Math.sin(angle) * speed;
+    body.setVelocity(velocityX, velocityY);
     bullet.setRotation(angle + Math.PI / 2);
+    this.createBulletMuzzleVfx(container.x, container.y, angle, color, texture);
 
     const b = bullet as any;
     b.bulletEffect = { type: 'normal', damage, speed, color, size: 1.2 };
     b.damage = damage;
     b.ownerType = 'companion';
     b.ownerId = companionId;
+    b.bulletTextureKey = texture;
+    b.baseVelocityX = velocityX;
+    b.baseVelocityY = velocityY;
+    b.swayAmplitude = texture === 'bullet_pulse' ? Math.min(20, 8 + level * 0.35) : 0;
+    b.swayFrequency = b.swayAmplitude > 0 ? 0.013 : 0;
+    b.swayPhase = Math.random() * Math.PI * 2;
     b.spawnTime = this.time.now;
     const lifetime = Math.max(320, 1200 - Math.min(400, level * 10));
     b.maxLifetime = lifetime + 120;
@@ -5300,7 +5992,7 @@ export default class GameScene extends Phaser.Scene {
       {
         fontSize: '10px',
         color: '#fde68a',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         stroke: '#0b1220',
         strokeThickness: 3,
         backgroundColor: '#111827cc',
@@ -5409,7 +6101,7 @@ export default class GameScene extends Phaser.Scene {
       const zzz = this.add.text(8, -18, 'Zz', {
         fontSize: '10px',
         color: '#cbd5e1',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
       });
       container.add([bed, zzz]);
       decorNodes.push(bed, zzz);
@@ -5488,7 +6180,7 @@ export default class GameScene extends Phaser.Scene {
       {
         fontSize: '11px',
         color: colorMap[behavior],
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         fontStyle: 'bold',
         stroke: '#0b1220',
         strokeThickness: 3,
@@ -5560,7 +6252,7 @@ export default class GameScene extends Phaser.Scene {
       const z = this.add.text(container.x + 8, container.y - 24, 'z', {
         fontSize: '10px',
         color: '#cbd5e1',
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
         stroke: '#0b1220',
         strokeThickness: 2,
       }).setDepth(1002);
@@ -5718,7 +6410,7 @@ export default class GameScene extends Phaser.Scene {
     const marker = this.add.text(container.x, container.y - 48, `E 协助 · ${assistLabel}`, {
       fontSize: '11px',
       color: chainStep === 2 ? '#f97316' : '#facc15',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       stroke: '#0b1220',
       strokeThickness: 3,
@@ -5969,7 +6661,7 @@ export default class GameScene extends Phaser.Scene {
     const icon = this.add.text(container.x - 40, container.y - 36, hint.icon, {
       fontSize: '14px',
       color: hint.color,
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       stroke: '#020617',
       strokeThickness: 2,
@@ -5977,7 +6669,7 @@ export default class GameScene extends Phaser.Scene {
     const pop = this.add.text(container.x, container.y - 34, line, {
       fontSize: usePersonaLine ? '11px' : '12px',
       color: hint.color,
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       stroke: '#020617',
       strokeThickness: 3,
     }).setOrigin(0.5).setDepth(1002);
@@ -6454,6 +7146,7 @@ export default class GameScene extends Phaser.Scene {
     if (this.isGameOver) return;
     this.isGameOver = true;
     this.waveSystem.stopWaves();
+    this.playPlayerAction('death', true, 2400);
 
     // Screen shake and flash
     this.cameras.main.shake(500, 0.02);
@@ -6470,7 +7163,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Title with scale-in
     const title = this.add.text(w / 2, h / 2 - 140, '💀 AR连接中断 💀', {
-      fontSize: '42px', color: '#ef4444', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: '42px', color: '#ef4444', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 6,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2501).setAlpha(0).setScale(0.5);
     this.tweens.add({ targets: title, alpha: 1, scale: 1, duration: 600, delay: 500, ease: 'Back.easeOut' });
@@ -6483,7 +7176,7 @@ export default class GameScene extends Phaser.Scene {
     };
     const gradeText = this.add.text(w / 2, h / 2 - 80, grade, {
       fontSize: '64px', color: gradeColors[grade] || '#94a3b8',
-      fontFamily: 'Courier New', fontStyle: 'bold',
+      fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 8,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2501).setAlpha(0).setScale(3);
     this.tweens.add({ targets: gradeText, alpha: 1, scale: 1, duration: 800, delay: 900, ease: 'Back.easeOut' });
@@ -6500,13 +7193,13 @@ export default class GameScene extends Phaser.Scene {
     ].join('\n');
 
     const statsTextObj = this.add.text(w / 2, h / 2 + 20, statsLines, {
-      fontSize: '16px', color: '#e2e8f0', fontFamily: 'Courier New',
+      fontSize: '16px', color: '#e2e8f0', fontFamily: this.getUIFontFamily(),
       align: 'center', lineSpacing: 8,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2501).setAlpha(0);
     this.tweens.add({ targets: statsTextObj, alpha: 1, duration: 500, delay: 1400 });
 
     const btcText = this.add.text(w / 2, h / 2 + 120, `本轮结算: +₿${banked.toFixed(3)}  |  永久账户: ₿${gameState.meta.bitcoinBank.toFixed(3)}`, {
-      fontSize: '15px', color: '#fbbf24', fontFamily: 'Courier New',
+      fontSize: '15px', color: '#fbbf24', fontFamily: this.getUIFontFamily(),
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2501).setAlpha(0);
     this.tweens.add({ targets: btcText, alpha: 1, duration: 500, delay: 1650 });
@@ -6519,7 +7212,7 @@ export default class GameScene extends Phaser.Scene {
     const cards: Phaser.GameObjects.Rectangle[] = [];
     const labels: Phaser.GameObjects.Text[] = [];
     const selectedMark = this.add.text(0, 0, '已选择', {
-      fontSize: '12px', color: '#22c55e', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: '12px', color: '#22c55e', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       backgroundColor: '#052e16', padding: { x: 6, y: 4 },
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2503).setVisible(false).setAlpha(0);
 
@@ -6539,7 +7232,7 @@ export default class GameScene extends Phaser.Scene {
         {
           fontSize: '12px',
           color: '#e2e8f0',
-          fontFamily: 'Courier New',
+          fontFamily: this.getUIFontFamily(),
           align: 'center',
           lineSpacing: 4,
           wordWrap: { width: 214 },
@@ -6587,7 +7280,7 @@ export default class GameScene extends Phaser.Scene {
 
     // Restart button
     const restartBtn = this.add.text(w / 2, h / 2 + 286, picked ? '[ 重新觉醒 ]' : '[ 选择永久天赋后重生 ]', {
-      fontSize: '22px', color: picked ? '#0ea5e9' : '#64748b', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: '22px', color: picked ? '#0ea5e9' : '#64748b', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       backgroundColor: '#0c1829', padding: { x: 20, y: 10 },
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2501).setInteractive({ useHandCursor: true }).setAlpha(0);
     this.tweens.add({ targets: restartBtn, alpha: 1, duration: 500, delay: 1800 });

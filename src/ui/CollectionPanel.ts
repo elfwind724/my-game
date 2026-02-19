@@ -19,6 +19,24 @@ export class CollectionPanel {
     this.scene = scene;
   }
 
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024 || (navigator.maxTouchPoints || 0) > 1;
+  }
+
+  private getUIFontFamily(): string {
+    return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  }
+
+  private fs(base: number, min: number = 11): string {
+    const w = this.scene.cameras.main.width || 1;
+    const h = this.scene.cameras.main.height || 1;
+    const portrait = h > w;
+    const boost = this.isMobileViewport() ? (portrait ? 1.22 : 1.1) : 1;
+    return `${Math.max(min, Math.round(base * boost))}px`;
+  }
+
   toggle(): void {
     if (this.isOpen) { this.hide(); } else { this.show(); }
   }
@@ -50,7 +68,7 @@ export class CollectionPanel {
 
     // Title
     const title = this.scene.add.text(w / 2, panelY + 20, '🔬 AR眼镜图鉴', {
-      fontSize: '28px', color: '#0ea5e9', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(28, 22), color: '#0ea5e9', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
     }).setOrigin(0.5, 0);
     this.container.add(title);
 
@@ -58,13 +76,13 @@ export class CollectionPanel {
     const collected = gameState.data.collectedGlasses?.length || 0;
     const equipped = AR_GLASSES[gameState.data.equippedGlasses]?.nameCN || '未装备';
     const progressText = this.scene.add.text(w / 2, panelY + 55, `已收集: ${collected}/${TOTAL_GLASSES}  |  当前装备: ${equipped}`, {
-      fontSize: '14px', color: '#94a3b8', fontFamily: 'Courier New',
+      fontSize: this.fs(14, 12), color: '#94a3b8', fontFamily: this.getUIFontFamily(),
     }).setOrigin(0.5, 0);
     this.container.add(progressText);
 
     // Close button
     const closeBtn = this.scene.add.text(panelX + panelW - 20, panelY + 10, '✕', {
-      fontSize: '24px', color: '#ef4444', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(24, 20), color: '#ef4444', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     closeBtn.on('pointerdown', () => this.hide());
     closeBtn.on('pointerover', () => closeBtn.setColor('#ff6666'));
@@ -108,8 +126,8 @@ export class CollectionPanel {
 
       // Rarity header
       const header = this.scene.add.text(x + 5, currentY, `${info.nameCN}`, {
-        fontSize: '16px', color: `#${info.color.toString(16).padStart(6, '0')}`,
-        fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: this.fs(16, 13), color: `#${info.color.toString(16).padStart(6, '0')}`,
+        fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       });
       this.contentContainer.add(header);
       currentY += 28;
@@ -151,18 +169,18 @@ export class CollectionPanel {
       this.contentContainer.add(lockIcon);
 
       const lockName = this.scene.add.text(x + 40, y + 12, '???', {
-        fontSize: '16px', color: '#475569', fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: this.fs(16, 13), color: '#475569', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       });
       this.contentContainer.add(lockName);
 
       const lockCond = this.scene.add.text(x + 40, y + 35, glass.unlockCondition.descriptionCN, {
-        fontSize: '11px', color: '#475569', fontFamily: 'Courier New',
+        fontSize: '11px', color: '#475569', fontFamily: this.getUIFontFamily(),
         wordWrap: { width: w - 55 },
       });
       this.contentContainer.add(lockCond);
 
       const lockBrand = this.scene.add.text(x + 40, y + 55, glass.brand, {
-        fontSize: '10px', color: '#374151', fontFamily: 'Courier New',
+        fontSize: '10px', color: '#374151', fontFamily: this.getUIFontFamily(),
       });
       this.contentContainer.add(lockBrand);
     } else {
@@ -180,27 +198,27 @@ export class CollectionPanel {
 
       // Name
       const name = this.scene.add.text(x + 42, y + 8, glass.nameCN, {
-        fontSize: '14px', color: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: this.fs(14, 12), color: '#ffffff', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       });
       this.contentContainer.add(name);
 
       // Brand + year
       const brandYear = this.scene.add.text(x + 42, y + 28, `${glass.brand} · ${glass.year}`, {
-        fontSize: '10px', color: '#94a3b8', fontFamily: 'Courier New',
+        fontSize: '10px', color: '#94a3b8', fontFamily: this.getUIFontFamily(),
       });
       this.contentContainer.add(brandYear);
 
       // Skill name
       const skillName = this.scene.add.text(x + 42, y + 45, `技能: ${glass.skill.nameCN}`, {
         fontSize: '11px', color: `#${info.color.toString(16).padStart(6, '0')}`,
-        fontFamily: 'Courier New',
+        fontFamily: this.getUIFontFamily(),
       });
       this.contentContainer.add(skillName);
 
       // Rarity tag
       const rarityTag = this.scene.add.text(x + w - 8, y + 8, info.nameCN, {
         fontSize: '10px', color: `#${info.color.toString(16).padStart(6, '0')}`,
-        fontFamily: 'Courier New', fontStyle: 'bold',
+        fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       }).setOrigin(1, 0);
       this.contentContainer.add(rarityTag);
     }
@@ -251,13 +269,13 @@ export class CollectionPanel {
     textY += 55;
 
     const nameText = this.scene.add.text(cx, textY, glass.nameCN, {
-      fontSize: '24px', color: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(24, 20), color: '#ffffff', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
     }).setOrigin(0.5, 0);
     this.detailContainer.add(nameText);
     textY += 28;
 
     const enName = this.scene.add.text(cx, textY, `${glass.nameEN} · ${glass.brand} · ${glass.year}`, {
-      fontSize: '12px', color: '#94a3b8', fontFamily: 'Courier New',
+      fontSize: this.fs(12, 11), color: '#94a3b8', fontFamily: this.getUIFontFamily(),
     }).setOrigin(0.5, 0);
     this.detailContainer.add(enName);
     textY += 18;
@@ -265,14 +283,14 @@ export class CollectionPanel {
     // Rarity
     const rarityText = this.scene.add.text(cx, textY, `[${info.nameCN}]`, {
       fontSize: '14px', color: `#${info.color.toString(16).padStart(6, '0')}`,
-      fontFamily: 'Courier New', fontStyle: 'bold',
+      fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
     }).setOrigin(0.5, 0);
     this.detailContainer.add(rarityText);
     textY += 28;
 
     // Description
     const desc = this.scene.add.text(cx, textY, glass.descriptionCN, {
-      fontSize: '12px', color: '#e2e8f0', fontFamily: 'Courier New',
+      fontSize: '12px', color: '#e2e8f0', fontFamily: this.getUIFontFamily(),
       wordWrap: { width: cardW - 50 }, align: 'center',
     }).setOrigin(0.5, 0);
     this.detailContainer.add(desc);
@@ -284,7 +302,7 @@ export class CollectionPanel {
     textY += 8;
 
     const specTitle = this.scene.add.text(leftX, textY, '📋 硬件参数', {
-      fontSize: '13px', color: '#0ea5e9', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: '13px', color: '#0ea5e9', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
     });
     this.detailContainer.add(specTitle);
     textY += 20;
@@ -308,12 +326,12 @@ export class CollectionPanel {
       const sy = textY + row * 16;
 
       const label = this.scene.add.text(sx, sy, `${entry[0]}:`, {
-        fontSize: '10px', color: '#64748b', fontFamily: 'Courier New',
+        fontSize: '10px', color: '#64748b', fontFamily: this.getUIFontFamily(),
       });
       this.detailContainer!.add(label);
 
       const val = this.scene.add.text(sx + 50, sy, entry[1], {
-        fontSize: '10px', color: '#cbd5e1', fontFamily: 'Courier New',
+        fontSize: '10px', color: '#cbd5e1', fontFamily: this.getUIFontFamily(),
         wordWrap: { width: colW - 55 },
       });
       this.detailContainer!.add(val);
@@ -326,19 +344,19 @@ export class CollectionPanel {
     textY += 8;
 
     const skillTitle = this.scene.add.text(leftX, textY, `⚡ 技能: ${glass.skill.nameCN}`, {
-      fontSize: '13px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: '13px', color: '#fbbf24', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
     });
     this.detailContainer.add(skillTitle);
 
     const skillType = this.scene.add.text(rightX, textY, glass.skill.type === 'active' ? '主动' : '被动', {
       fontSize: '11px', color: glass.skill.type === 'active' ? '#22c55e' : '#8b5cf6',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
     }).setOrigin(1, 0);
     this.detailContainer.add(skillType);
     textY += 20;
 
     const skillDesc = this.scene.add.text(leftX, textY, glass.skill.descriptionCN, {
-      fontSize: '12px', color: '#e2e8f0', fontFamily: 'Courier New',
+      fontSize: '12px', color: '#e2e8f0', fontFamily: this.getUIFontFamily(),
       wordWrap: { width: cardW - 50 },
     });
     this.detailContainer.add(skillDesc);
@@ -351,13 +369,13 @@ export class CollectionPanel {
       textY += 8;
 
       const loreTitle = this.scene.add.text(leftX, textY, '📖 背景故事', {
-        fontSize: '13px', color: '#a78bfa', fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: '13px', color: '#a78bfa', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
       });
       this.detailContainer.add(loreTitle);
       textY += 20;
 
       const loreText = this.scene.add.text(leftX, textY, glass.loreCN, {
-        fontSize: '11px', color: '#94a3b8', fontFamily: 'Courier New',
+        fontSize: '11px', color: '#94a3b8', fontFamily: this.getUIFontFamily(),
         wordWrap: { width: cardW - 50 }, lineSpacing: 4,
       });
       this.detailContainer.add(loreText);
@@ -365,7 +383,7 @@ export class CollectionPanel {
 
     // Close hint
     const closeHint = this.scene.add.text(cx, cy + cardH / 2 - 15, '[ 点击空白处关闭 ]', {
-      fontSize: '11px', color: '#475569', fontFamily: 'Courier New',
+      fontSize: '11px', color: '#475569', fontFamily: this.getUIFontFamily(),
     }).setOrigin(0.5);
     this.detailContainer.add(closeHint);
 
@@ -373,7 +391,7 @@ export class CollectionPanel {
     const equipBtn = this.scene.add.text(cx, cy + cardH / 2 - 44, isEquipped ? '已装备' : '设为当前装备', {
       fontSize: '12px',
       color: isEquipped ? '#0f172a' : '#e2e8f0',
-      fontFamily: 'Courier New',
+      fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
       backgroundColor: isEquipped ? '#4ade80' : '#1e293b',
       padding: { x: 10, y: 5 },

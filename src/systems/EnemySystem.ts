@@ -6,6 +6,10 @@ import Phaser from 'phaser';
 import { events, GameEvents } from '../utils/EventBus';
 import { ENEMY_DEFS } from '../data/enemies';
 import { gameState } from '../state/GameState';
+import {
+    ENEMY_V2_TEXTURE_KEYS,
+    mapLegacyEnemyTypeToV2Archetype,
+} from '../data/v2SpriteAnims';
 
 export class EnemySystem {
     private scene: Phaser.Scene;
@@ -20,6 +24,13 @@ export class EnemySystem {
         this.scene = scene;
         this.enemies = enemies;
         this.player = player;
+    }
+
+    private isV2DirectionalAnimated(enemy: Phaser.Physics.Arcade.Sprite): boolean {
+        const key = enemy.texture?.key || '';
+        return key === ENEMY_V2_TEXTURE_KEYS.walker
+            || key === ENEMY_V2_TEXTURE_KEYS.runner
+            || key === ENEMY_V2_TEXTURE_KEYS.brute;
     }
 
     // Base camp bounds
@@ -93,9 +104,13 @@ export class EnemySystem {
         const enemy = this.enemies.get(cX, cY, enemyType) as Phaser.Physics.Arcade.Sprite;
         if (!enemy) return;
 
+        const v2Archetype = mapLegacyEnemyTypeToV2Archetype(enemyType);
+        const v2TextureKey = ENEMY_V2_TEXTURE_KEYS[v2Archetype];
+        const useV2Texture = this.scene.textures.exists(v2TextureKey);
+
         enemy.enableBody(true, cX, cY, true, true);
         enemy.setActive(true).setVisible(true);
-        enemy.setTexture(enemyType);
+        enemy.setTexture(useV2Texture ? v2TextureKey : enemyType);
         enemy.setCollideWorldBounds(true);
 
         if (enemy.body) {
@@ -110,6 +125,8 @@ export class EnemySystem {
         ed.speed = Math.min(baseSpeed + 20, baseSpeed + (wave - 1) * 2);
         ed.enemyType = enemyType;
         ed.behavior = enemyType === 'runner' ? 'run' : enemyType === 'tank' ? 'heavy' : 'chase';
+        ed.enemyAnimArchetype = v2Archetype;
+        ed.dead = false;
 
         // Loot + damage mapping (ensure resource drops work)
         const mapId = enemyType === 'zombie' ? 'controlled' : enemyType === 'tank' ? 'heavy' : enemyType;
@@ -120,9 +137,8 @@ export class EnemySystem {
             ed.damage = Math.floor(def.baseDamage * diffMult);
         }
 
-        if (enemyType === 'tank') enemy.setScale(2.7);
-        else if (enemyType === 'runner') enemy.setScale(1.85);
-        else enemy.setScale(1.7);
+        if (enemyType === 'tank') enemy.setScale(3);
+        else enemy.setScale(2);
 
         const effectColor = enemyType === 'runner' ? 0xfbbf24 : enemyType === 'tank' ? 0x8b5cf6 : 0xef4444;
         const effect = this.scene.add.circle(cX, cY, 20, effectColor, 0.5);
@@ -136,6 +152,10 @@ export class EnemySystem {
             if (!enemy.active) return true;
 
             const ed = enemy as any;
+            if (ed.dead) {
+                enemy.setVelocity(0, 0);
+                return true;
+            }
             const speed = ed.speed || 60;
             const behavior = ed.behavior || 'chase';
 
@@ -165,7 +185,9 @@ export class EnemySystem {
                     }
                 } else {
                     this.scene.physics.moveToObject(enemy, structureTarget, speed * 0.95);
-                    enemy.setFlipX(structureTarget.x < enemy.x);
+                    if (!this.isV2DirectionalAnimated(enemy)) {
+                        enemy.setFlipX(structureTarget.x < enemy.x);
+                    }
                 }
                 return true;
             }
@@ -234,7 +256,9 @@ export class EnemySystem {
             }
 
             // Face player
-            enemy.setFlipX(this.player.x < enemy.x);
+            if (!this.isV2DirectionalAnimated(enemy)) {
+                enemy.setFlipX(this.player.x < enemy.x);
+            }
             return true;
         });
 
@@ -347,7 +371,7 @@ export class EnemySystem {
             const bossType = bossTypes[Math.min(bossLevel - 1, bossTypes.length - 1)];
 
             const boss = this.enemies.create(x, y, 'tank') as Phaser.Physics.Arcade.Sprite;
-            boss.setScale(2.5);
+            boss.setScale(3);
             boss.setTint(0xff0066);
 
             const baseHealth = 200 + bossLevel * 100;

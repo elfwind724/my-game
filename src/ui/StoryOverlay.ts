@@ -13,6 +13,24 @@ export class StoryOverlay {
     this.scene = scene;
   }
 
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') return false;
+    const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 1024 || (navigator.maxTouchPoints || 0) > 1;
+  }
+
+  private getUIFontFamily(): string {
+    return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  }
+
+  private fs(base: number, min: number = 11): string {
+    const w = this.scene.cameras.main.width || 1;
+    const h = this.scene.cameras.main.height || 1;
+    const portrait = h > w;
+    const boost = this.isMobileViewport() ? (portrait ? 1.2 : 1.1) : 1;
+    return `${Math.max(min, Math.round(base * boost))}px`;
+  }
+
   show(title: string, lines: string[], duration: number = 5000): void {
     if (this.isShowing) return;
     this.isShowing = true;
@@ -34,7 +52,7 @@ export class StoryOverlay {
 
     // Title
     const titleText = this.scene.add.text(panelX + 20, panelY + 12, title, {
-      fontSize: '20px', color: '#0ea5e9', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.fs(20, 16), color: '#0ea5e9', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
     });
     this.container.add(titleText);
 
@@ -47,7 +65,7 @@ export class StoryOverlay {
     lines.forEach((lineStr, i) => {
       if (!lineStr) return; // skip empty lines
       const t = this.scene.add.text(panelX + 20, panelY + 46 + i * 26, '', {
-        fontSize: '16px', color: '#e2e8f0', fontFamily: 'Courier New',
+        fontSize: this.fs(16, 13), color: '#e2e8f0', fontFamily: this.getUIFontFamily(),
         wordWrap: { width: panelW - 40 },
       });
       textObjects.push(t);
@@ -69,7 +87,7 @@ export class StoryOverlay {
 
     // Skip hint
     const skipHint = this.scene.add.text(w - 40, panelY + panelH - 16, '[空格跳过]', {
-      fontSize: '11px', color: '#475569', fontFamily: 'Courier New',
+      fontSize: this.fs(11, 10), color: '#475569', fontFamily: this.getUIFontFamily(),
     }).setOrigin(1, 1);
     this.container.add(skipHint);
 

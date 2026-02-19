@@ -90,7 +90,7 @@ export class CompanionSystem {
         config.level = Phaser.Math.Clamp(Math.max(1, config.level || 1), 1, COMPANION_MAX_LEVEL);
         config.promotionTier = config.promotionTier === 1 || !!config.advancedClass ? 1 : 0;
         const sprite = this.group.create(x, y, 'companion') as Phaser.Physics.Arcade.Sprite;
-        sprite.setScale(1.45);
+        sprite.setScale(2);
         sprite.setTint(config.bulletEffect.color ?? 0xffffff);
         sprite.setCollideWorldBounds(true);
         const body = sprite.body as Phaser.Physics.Arcade.Body;
@@ -474,9 +474,10 @@ export class CompanionSystem {
             const texture = this.getTextureByEffect(effect.type);
             bullet.setTexture(texture);
             bullet.setAlpha(1);
-            const scale = Math.max(effect.size ?? 1, texture === 'bullet_cannon' ? 1.7 : 1.35);
+            const scale = texture === 'bullet_cannon' ? 3 : 2;
             bullet.setScale(scale);
             bullet.setTint(effect.color ?? 0xffffff);
+            bullet.setBlendMode(Phaser.BlendModes.ADD);
             bullet.setDepth(10);
 
             const clonedEffect: BulletEffect = {
@@ -510,9 +511,23 @@ export class CompanionSystem {
             body.setCircle(radius, bullet.width / 2 - radius, bullet.height / 2 - radius);
             body.setBounce(0, 0);
             body.setDrag(0, 0);
-            this.scene.physics.velocityFromRotation(pelletAngle, speed, body.velocity);
+            const velocityX = Math.cos(pelletAngle) * speed;
+            const velocityY = Math.sin(pelletAngle) * speed;
+            body.setVelocity(velocityX, velocityY);
+            bullet.setRotation(pelletAngle + Math.PI / 2);
 
             const anyBullet = bullet as any;
+            anyBullet.bulletTextureKey = texture;
+            anyBullet.baseVelocityX = velocityX;
+            anyBullet.baseVelocityY = velocityY;
+            const swayAmp = effect.type === 'chain' || effect.type === 'laser'
+                ? 14
+                : effect.type === 'burning'
+                    ? 10
+                    : 0;
+            anyBullet.swayAmplitude = swayAmp;
+            anyBullet.swayFrequency = swayAmp > 0 ? (effect.type === 'burning' ? 0.02 : 0.013) : 0;
+            anyBullet.swayPhase = Math.random() * Math.PI * 2;
             if (anyBullet.lifetimeTimer) {
                 anyBullet.lifetimeTimer.remove();
                 anyBullet.lifetimeTimer = null;
@@ -571,6 +586,12 @@ export class CompanionSystem {
         anyBullet.pierceLeft = null;
         anyBullet.ownerType = null;
         anyBullet.ownerId = null;
+        anyBullet.bulletTextureKey = null;
+        anyBullet.baseVelocityX = null;
+        anyBullet.baseVelocityY = null;
+        anyBullet.swayAmplitude = null;
+        anyBullet.swayFrequency = null;
+        anyBullet.swayPhase = null;
         anyBullet.spawnTime = null;
         anyBullet.maxLifetime = null;
         bullet.setVelocity(0, 0);

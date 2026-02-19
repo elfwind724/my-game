@@ -62,6 +62,16 @@ export default class UIScene extends Phaser.Scene {
   private gradeText!: Phaser.GameObjects.Text;
   private gradeTimer: number = 0;
   private glassesText!: Phaser.GameObjects.Text;
+  private leftHudExpanded: boolean = true;
+  private leftPanelExpandedBg!: Phaser.GameObjects.Rectangle;
+  private leftPanelCollapsedBg!: Phaser.GameObjects.Rectangle;
+  private leftPanelDivider!: Phaser.GameObjects.Rectangle;
+  private leftHudToggleBg!: Phaser.GameObjects.Rectangle;
+  private leftHudToggleText!: Phaser.GameObjects.Text;
+  private leftHudCollapsibleObjects: Phaser.GameObjects.GameObject[] = [];
+  private leftHudPanelX: number = 12;
+  private leftHudExpandedW: number = 352;
+  private leftHudCollapsedW: number = 168;
 
   // Panels
   private craftingPanel!: CraftingPanel;
@@ -95,6 +105,8 @@ export default class UIScene extends Phaser.Scene {
   private joystickPointerId: number | null = null;
   private joystickMoveHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
   private joystickUpHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
+  private uiFontFamily: string = 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  private hudFontBoost: number = 1;
 
   constructor() {
     super({ key: 'UIScene' });
@@ -106,6 +118,12 @@ export default class UIScene extends Phaser.Scene {
     const portraitLayout = h > w * 1.2;
     const mobileViewport = this.isMobileViewport();
     this.mobileViewport = mobileViewport;
+    this.uiFontFamily = this.getUIFontFamily();
+    this.hudFontBoost = Phaser.Math.Clamp(
+      mobileViewport ? (portraitLayout ? 1.34 : 1.2) : 1.06,
+      1,
+      1.45
+    );
 
     this.events.on(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
 
@@ -124,12 +142,14 @@ export default class UIScene extends Phaser.Scene {
     // ========================================
     // TOP BAR
     // ========================================
-    this.add.rectangle(w / 2, 0, w, 50, 0x0f172a, 0.92)
+    this.add.rectangle(w / 2, 0, w, 66, 0x161b24, 0.95)
+      .setOrigin(0.5, 0).setDepth(1000);
+    this.add.rectangle(w / 2, 64, w, 2, 0xf59e0b, 0.32)
       .setOrigin(0.5, 0).setDepth(1000);
 
     // Day / Time (top center)
     this.dayText = this.add.text(w / 2, 8, '第1天 · 第1周', {
-      fontSize: '22px', color: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.hudFs(21, 18), color: '#fef3c7', fontFamily: this.uiFontFamily, fontStyle: 'bold',
     }).setOrigin(0.5, 0).setDepth(1001);
 
     // Time bar (below day text)
@@ -137,12 +157,12 @@ export default class UIScene extends Phaser.Scene {
 
     // Blood moon indicator
     this.bloodMoonIndicator = this.add.text(w / 2, 36, '', {
-      fontSize: '12px', color: '#ef4444', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.hudFs(12, 11), color: '#ef4444', fontFamily: this.uiFontFamily, fontStyle: 'bold',
     }).setOrigin(0.5, 0).setDepth(1001);
 
     // Level + XP (top right)
     this.levelText = this.add.text(w - 15, 5, 'Lv.1', {
-      fontSize: '22px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.hudFs(21, 18), color: '#f59e0b', fontFamily: this.uiFontFamily, fontStyle: 'bold',
     }).setOrigin(1, 0).setDepth(1001);
 
     this.expBarBg = this.add.graphics().setDepth(1001);
@@ -152,34 +172,79 @@ export default class UIScene extends Phaser.Scene {
     // ========================================
     // LEFT SIDE
     // ========================================
+    const leftPanelX = 12;
+    const leftPanelY = 52;
+    const leftPanelExpandedW = portraitLayout ? 332 : 352;
+    const leftPanelCollapsedW = portraitLayout ? 164 : 172;
+    const leftPanelExpandedH = portraitLayout ? 146 : 156;
+    const leftPanelCollapsedH = 92;
+    this.leftHudPanelX = leftPanelX;
+    this.leftHudExpandedW = leftPanelExpandedW;
+    this.leftHudCollapsedW = leftPanelCollapsedW;
+    this.leftPanelExpandedBg = this.add.rectangle(
+      leftPanelX + leftPanelExpandedW / 2,
+      leftPanelY + leftPanelExpandedH / 2,
+      leftPanelExpandedW,
+      leftPanelExpandedH,
+      0x121923,
+      0.76
+    ).setOrigin(0.5).setStrokeStyle(1, 0x334155, 0.62).setDepth(1000).setScrollFactor(0);
+    this.leftPanelCollapsedBg = this.add.rectangle(
+      leftPanelX + leftPanelCollapsedW / 2,
+      leftPanelY + leftPanelCollapsedH / 2,
+      leftPanelCollapsedW,
+      leftPanelCollapsedH,
+      0x121923,
+      0.82
+    ).setOrigin(0.5).setStrokeStyle(1, 0x334155, 0.62).setDepth(1000).setVisible(false).setScrollFactor(0);
+    this.leftPanelDivider = this.add.rectangle(leftPanelX + leftPanelExpandedW * 0.5, 74, leftPanelExpandedW - 8, 1, 0x334155, 0.8)
+      .setDepth(1001).setScrollFactor(0);
+    this.leftHudToggleBg = this.add.rectangle(leftPanelX + leftPanelExpandedW - 28, 62, 46, 20, 0x0f172a, 0.82)
+      .setStrokeStyle(1, 0x475569, 0.9)
+      .setDepth(1002)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true });
+    this.leftHudToggleText = this.add.text(leftPanelX + leftPanelExpandedW - 28, 56, '收起', {
+      fontSize: this.hudFs(11, 10),
+      color: '#93c5fd',
+      fontFamily: this.uiFontFamily,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setDepth(1003).setScrollFactor(0);
+    this.leftHudToggleBg.on('pointerdown', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+      this.setLeftHudExpanded(!this.leftHudExpanded);
+    });
+
     // Health bar
     this.healthBarBg = this.add.graphics().setDepth(1001);
     this.healthBar = this.add.graphics().setDepth(1001);
     this.healthText = this.add.text(15, 58, '100/100', {
-      fontSize: '14px', color: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.hudFs(14, 13), color: '#ffffff', fontFamily: this.uiFontFamily, fontStyle: 'bold',
     }).setDepth(1001);
     this.drawHealthBar(100, 100);
 
     // Kills
     this.killText = this.add.text(15, 80, '击杀: 0', {
-      fontSize: '14px', color: '#ef4444', fontFamily: 'Courier New',
+      fontSize: this.hudFs(14, 13), color: '#ef4444', fontFamily: this.uiFontFamily,
     }).setDepth(1001);
 
     // Resources
     this.resourceText = this.add.text(15, 100, '', {
-      fontSize: '12px', color: '#94a3b8', fontFamily: 'Courier New',
+      fontSize: this.hudFs(12, 11), color: '#94a3b8', fontFamily: this.uiFontFamily,
     }).setDepth(1001).setVisible(false);
     this.createResourceHud(15, 98);
 
     // Wave info
-    this.waveText = this.add.text(15, 140, '', {
-      fontSize: '16px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
+    this.waveText = this.add.text(15, 124, '', {
+      fontSize: this.hudFs(16, 14), color: '#fbbf24', fontFamily: this.uiFontFamily, fontStyle: 'bold',
     }).setDepth(1001);
 
     // Quest HUD (top-left under wave)
-    this.questHudText = this.add.text(15, 165, '', {
-      fontSize: '12px', color: '#e2e8f0', fontFamily: 'Courier New',
+    this.questHudText = this.add.text(15, 144, '', {
+      fontSize: this.hudFs(12, 11), color: '#e2e8f0', fontFamily: this.uiFontFamily,
     }).setDepth(1001);
+    this.leftHudCollapsibleObjects.push(this.waveText, this.questHudText);
+    this.setLeftHudExpanded(true);
 
     // ========================================
     // BOTTOM CENTER - WEAPON SLOTS
@@ -188,46 +253,49 @@ export default class UIScene extends Phaser.Scene {
     this.updateWeaponSlots();
 
     this.weaponText = this.add.text(portraitLayout ? (w / 2) : (w - 160), portraitLayout ? (h - 176) : (h - 150), '', {
-      fontSize: '14px', color: '#0ea5e9', fontFamily: 'Courier New',
+      fontSize: this.hudFs(14, 13), color: '#0ea5e9', fontFamily: this.uiFontFamily,
     }).setOrigin(0.5).setDepth(1001);
 
     // ========================================
     // BOTTOM LEFT - MINIMAP
     // ========================================
-    this.minimapWidth = portraitLayout ? 112 : 150;
-    this.minimapHeight = portraitLayout ? 84 : 112;
-    this.add.rectangle(10, h - 10, this.minimapWidth, this.minimapHeight, 0x0f172a, 0.85)
-      .setOrigin(0, 1).setStrokeStyle(1, 0x0ea5e9, 0.5).setDepth(1000);
+    this.minimapWidth = portraitLayout ? 124 : 166;
+    this.minimapHeight = portraitLayout ? 92 : 124;
+    this.add.rectangle(10, h - 10, this.minimapWidth, this.minimapHeight, 0x121923, 0.92)
+      .setOrigin(0, 1).setStrokeStyle(1, 0xf59e0b, 0.5).setDepth(1000);
     this.minimapGraphics = this.add.graphics().setDepth(1001);
 
     this.add.text(10 + this.minimapWidth * 0.5, h - this.minimapHeight - 8, '小地图', {
-      fontSize: portraitLayout ? '10px' : '11px',
-      color: '#0ea5e9',
-      fontFamily: 'Courier New',
+      fontSize: portraitLayout ? this.hudFs(11, 10) : this.hudFs(12, 11),
+      color: '#fcd34d',
+      fontFamily: this.uiFontFamily,
     }).setOrigin(0.5).setDepth(1001);
 
     // ========================================
     // RIGHT SIDE - COMPANIONS
     // ========================================
+    this.add.rectangle(w - 100, 112, 194, 82, 0x121923, 0.76)
+      .setStrokeStyle(1, 0x334155, 0.62)
+      .setDepth(1000);
     this.companionText = this.add.text(w - 15, 110, '微信群: 0人', {
-      fontSize: '14px', color: '#38bdf8', fontFamily: 'Courier New',
+      fontSize: this.hudFs(14, 13), color: '#38bdf8', fontFamily: this.uiFontFamily,
     }).setOrigin(1, 0).setDepth(1001).setVisible(false);
 
     // ========================================
     // TOP LEFT - GRADE
     // ========================================
     this.gradeText = this.add.text(w - 15, 50, '', {
-      fontSize: '18px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
+      fontSize: this.hudFs(18, 15), color: '#fbbf24', fontFamily: this.uiFontFamily, fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(1, 0).setDepth(1001);
 
     const equippedName = AR_GLASSES[gameState.data.equippedGlasses]?.nameCN || '未装备';
     this.glassesText = this.add.text(w - 15, 72, `眼镜: ${equippedName}`, {
-      fontSize: '11px', color: '#93c5fd', fontFamily: 'Courier New',
+      fontSize: this.hudFs(11, 10), color: '#93c5fd', fontFamily: this.uiFontFamily,
     }).setOrigin(1, 0).setDepth(1001).setVisible(false);
     const tree = EvolutionSystem.getEquippedBrandSkillTree();
     this.brandTreeText = this.add.text(w - 15, 86, `弹幕树: ${tree.treeNameCN}`, {
-      fontSize: '11px', color: '#c4b5fd', fontFamily: 'Courier New',
+      fontSize: this.hudFs(11, 10), color: '#c4b5fd', fontFamily: this.uiFontFamily,
     }).setOrigin(1, 0).setDepth(1001).setVisible(false);
     this.createRightStatusHud(w - 15, 74);
 
@@ -241,10 +309,15 @@ export default class UIScene extends Phaser.Scene {
           ? '竖屏HUD: B建造 C制造 Q任务 T基地 V仓库\nE交互 X交易 R拆除 G图鉴'
           : 'B建造 C制造 Q任务 T基地 H休闲 V仓库\nE交互 X交易 R拆除 G图鉴')
         : 'WASD:移动 | B:建造 | C:制造 | Q:任务 | T:基地 | H:休闲 | V:仓库 | E:交互 | X:交易 | R:拆除 | G:图鉴';
+      const lineCount = controlsText.includes('\n') ? 2 : 1;
+      const panelH = lineCount === 2 ? 46 : 26;
+      this.add.rectangle(w - 200, h - 15 - panelH * 0.5, 390, panelH, 0x0b1220, 0.72)
+        .setStrokeStyle(1, 0x334155, 0.62)
+        .setDepth(1000);
       this.add.text(w - 10, h - 10, controlsText, {
-        fontSize: compactHud ? (portraitLayout ? '15px' : '12px') : '11px',
-        color: '#475569',
-        fontFamily: 'Courier New',
+        fontSize: compactHud ? this.hudFs(portraitLayout ? 15 : 12, portraitLayout ? 13 : 11) : this.hudFs(11, 10),
+        color: '#fcd34d',
+        fontFamily: this.uiFontFamily,
         align: 'right',
         lineSpacing: 4,
       }).setOrigin(1, 1).setDepth(1001);
@@ -295,6 +368,27 @@ export default class UIScene extends Phaser.Scene {
 
   private getUIFontFamily(): string {
     return 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
+  }
+
+  private hudFs(base: number, min: number = 11): string {
+    return `${Math.max(min, Math.round(base * this.hudFontBoost))}px`;
+  }
+
+  private setLeftHudExpanded(expanded: boolean): void {
+    this.leftHudExpanded = expanded;
+    if (this.leftPanelExpandedBg) this.leftPanelExpandedBg.setVisible(expanded);
+    if (this.leftPanelCollapsedBg) this.leftPanelCollapsedBg.setVisible(!expanded);
+    if (this.leftPanelDivider) this.leftPanelDivider.setVisible(expanded);
+    if (this.healthBarBg) this.healthBarBg.setVisible(expanded);
+    if (this.healthBar) this.healthBar.setVisible(expanded);
+    this.leftHudCollapsibleObjects.forEach((obj) => (obj as any).setVisible(expanded));
+    const toggleX = this.leftHudPanelX + (expanded ? this.leftHudExpandedW : this.leftHudCollapsedW) - 28;
+    if (this.leftHudToggleBg) this.leftHudToggleBg.setX(toggleX);
+    if (this.leftHudToggleText) {
+      this.leftHudToggleText.setX(toggleX);
+      this.leftHudToggleText.setText(expanded ? '收起' : '展开');
+      this.leftHudToggleText.setColor(expanded ? '#93c5fd' : '#67e8f9');
+    }
   }
 
   private setupEventListeners(): void {
@@ -447,7 +541,7 @@ export default class UIScene extends Phaser.Scene {
       this.rightStatusTexts.glasses?.setText(data.nameCN);
       this.rightStatusTexts.tree?.setText(tree.treeNameCN);
       const hint = this.add.text(this.cameras.main.width / 2, 120, `已装备 ${data.nameCN}`, {
-        fontSize: '16px', color: '#38bdf8', fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: this.hudFs(16, 14), color: '#38bdf8', fontFamily: this.uiFontFamily, fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 3,
       }).setOrigin(0.5).setDepth(2000);
       this.tweens.add({
@@ -466,7 +560,7 @@ export default class UIScene extends Phaser.Scene {
 
     events.on('quest-completed', (_data: any) => {
       const text = this.add.text(this.cameras.main.width / 2, 200, '✅ 任务完成!', {
-        fontSize: '24px', color: '#4ade80', fontFamily: 'Courier New', fontStyle: 'bold',
+        fontSize: this.hudFs(24, 20), color: '#4ade80', fontFamily: this.uiFontFamily, fontStyle: 'bold',
         stroke: '#000000', strokeThickness: 3,
       }).setOrigin(0.5).setDepth(2000);
       this.tweens.add({
@@ -721,7 +815,10 @@ export default class UIScene extends Phaser.Scene {
   // DRAWING METHODS
   // ========================================
   private drawHealthBar(current: number, max: number): void {
-    const x = 15, y = 55, w = 180, h = 6;
+    const x = 15;
+    const y = 55;
+    const w = this.leftHudExpanded ? 214 : 142;
+    const h = 8;
     this.healthBarBg.clear();
     this.healthBarBg.fillStyle(0x1e293b, 0.8);
     this.healthBarBg.fillRoundedRect(x, y, w, h, 3);
@@ -747,7 +844,7 @@ export default class UIScene extends Phaser.Scene {
 
   private drawExpBar(current: number, max: number): void {
     const w = this.cameras.main.width;
-    const barW = 120, barH = 5;
+    const barW = 150, barH = 6;
     const x = w - 15 - barW, y = 30;
 
     this.expBarBg.clear();
@@ -762,7 +859,7 @@ export default class UIScene extends Phaser.Scene {
 
   private updateTimeBar(timeOfDay: number = 0, isNight: boolean = false, isBloodMoon: boolean = false): void {
     const w = this.cameras.main.width;
-    const barW = 200, barH = 4;
+    const barW = 248, barH = 5;
     const x = w / 2 - barW / 2, y = 30;
 
     this.timeBar.clear();
@@ -813,7 +910,7 @@ export default class UIScene extends Phaser.Scene {
 
       // Level
       const lvl = this.add.text(x + slotW / 2, 12, `${weapon.level}`, {
-        fontSize: '11px', color: '#94a3b8', fontFamily: 'Courier New',
+        fontSize: this.hudFs(11, 10), color: '#94a3b8', fontFamily: this.uiFontFamily,
       }).setOrigin(0.5);
       this.weaponSlots.add(lvl);
 
@@ -874,19 +971,29 @@ export default class UIScene extends Phaser.Scene {
     const scaleX = mapW / 2000;
     const scaleY = mapH / 1500;
 
-    // Zone backgrounds
-    this.minimapGraphics.fillStyle(0x2a2a3a, 0.4);
-    this.minimapGraphics.fillRect(mapX, mapY, mapW / 2, mapH / 2);
-    this.minimapGraphics.fillStyle(0x1a2a1a, 0.4);
-    this.minimapGraphics.fillRect(mapX + mapW / 2, mapY, mapW / 2, mapH / 2);
-    this.minimapGraphics.fillStyle(0x2a2a1a, 0.4);
-    this.minimapGraphics.fillRect(mapX, mapY + mapH / 2, mapW / 2, mapH / 2);
-    this.minimapGraphics.fillStyle(0x1a1a2a, 0.4);
-    this.minimapGraphics.fillRect(mapX + mapW / 2, mapY + mapH / 2, mapW / 2, mapH / 2);
+    // Minimap biome base (mirrors world composition).
+    this.minimapGraphics.fillStyle(0x101827, 0.94);
+    this.minimapGraphics.fillRect(mapX, mapY, mapW, mapH);
+
+    this.minimapGraphics.fillStyle(0x233447, 0.5); // city NW
+    this.minimapGraphics.fillEllipse(mapX + mapW * 0.16, mapY + mapH * 0.25, mapW * 0.38, mapH * 0.42);
+    this.minimapGraphics.fillStyle(0x1c3a2e, 0.46); // forest NE
+    this.minimapGraphics.fillEllipse(mapX + mapW * 0.8, mapY + mapH * 0.24, mapW * 0.44, mapH * 0.44);
+    this.minimapGraphics.fillStyle(0x3a2d21, 0.42); // wasteland SW
+    this.minimapGraphics.fillEllipse(mapX + mapW * 0.24, mapY + mapH * 0.78, mapW * 0.54, mapH * 0.42);
+    this.minimapGraphics.fillStyle(0x253247, 0.46); // cave / rocky SE
+    this.minimapGraphics.fillEllipse(mapX + mapW * 0.84, mapY + mapH * 0.78, mapW * 0.36, mapH * 0.3);
+    this.minimapGraphics.fillStyle(0x22d3ee, 0.24); // river
+    this.minimapGraphics.fillRect(mapX + mapW * 0.15, mapY + mapH * 0.04, mapW * 0.1, mapH * 0.9);
+    this.minimapGraphics.fillRect(mapX + mapW * 0.19, mapY + mapH * 0.69, mapW * 0.18, mapH * 0.13);
+    this.minimapGraphics.fillRect(mapX + mapW * 0.18, mapY + mapH * 0.13, mapW * 0.14, mapH * 0.17);
+    this.minimapGraphics.fillStyle(0x111827, 0.9); // roads
+    this.minimapGraphics.fillRect(mapX + mapW * 0.48, mapY, mapW * 0.04, mapH);
+    this.minimapGraphics.fillRect(mapX + mapW * 0.11, mapY + mapH * 0.47, mapW * 0.78, mapH * 0.06);
 
     // Base
-    this.minimapGraphics.fillStyle(0x0ea5e9, 0.3);
-    this.minimapGraphics.fillRect(mapX + 790 * scaleX, mapY + 560 * scaleX, 420 * scaleX, 420 * scaleY);
+    this.minimapGraphics.fillStyle(0x0ea5e9, 0.32);
+    this.minimapGraphics.fillEllipse(mapX + 1000 * scaleX, mapY + 750 * scaleY, 360 * scaleX, 320 * scaleY);
 
     // Player
     const player = gameScene.player;
@@ -960,31 +1067,32 @@ export default class UIScene extends Phaser.Scene {
       { key: 'bitcoin', icon: 'icon_bitcoin' },
       { key: 'power', icon: 'icon_power' },
     ];
-    const cellW = 74;
-    const cellH = 20;
+    const cellW = 68;
+    const cellH = 22;
     const cols = 5;
     entries.forEach((entry, idx) => {
       const row = Math.floor(idx / cols);
       const col = idx % cols;
       const x = startX + col * cellW;
       const y = startY + row * cellH;
-      const bg = this.add.rectangle(x, y, 70, 18, 0x0f172a, 0.72)
+      const bg = this.add.rectangle(x, y, 64, 20, 0x151a23, 0.82)
         .setOrigin(0, 0)
-        .setStrokeStyle(1, 0x1e293b, 0.8)
+        .setStrokeStyle(1, 0x4b5563, 0.75)
         .setDepth(1001);
       const icon = this.textures.exists(entry.icon)
-        ? this.add.image(x + 9, y + 9, entry.icon).setScale(0.95).setDepth(1002)
-        : this.add.rectangle(x + 9, y + 9, 10, 10, 0x64748b, 1).setDepth(1002);
-      const value = this.add.text(x + 18, y + 4, '0', {
-        fontSize: '11px',
+        ? this.add.image(x + 8, y + 9, entry.icon).setScale(0.8).setDepth(1002)
+        : this.add.rectangle(x + 10, y + 10, 10, 10, 0x64748b, 1).setDepth(1002);
+      const value = this.add.text(x + 16, y + 3, '0', {
+        fontSize: this.hudFs(12, 11),
         color: '#e2e8f0',
-        fontFamily: 'Courier New',
+        fontFamily: this.uiFontFamily,
         fontStyle: 'bold',
       }).setDepth(1002);
       this.resourceValueTexts[entry.key] = value;
       bg.setScrollFactor(0);
       icon.setScrollFactor(0);
       value.setScrollFactor(0);
+      this.leftHudCollapsibleObjects.push(bg, icon, value);
     });
     this.updateResourceHud(gameState.data.resources);
   }
@@ -1013,8 +1121,8 @@ export default class UIScene extends Phaser.Scene {
   }
 
   private createRightStatusHud(rightX: number, startY: number): void {
-    const lineW = 162;
-    const rowH = 19;
+    const lineW = 186;
+    const rowH = 23;
     const rows = [
       {
         id: 'glasses',
@@ -1037,18 +1145,18 @@ export default class UIScene extends Phaser.Scene {
     ];
     rows.forEach((row, idx) => {
       const y = startY + idx * rowH;
-      const bg = this.add.rectangle(rightX - lineW, y, lineW, 17, 0x0f172a, 0.7)
+      const bg = this.add.rectangle(rightX - lineW, y, lineW, 21, 0x151a23, 0.76)
         .setOrigin(0, 0)
-        .setStrokeStyle(1, 0x1e293b, 0.8)
+        .setStrokeStyle(1, 0x5b4a36, 0.65)
         .setDepth(1001)
         .setScrollFactor(0);
       const icon = this.textures.exists(row.icon)
-        ? this.add.image(rightX - lineW + 9, y + 8, row.icon).setScale(0.9).setDepth(1002).setScrollFactor(0)
-        : this.add.rectangle(rightX - lineW + 9, y + 8, 10, 10, 0x64748b, 1).setDepth(1002).setScrollFactor(0);
-      const value = this.add.text(rightX - lineW + 18, y + 3, row.text, {
-        fontSize: '11px',
+        ? this.add.image(rightX - lineW + 10, y + 10, row.icon).setScale(0.92).setDepth(1002).setScrollFactor(0)
+        : this.add.rectangle(rightX - lineW + 10, y + 10, 10, 10, 0x64748b, 1).setDepth(1002).setScrollFactor(0);
+      const value = this.add.text(rightX - lineW + 20, y + 4, row.text, {
+        fontSize: this.hudFs(13, 12),
         color: row.color,
-        fontFamily: 'Courier New',
+        fontFamily: this.uiFontFamily,
         fontStyle: 'bold',
       }).setDepth(1002).setScrollFactor(0);
       this.rightStatusTexts[row.id as 'glasses' | 'tree' | 'group'] = value;
