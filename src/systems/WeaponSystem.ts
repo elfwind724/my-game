@@ -27,6 +27,18 @@ export interface WeaponFireModifiers {
     forceSpecial?: 'chain' | 'burn' | 'pierce';
     tintColor?: number;
     homing?: boolean;
+    patternPower?: number;
+    signatureRateMul?: number;
+    extraChainChance?: number;
+    signatureDamageMul?: number;
+    signatureSpeedMul?: number;
+    orbitAmpMul?: number;
+}
+
+interface SignatureMotionOptions {
+    swayAmplitude?: number;
+    swayFrequency?: number;
+    swayPhase?: number;
 }
 
 export const WEAPON_DEFINITIONS: Record<WeaponType, WeaponConfig> = {
@@ -239,13 +251,25 @@ export class WeaponSystem {
         const speedMul = mod.speedMul || 1;
         const spreadMul = mod.spreadMul || 1;
         const tint = mod.tintColor;
-        const emitSpread = (
+        const patternPower = Phaser.Math.Clamp(Math.floor(mod.patternPower || 0), 0, 8);
+        const signatureRateMul = Math.max(0.55, mod.signatureRateMul || 1);
+        const signatureDamageMul = Math.max(0.7, mod.signatureDamageMul || 1);
+        const signatureSpeedMul = Math.max(0.7, mod.signatureSpeedMul || 1);
+        const extraChainChance = Phaser.Math.Clamp(mod.extraChainChance || 0, 0, 0.55);
+        const orbitAmpMul = Math.max(0.7, mod.orbitAmpMul || 1);
+        const cadence = (base: number): number => Math.max(2, Math.round(base / signatureRateMul));
+        const resolveSpecial = (base: WeaponConfig['special']): WeaponConfig['special'] => {
+            if (extraChainChance > 0 && Math.random() < extraChainChance) return 'chain';
+            return base;
+        };
+        const emitArc = (
             count: number,
             spreadDeg: number,
             projectileSpeedMul: number,
             projectileDamageMul: number,
             special: WeaponConfig['special'],
-            rangeMul: number = 1
+            rangeMul: number = 1,
+            motionFactory?: (index: number, total: number) => SignatureMotionOptions
         ): void => {
             const safeCount = Math.max(1, count);
             const safeSpread = Math.max(0, spreadDeg * spreadMul);
@@ -255,8 +279,8 @@ export class WeaponSystem {
                     ? (-safeSpread / 2 + step * i)
                     : 0;
                 const finalAngle = baseAngle + Phaser.Math.DegToRad(spreadOffset + Phaser.Math.FloatBetween(-1.8, 1.8));
-                const shotSpeed = Math.max(120, scaled.speed * speedMul * projectileSpeedMul);
-                const shotDamage = Math.max(1, scaled.damage * damageMul * projectileDamageMul);
+                const shotSpeed = Math.max(120, scaled.speed * speedMul * projectileSpeedMul * signatureSpeedMul);
+                const shotDamage = Math.max(1, scaled.damage * damageMul * projectileDamageMul * signatureDamageMul);
                 const spawn = this.getSafeSpawnPoint(x, y, finalAngle);
                 const tunedConfig: WeaponConfig = {
                     ...scaled,
@@ -272,36 +296,149 @@ export class WeaponSystem {
                     Math.sin(finalAngle) * shotSpeed,
                     tunedConfig,
                     shotDamage,
-                    special,
+                    resolveSpecial(special),
                     tint,
                     false,
-                    weaponType
+                    weaponType,
+                    motionFactory ? motionFactory(i, safeCount) : undefined
+                );
+            }
+        };
+        const emitRadial = (
+            count: number,
+            projectileSpeedMul: number,
+            projectileDamageMul: number,
+            special: WeaponConfig['special'],
+            rangeMul: number = 1,
+            wobbleDeg: number = 3
+        ): void => {
+            const safeCount = Math.max(1, count);
+            for (let i = 0; i < safeCount; i += 1) {
+                const circleAngle = baseAngle + (Math.PI * 2 * i / safeCount);
+                const finalAngle = circleAngle + Phaser.Math.DegToRad(Phaser.Math.FloatBetween(-wobbleDeg, wobbleDeg));
+                const shotSpeed = Math.max(120, scaled.speed * speedMul * projectileSpeedMul * signatureSpeedMul);
+                const shotDamage = Math.max(1, scaled.damage * damageMul * projectileDamageMul * signatureDamageMul);
+                const spawn = this.getSafeSpawnPoint(x, y, finalAngle);
+                const tunedConfig: WeaponConfig = {
+                    ...scaled,
+                    range: Math.max(140, scaled.range * rangeMul),
+                    speed: shotSpeed,
+                    color: tint ?? scaled.color,
+                    special,
+                };
+                this.createBullet(
+                    spawn.x,
+                    spawn.y,
+                    Math.cos(finalAngle) * shotSpeed,
+                    Math.sin(finalAngle) * shotSpeed,
+                    tunedConfig,
+                    shotDamage,
+                    resolveSpecial(special),
+                    tint,
+                    false,
+                    weaponType,
+                    {
+                        swayAmplitude: (8 + patternPower * 2) * orbitAmpMul,
+                        swayFrequency: 0.012 + patternPower * 0.0008,
+                        swayPhase: (Math.PI * 2 * i) / safeCount,
+                    }
                 );
             }
         };
 
-        if (weaponType === 'pistol' && shotIndex % 6 === 0) {
-            emitSpread(3, 22, 1.18, 0.78, fallbackSpecial === 'none' ? 'chain' : fallbackSpecial, 1.05);
+        if (weaponType === 'pistol' && shotIndex % cadence(6) === 0) {
+            emitArc(
+                3 + Math.min(2, patternPower),
+                22 + patternPower * 4,
+                1.18,
+                0.78,
+                fallbackSpecial === 'none' ? 'chain' : fallbackSpecial,
+                1.05,
+                (index, total) => ({
+                    swayAmplitude: (10 + patternPower * 2) * orbitAmpMul,
+                    swayFrequency: 0.013 + (index / Math.max(1, total)) * 0.002,
+                })
+            );
+            if (patternPower >= 2 && shotIndex % cadence(10) === 0) {
+                emitRadial(5 + Math.min(3, patternPower), 1.02, 0.62, 'chain', 0.92);
+            }
             return;
         }
-        if (weaponType === 'shotgun' && shotIndex % 3 === 0) {
-            emitSpread(7, 68, 0.92, 0.54, fallbackSpecial === 'none' ? 'burn' : fallbackSpecial, 0.72);
+        if (weaponType === 'shotgun' && shotIndex % cadence(3) === 0) {
+            emitArc(
+                7 + Math.min(3, patternPower),
+                68 + patternPower * 5,
+                0.92,
+                0.54,
+                fallbackSpecial === 'none' ? 'burn' : fallbackSpecial,
+                0.72,
+                () => ({
+                    swayAmplitude: (6 + patternPower * 2) * orbitAmpMul,
+                    swayFrequency: 0.018,
+                })
+            );
+            if (patternPower >= 3 && shotIndex % cadence(9) === 0) {
+                emitArc(4 + patternPower, 34, 1.28, 0.5, 'chain', 0.86);
+            }
             return;
         }
-        if (weaponType === 'rifle' && shotIndex % 8 === 0) {
-            emitSpread(3, 14, 1.45, 0.88, 'pierce', 1.25);
+        if (weaponType === 'rifle' && shotIndex % cadence(8) === 0) {
+            emitArc(
+                3 + Math.min(2, Math.floor(patternPower / 2)),
+                14 + patternPower * 2,
+                1.45,
+                0.88,
+                'pierce',
+                1.25,
+                (index) => ({
+                    swayAmplitude: 14 * orbitAmpMul,
+                    swayFrequency: 0.013 + patternPower * 0.0006,
+                    swayPhase: index % 2 === 0 ? 0 : Math.PI,
+                })
+            );
             return;
         }
-        if (weaponType === 'flamethrower' && shotIndex % 9 === 0) {
-            emitSpread(8, 92, 0.84, 0.58, 'burn', 0.9);
+        if (weaponType === 'flamethrower' && shotIndex % cadence(9) === 0) {
+            emitArc(
+                8 + Math.min(4, patternPower),
+                92 + patternPower * 6,
+                0.84,
+                0.58,
+                'burn',
+                0.9,
+                (_index, total) => ({
+                    swayAmplitude: (12 + patternPower * 3) * orbitAmpMul,
+                    swayFrequency: 0.021 + (total * 0.0002),
+                })
+            );
+            if (patternPower >= 2 && shotIndex % cadence(11) === 0) {
+                emitRadial(4 + patternPower, 0.92, 0.45, 'burn', 0.84, 6);
+            }
             return;
         }
-        if (weaponType === 'laser' && shotIndex % 4 === 0) {
-            emitSpread(3, 20, 1.32, 0.96, 'pierce', 1.3);
+        if (weaponType === 'laser' && shotIndex % cadence(4) === 0) {
+            emitArc(3 + Math.min(2, patternPower), 20, 1.32, 0.96, 'pierce', 1.3);
+            if (patternPower >= 2 && shotIndex % cadence(8) === 0) {
+                emitArc(2 + Math.min(2, patternPower), 16, 1.18, 0.66, 'pierce', 1.08);
+            }
             return;
         }
-        if (weaponType === 'rocket' && shotIndex % 5 === 0) {
-            emitSpread(5, 26, 1.1, 0.62, 'explode', 1.16);
+        if (weaponType === 'rocket' && shotIndex % cadence(5) === 0) {
+            emitArc(
+                5 + Math.min(2, patternPower),
+                26 + patternPower * 2,
+                1.1,
+                0.62,
+                'explode',
+                1.16,
+                (index, total) => ({
+                    swayAmplitude: (5 + patternPower * 1.2) * orbitAmpMul,
+                    swayFrequency: 0.011 + (index / Math.max(1, total)) * 0.0014,
+                })
+            );
+            if (patternPower >= 1 && shotIndex % cadence(9) === 0) {
+                emitRadial(3 + Math.min(3, patternPower), 0.88, 0.54, 'explode', 0.9, 5);
+            }
         }
     }
 
@@ -396,7 +533,8 @@ export class WeaponSystem {
         specialValue: WeaponConfig['special'],
         brandTint?: number,
         homingEnabled?: boolean,
-        weaponType?: WeaponType
+        weaponType?: WeaponType,
+        motion?: SignatureMotionOptions
     ): void {
         let bullet = this.acquireBullet(x, y);
         if (!bullet) return;
@@ -462,9 +600,10 @@ export class WeaponSystem {
                 : bulletTexture === 'bullet_flame'
                     ? 10
                     : 0;
-        anyBullet.swayAmplitude = swayAmp;
-        anyBullet.swayFrequency = swayAmp > 0 ? (bulletTexture === 'bullet_flame' ? 0.02 : 0.013) : 0;
-        anyBullet.swayPhase = Math.random() * Math.PI * 2;
+        anyBullet.swayAmplitude = motion?.swayAmplitude ?? swayAmp;
+        const fallbackFrequency = swayAmp > 0 ? (bulletTexture === 'bullet_flame' ? 0.02 : 0.013) : 0;
+        anyBullet.swayFrequency = motion?.swayFrequency ?? fallbackFrequency;
+        anyBullet.swayPhase = motion?.swayPhase ?? (Math.random() * Math.PI * 2);
 
         // Cleanup: disable for pooling
         if (anyBullet.lifetimeTimer) {

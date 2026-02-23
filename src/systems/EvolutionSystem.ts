@@ -156,13 +156,15 @@ const BRAND_SKILL_TREES: Record<string, BrandSkillTree> = {
 };
 
 export interface LevelUpChoice {
-  type: 'new_weapon' | 'upgrade_weapon' | 'new_passive' | 'upgrade_passive';
+  type: 'new_weapon' | 'upgrade_weapon' | 'new_passive' | 'upgrade_passive' | 'upgrade_protocol';
   id: string;
   nameCN: string;
   descriptionCN: string;
   icon: string;
   rarity: string;
   currentLevel?: number;
+  maxLevel?: number;
+  protocolId?: LevelUpProtocolId;
   color: number;
   previewDpsBefore?: number;
   previewDpsAfter?: number;
@@ -170,7 +172,167 @@ export interface LevelUpChoice {
   previewTextCN?: string;
 }
 
+export type LevelUpProtocolId =
+  | 'barrage_matrix'
+  | 'phase_lance'
+  | 'overclock_link'
+  | 'echo_reactor'
+  | 'hunter_instinct'
+  | 'companion_sync';
+
+interface LevelUpProtocolDef {
+  id: LevelUpProtocolId;
+  nameCN: string;
+  descCN: string;
+  icon: string;
+  rarity: 'common' | 'rare' | 'epic';
+  color: number;
+  maxLevel: number;
+}
+
+export interface LevelUpProtocolBonuses {
+  damageMul: number;
+  fireRateMul: number;
+  speedMul: number;
+  projectileBonus: number;
+  pierceBonus: number;
+  patternPower: number;
+  signatureRateMul: number;
+  companionDamageMul: number;
+  companionFireRateMul: number;
+  extraChainChance: number;
+}
+
+const LEVEL_UP_PROTOCOL_DEFS: Record<LevelUpProtocolId, LevelUpProtocolDef> = {
+  barrage_matrix: {
+    id: 'barrage_matrix',
+    nameCN: '弹幕矩阵',
+    descCN: '投射物数量提升并追加扇形补射',
+    icon: '✶',
+    rarity: 'rare',
+    color: 0x22d3ee,
+    maxLevel: 4,
+  },
+  phase_lance: {
+    id: 'phase_lance',
+    nameCN: '相位穿矛',
+    descCN: '穿透与弹速提升，直线压制更强',
+    icon: '⟐',
+    rarity: 'rare',
+    color: 0x7dd3fc,
+    maxLevel: 4,
+  },
+  overclock_link: {
+    id: 'overclock_link',
+    nameCN: '过载链路',
+    descCN: '射速和签名弹触发率大幅提升',
+    icon: '⚡',
+    rarity: 'epic',
+    color: 0xf59e0b,
+    maxLevel: 5,
+  },
+  echo_reactor: {
+    id: 'echo_reactor',
+    nameCN: '回声反应堆',
+    descCN: '基础伤害提升并附带连锁概率',
+    icon: '◎',
+    rarity: 'epic',
+    color: 0xa78bfa,
+    maxLevel: 4,
+  },
+  hunter_instinct: {
+    id: 'hunter_instinct',
+    nameCN: '猎手本能',
+    descCN: '弹道形态更复杂，轨迹压制增强',
+    icon: '➹',
+    rarity: 'rare',
+    color: 0x34d399,
+    maxLevel: 4,
+  },
+  companion_sync: {
+    id: 'companion_sync',
+    nameCN: '伙伴协同',
+    descCN: '伙伴伤害/射速同步提升，战斗存在感增强',
+    icon: '👥',
+    rarity: 'common',
+    color: 0x38bdf8,
+    maxLevel: 4,
+  },
+};
+
 export class EvolutionSystem {
+  private static protocolToken(id: LevelUpProtocolId): string {
+    return `proto:${id}`;
+  }
+
+  static getProtocolLevel(id: LevelUpProtocolId): number {
+    const token = this.protocolToken(id);
+    return gameState.data.unlockedSkills.reduce((count, skillId) => count + (skillId === token ? 1 : 0), 0);
+  }
+
+  static getProtocolLevels(): Record<LevelUpProtocolId, number> {
+    const levels = {} as Record<LevelUpProtocolId, number>;
+    (Object.keys(LEVEL_UP_PROTOCOL_DEFS) as LevelUpProtocolId[]).forEach((id) => {
+      levels[id] = this.getProtocolLevel(id);
+    });
+    return levels;
+  }
+
+  static getProtocolCombatBonuses(): LevelUpProtocolBonuses {
+    const lv = this.getProtocolLevels();
+    const projectileBonus = lv.barrage_matrix > 0 ? Math.ceil(lv.barrage_matrix / 2) : 0;
+    const pierceBonus = lv.phase_lance > 0 ? Math.ceil(lv.phase_lance / 2) : 0;
+    const patternPower = lv.hunter_instinct + Math.floor(lv.barrage_matrix / 2);
+    const signatureRateMul = 1 + lv.overclock_link * 0.11;
+    const extraChainChance = lv.echo_reactor * 0.06;
+    const damageMul = 1 + lv.echo_reactor * 0.1 + lv.phase_lance * 0.03;
+    const fireRateMul = 1 + lv.overclock_link * 0.09;
+    const speedMul = 1 + lv.phase_lance * 0.07;
+    const companionDamageMul = 1 + lv.companion_sync * 0.12;
+    const companionFireRateMul = 1 + lv.companion_sync * 0.08;
+    return {
+      damageMul: Number(damageMul.toFixed(3)),
+      fireRateMul: Number(fireRateMul.toFixed(3)),
+      speedMul: Number(speedMul.toFixed(3)),
+      projectileBonus,
+      pierceBonus,
+      patternPower,
+      signatureRateMul: Number(signatureRateMul.toFixed(3)),
+      companionDamageMul: Number(companionDamageMul.toFixed(3)),
+      companionFireRateMul: Number(companionFireRateMul.toFixed(3)),
+      extraChainChance: Number(extraChainChance.toFixed(3)),
+    };
+  }
+
+  private static canUpgradeProtocol(id: LevelUpProtocolId): boolean {
+    const def = LEVEL_UP_PROTOCOL_DEFS[id];
+    return this.getProtocolLevel(id) < def.maxLevel;
+  }
+
+  private static addProtocolLevel(id: LevelUpProtocolId): number {
+    if (!this.canUpgradeProtocol(id)) return this.getProtocolLevel(id);
+    gameState.data.unlockedSkills.push(this.protocolToken(id));
+    return this.getProtocolLevel(id);
+  }
+
+  private static buildProtocolChoice(id: LevelUpProtocolId): LevelUpChoice {
+    const def = LEVEL_UP_PROTOCOL_DEFS[id];
+    const level = this.getProtocolLevel(id);
+    const next = Math.min(def.maxLevel, level + 1);
+    return {
+      type: 'upgrade_protocol',
+      id,
+      protocolId: id,
+      nameCN: def.nameCN,
+      descriptionCN: `${def.descCN}（Lv.${level} → Lv.${next}）`,
+      icon: def.icon,
+      rarity: def.rarity,
+      currentLevel: level,
+      maxLevel: def.maxLevel,
+      color: def.color,
+    };
+  }
+
   static getEquippedGlasses(): ARGlassesDef | null {
     const id = gameState.data.equippedGlasses;
     if (!id) return null;
@@ -363,15 +525,24 @@ export class EvolutionSystem {
       });
     }
 
+    // 5. Combat protocol upgrades (run-only, stackable, for stronger moment-to-moment growth)
+    const protocolIds = Object.keys(LEVEL_UP_PROTOCOL_DEFS) as LevelUpProtocolId[];
+    protocolIds.forEach((id) => {
+      if (!this.canUpgradeProtocol(id)) return;
+      pool.push(this.buildProtocolChoice(id));
+    });
+
     // Shuffle and pick
     Phaser.Utils.Array.Shuffle(pool);
 
     // Prioritize: at least one weapon option and one passive option if available
     const weaponChoices = pool.filter(c => c.type === 'new_weapon' || c.type === 'upgrade_weapon');
     const passiveChoices = pool.filter(c => c.type === 'new_passive' || c.type === 'upgrade_passive');
+    const protocolChoices = pool.filter(c => c.type === 'upgrade_protocol');
 
     if (weaponChoices.length > 0) choices.push(weaponChoices[0]);
     if (passiveChoices.length > 0 && choices.length < count) choices.push(passiveChoices[0]);
+    if (protocolChoices.length > 0 && choices.length < count) choices.push(protocolChoices[0]);
 
     // Fill remaining from shuffled pool
     for (const choice of pool) {
@@ -386,7 +557,27 @@ export class EvolutionSystem {
 
   private static attachPowerPreviews(choices: LevelUpChoice[]): LevelUpChoice[] {
     const before = this.estimateLoadoutDps(gameState.data.weapons, gameState.data.passives);
+    const protocolBefore = this.estimateProtocolPowerScore(this.getProtocolLevels());
     return choices.map(choice => {
+      if (choice.type === 'upgrade_protocol') {
+        const protocolId = (choice.protocolId || choice.id) as LevelUpProtocolId;
+        const levels = this.getProtocolLevels();
+        const afterLevels = { ...levels };
+        afterLevels[protocolId] = Math.min(
+          LEVEL_UP_PROTOCOL_DEFS[protocolId].maxLevel,
+          (afterLevels[protocolId] || 0) + 1
+        );
+        const protocolAfter = this.estimateProtocolPowerScore(afterLevels);
+        const delta = Number((protocolAfter - protocolBefore).toFixed(1));
+        const sign = delta >= 0 ? '+' : '';
+        return {
+          ...choice,
+          previewDpsBefore: Number(protocolBefore.toFixed(1)),
+          previewDpsAfter: Number(protocolAfter.toFixed(1)),
+          previewDpsDelta: delta,
+          previewTextCN: `流派增幅  ${protocolBefore.toFixed(1)}% → ${protocolAfter.toFixed(1)}% (${sign}${delta}%)`,
+        };
+      }
       const simulated = this.simulateChoiceResult(choice, gameState.data.weapons, gameState.data.passives);
       const after = this.estimateLoadoutDps(simulated.weapons, simulated.passives);
       const delta = after - before;
@@ -435,10 +626,33 @@ export class EvolutionSystem {
         if (target) target.level = Math.min(5, target.level + 1);
         break;
       }
+      case 'upgrade_protocol':
+        break;
     }
 
     this.applySimulatedEvolutions(weapons, passives);
     return { weapons, passives };
+  }
+
+  private static estimateProtocolPowerScore(levels: Record<LevelUpProtocolId, number>): number {
+    const clampLevel = (id: LevelUpProtocolId): number => {
+      const max = LEVEL_UP_PROTOCOL_DEFS[id].maxLevel;
+      return Phaser.Math.Clamp(levels[id] || 0, 0, max);
+    };
+    const barrage = clampLevel('barrage_matrix');
+    const lance = clampLevel('phase_lance');
+    const overclock = clampLevel('overclock_link');
+    const echo = clampLevel('echo_reactor');
+    const hunt = clampLevel('hunter_instinct');
+    const companion = clampLevel('companion_sync');
+    const score =
+      barrage * 6.8 +
+      lance * 5.4 +
+      overclock * 7.6 +
+      echo * 8.2 +
+      hunt * 5.9 +
+      companion * 4.8;
+    return Math.max(0, score);
   }
 
   private static applySimulatedEvolutions(weapons: WeaponSlot[], passives: PassiveSlot[]): void {
@@ -520,6 +734,9 @@ export class EvolutionSystem {
         break;
       case 'upgrade_passive':
         gameState.upgradePassive(choice.id);
+        break;
+      case 'upgrade_protocol':
+        this.addProtocolLevel((choice.protocolId || choice.id) as LevelUpProtocolId);
         break;
     }
 

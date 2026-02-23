@@ -4,7 +4,16 @@
  * Manages physics groups, collisions, and inter-system communication
  */
 import Phaser from 'phaser';
-import { gameState, type Resources, type CompanionData, type PermanentTalentBonuses } from '../state/GameState';
+import {
+  gameState,
+  type Resources,
+  type CompanionData,
+  type PermanentTalentBonuses,
+  type DayChallengeBranch,
+  type DayChallengeMasteryBonuses,
+  type DayOpsRenownBonuses,
+  type GearWeaponType,
+} from '../state/GameState';
 import { events, GameEvents } from '../utils/EventBus';
 import { WeatherSystem } from '../systems/WeatherSystem';
 import { AnimationSystem } from '../systems/AnimationSystem';
@@ -15,7 +24,7 @@ import { PlayerSystem } from '../systems/PlayerSystem';
 import { DayCycleSystem } from '../systems/DayCycleSystem';
 import { WaveSystem } from '../systems/WaveSystem';
 import { LootSystem } from '../systems/LootSystem';
-import { EvolutionSystem } from '../systems/EvolutionSystem';
+import { EvolutionSystem, type LevelUpProtocolId } from '../systems/EvolutionSystem';
 import { QuestSystem } from '../systems/QuestSystem';
 import { BaseSystem } from '../systems/BaseSystem';
 import { CompanionPersonalitySystem } from '../systems/CompanionPersonalitySystem';
@@ -78,6 +87,185 @@ interface ExplorationSpot {
   radius: number;
   cooldown: number;
   lastInteract: number;
+}
+
+interface DayLifeSpotBonus {
+  label: string;
+  summary: string;
+  rewardMul: number;
+  dangerMul: number;
+  bonusXp: number;
+  expiresAt: number;
+  color: string;
+}
+
+interface DayMiniGameProfile {
+  title: string;
+  hint: string;
+  targetColor: number;
+  perfectColor: number;
+  trapColor: number;
+  baseWidth: number;
+  baseTargetSpeed: number;
+  perfectRatio: number;
+  riskyTargetWidthMul: number;
+  riskyTargetSpeedMul: number;
+  hasTrap: boolean;
+  trapWidth: number;
+}
+
+interface DayMiniGameTheme {
+  variant: 'river' | 'forest' | 'city' | 'cave';
+  accent: number;
+  accentText: string;
+  icon: string;
+  subtitle: string;
+  panelColor: number;
+  overlayColor: number;
+  overlayAlpha: number;
+  arenaColor: number;
+  tileA: number;
+  tileB: number;
+  safeCardColor: number;
+  riskyCardColor: number;
+  buttonColor: number;
+  buttonTextColor: string;
+  protocolLevel: number;
+  protocolLabel: string;
+  protocolColor: number;
+}
+
+interface DayExplorationChallenge {
+  id: string;
+  branch: DayChallengeBranch;
+  branchNameCN: string;
+  actionType: ExplorationActionType;
+  targetQuality: 'good' | 'perfect';
+  required: number;
+  progress: number;
+  reward: {
+    resources: Partial<Record<keyof Resources, number>>;
+    xp: number;
+    bitcoin?: number;
+  };
+  title: string;
+  desc: string;
+  dailyEffect: string;
+  masteryGain: number;
+  completed: boolean;
+  day: number;
+}
+
+type DayOpsQualityRequirement = 'any' | 'good' | 'perfect';
+type DayOpsStage = 'prep' | 'execute' | 'handoff' | 'done';
+
+interface DayOpsContract {
+  id: string;
+  actionType: ExplorationActionType;
+  title: string;
+  desc: string;
+  prepDesc: string;
+  requiredQuality: DayOpsQualityRequirement;
+  riskyOnly: boolean;
+  target: number;
+  progress: number;
+  prepGain: number;
+  stage: DayOpsStage;
+  prepCost: Partial<Record<keyof Resources, number>>;
+  handoffNpc: 'commander';
+  renownGain: number;
+  reward: {
+    resources: Partial<Record<keyof Resources, number>>;
+    xp: number;
+    bitcoin?: number;
+  };
+  completed: boolean;
+  day: number;
+}
+
+type NightDirectiveId = 'fortify' | 'assault' | 'salvage';
+
+interface NightDirectiveDef {
+  id: NightDirectiveId;
+  nameCN: string;
+  summaryCN: string;
+  color: number;
+  effects: {
+    playerDamageMul: number;
+    companionDamageMul: number;
+    turretDamageMul: number;
+    residentDamageMul: number;
+    lootMul: number;
+    xpMul: number;
+    enemyPressureMul: number;
+  };
+}
+
+interface CaveRaidEnemy {
+  sprite: Phaser.GameObjects.Rectangle;
+  visual: Phaser.GameObjects.Image | null;
+  hp: number;
+  maxHp: number;
+  speed: number;
+  vx: number;
+  vy: number;
+  kind: 'runner' | 'leaper' | 'spitter' | 'boss';
+  touchDamage: number;
+  isBoss: boolean;
+  nextAttackAt: number;
+  jumpCooldownUntil: number;
+  groundY: number;
+}
+
+interface CaveRaidProjectile {
+  sprite: Phaser.GameObjects.Rectangle;
+  vx: number;
+  vy: number;
+  lifeMs: number;
+  damage: number;
+  fromEnemy: boolean;
+}
+
+interface CaveRaidTrap {
+  zone: Phaser.GameObjects.Rectangle;
+  pulse: Phaser.GameObjects.Rectangle;
+  icon: Phaser.GameObjects.Image | null;
+  armedAt: number;
+  fireAt: number;
+  fired: boolean;
+  mode: 'floor' | 'drop';
+  travelV: number;
+}
+
+interface CaveRaidSurface {
+  x1: number;
+  x2: number;
+  y: number;
+}
+
+interface ForestHuntClue {
+  sprite: Phaser.GameObjects.Image;
+  pulse: Phaser.GameObjects.Ellipse;
+}
+
+interface CityScavengeLootNode {
+  sprite: Phaser.GameObjects.Image;
+  pulse: Phaser.GameObjects.Rectangle;
+  label: Phaser.GameObjects.Text;
+  x: number;
+  y: number;
+  weight: number;
+  value: number;
+  kind: 'supply' | 'medical' | 'tech' | 'stash';
+  collected: boolean;
+}
+
+interface CityScavengePatrol {
+  sprite: Phaser.GameObjects.Image;
+  laneY: number;
+  vx: number;
+  width: number;
+  height: number;
 }
 
 interface ResidentAssistTask {
@@ -147,6 +335,15 @@ const AUTO_LEVEL_COLOR_CYCLE: number[] = [
   0x22d3ee, 0x38bdf8, 0x34d399, 0xfacc15,
   0xfb923c, 0xf472b6, 0xa78bfa, 0xf43f5e,
 ];
+
+const PROTOCOL_VISUAL_PROFILE: Record<LevelUpProtocolId, { color: number; baseFreq: number }> = {
+  barrage_matrix: { color: 0x22d3ee, baseFreq: 186 },
+  phase_lance: { color: 0x7dd3fc, baseFreq: 208 },
+  overclock_link: { color: 0xf59e0b, baseFreq: 233 },
+  echo_reactor: { color: 0xa78bfa, baseFreq: 247 },
+  hunter_instinct: { color: 0x34d399, baseFreq: 175 },
+  companion_sync: { color: 0x38bdf8, baseFreq: 196 },
+};
 
 const DEFAULT_RUN_MUTATOR_EFFECTS: RunMutatorEffects = {
   playerDamageMul: 1,
@@ -295,6 +492,54 @@ const RUN_EVENT_DEFS: RunEventDef[] = [
   },
 ];
 
+const NIGHT_DIRECTIVE_DEFS: Record<NightDirectiveId, NightDirectiveDef> = {
+  fortify: {
+    id: 'fortify',
+    nameCN: '坚守防线',
+    summaryCN: '降低夜间压力，驻守火力更稳',
+    color: 0x38bdf8,
+    effects: {
+      playerDamageMul: 1.08,
+      companionDamageMul: 1.1,
+      turretDamageMul: 1.12,
+      residentDamageMul: 1.2,
+      lootMul: 0.96,
+      xpMul: 0.95,
+      enemyPressureMul: 0.86,
+    },
+  },
+  assault: {
+    id: 'assault',
+    nameCN: '猎杀出击',
+    summaryCN: '正面清场，收益更高但压力更大',
+    color: 0xef4444,
+    effects: {
+      playerDamageMul: 1.24,
+      companionDamageMul: 1.2,
+      turretDamageMul: 1.14,
+      residentDamageMul: 1.08,
+      lootMul: 1.18,
+      xpMul: 1.2,
+      enemyPressureMul: 1.22,
+    },
+  },
+  salvage: {
+    id: 'salvage',
+    nameCN: '夜行回收',
+    summaryCN: '维持战线并强化战利回收',
+    color: 0xf59e0b,
+    effects: {
+      playerDamageMul: 1.06,
+      companionDamageMul: 1.08,
+      turretDamageMul: 1.08,
+      residentDamageMul: 1.06,
+      lootMul: 1.34,
+      xpMul: 1.1,
+      enemyPressureMul: 1.05,
+    },
+  },
+};
+
 const TURRET_PROMOTION_LEVEL = 20;
 const TURRET_MAX_LEVEL = 40;
 const TURRET_ADVANCED_CLASSES = [
@@ -377,13 +622,177 @@ export default class GameScene extends Phaser.Scene {
   private lastHungerWarning: number = 0;
   private dayActivityUsage: Map<ExplorationActionType, number> = new Map();
   private explorationStatusNextAt: number = 0;
+  private dayAdventureChain: number = 0;
+  private dayAdventureLastAt: number = 0;
   private activeRunMutators: RunMutatorDef[] = [];
   private runMutatorEffects: RunMutatorEffects = { ...DEFAULT_RUN_MUTATOR_EFFECTS };
   private permanentTalentBonuses: PermanentTalentBonuses = gameState.getPermanentTalentBonuses();
+  private dayChallengeMasteryBonuses: DayChallengeMasteryBonuses = gameState.getDayChallengeMasteryBonuses();
+  private dayOpsRenownBonuses: DayOpsRenownBonuses = gameState.getDayOpsRenownBonuses();
   private runEventOpen: boolean = false;
   private runEventContainer: Phaser.GameObjects.Container | null = null;
   private pendingNightWaveStartAfterEvent: boolean = false;
+  private pendingDayRunEventAfterChallenge: boolean = false;
   private runEventAutoPickTimer: Phaser.Time.TimerEvent | null = null;
+  private dayChallengeSelectionOpen: boolean = false;
+  private dayChallengeSelectionContainer: Phaser.GameObjects.Container | null = null;
+  private dayChallengePendingChoices: DayExplorationChallenge[] = [];
+  private dayChallengeBranchSelected: DayChallengeBranch | null = null;
+  private dayChallengeDayRewardMul: number = 1;
+  private dayChallengeDayDangerMul: number = 1;
+  private dayChallengeDayXpMul: number = 1;
+  private dayOpsContracts: DayOpsContract[] = [];
+  private dayOpsNightPrepStacks: number = 0;
+  private nightDirectiveSelectionOpen: boolean = false;
+  private nightDirectiveSelectionContainer: Phaser.GameObjects.Container | null = null;
+  private nightDirectiveAutoPickTimer: Phaser.Time.TimerEvent | null = null;
+  private nightDirectiveId: NightDirectiveId | null = null;
+  private nightDirectiveEffects: NightDirectiveDef['effects'] = {
+    playerDamageMul: 1,
+    companionDamageMul: 1,
+    turretDamageMul: 1,
+    residentDamageMul: 1,
+    lootMul: 1,
+    xpMul: 1,
+    enemyPressureMul: 1,
+  };
+  private nightDirectivePressureNextAt: number = 0;
+  private daySpotMiniGameOpen: boolean = false;
+  private daySpotMiniGameContainer: Phaser.GameObjects.Container | null = null;
+  private daySpotMiniGameSpot: ExplorationSpot | null = null;
+  private daySpotMiniGameRisk: 'safe' | 'risky' = 'safe';
+  private daySpotMiniGameMode: ExplorationActionType = 'fish';
+  private daySpotMiniGameCursor: number = 0.5;
+  private daySpotMiniGameCursorDir: number = 1;
+  private daySpotMiniGameTargetCenter: number = 0.5;
+  private daySpotMiniGameTargetDir: number = 1;
+  private daySpotMiniGameTargetWidth: number = 0.24;
+  private daySpotMiniGamePerfectRatio: number = 0.4;
+  private daySpotMiniGameTrapCenter: number = -1;
+  private daySpotMiniGameTrapWidth: number = 0;
+  private daySpotMiniGameProfile: DayMiniGameProfile | null = null;
+  private daySpotMiniGameCursorVisual: Phaser.GameObjects.Rectangle | null = null;
+  private daySpotMiniGameTargetVisual: Phaser.GameObjects.Rectangle | null = null;
+  private daySpotMiniGamePerfectVisual: Phaser.GameObjects.Rectangle | null = null;
+  private daySpotMiniGameTrapVisual: Phaser.GameObjects.Rectangle | null = null;
+  private daySpotMiniGameTrapIcon: Phaser.GameObjects.Image | null = null;
+  private daySpotMiniGameRoundText: Phaser.GameObjects.Text | null = null;
+  private daySpotMiniGameStageText: Phaser.GameObjects.Text | null = null;
+  private daySpotMiniGameActionLabel: Phaser.GameObjects.Text | null = null;
+  private daySpotMiniGameRound: number = 1;
+  private daySpotMiniGameRoundsTotal: number = 1;
+  private daySpotMiniGameScore: number = 0;
+  private daySpotMiniGameTrapHits: number = 0;
+  private caveRaidMiniGameActive: boolean = false;
+  private caveRaidResultResolved: boolean = false;
+  private caveRaidArena: Phaser.Geom.Rectangle | null = null;
+  private caveRaidGroundY: number = 0;
+  private caveRaidSurfaces: CaveRaidSurface[] = [];
+  private caveRaidPlayerSprite: Phaser.GameObjects.Rectangle | null = null;
+  private caveRaidPlayerIcon: Phaser.GameObjects.Image | null = null;
+  private caveRaidPlayerVy: number = 0;
+  private caveRaidPlayerHpMax: number = 100;
+  private caveRaidPlayerHp: number = 100;
+  private caveRaidPlayerSpeed: number = 0.26;
+  private caveRaidPlayerJumpForce: number = 0.46;
+  private caveRaidPlayerGrounded: boolean = true;
+  private caveRaidPlayerJumpCooldownUntil: number = 0;
+  private caveRaidPlayerAttackCooldownUntil: number = 0;
+  private caveRaidPlayerInvulUntil: number = 0;
+  private caveRaidElapsedMs: number = 0;
+  private caveRaidDurationMs: number = 36000;
+  private caveRaidStage: 1 | 2 | 3 = 1;
+  private caveRaidStageProgress: number = 0;
+  private caveRaidStageObjective: number = 4;
+  private caveRaidKills: number = 0;
+  private caveRaidBossSpawned: boolean = false;
+  private caveRaidBossKilled: boolean = false;
+  private caveRaidBossSprite: Phaser.GameObjects.Rectangle | null = null;
+  private caveRaidBossNextSkillAt: number = 0;
+  private caveRaidNextSpawnAt: number = 0;
+  private caveRaidNextTrapAt: number = 0;
+  private caveRaidEnemyHpMul: number = 1;
+  private caveRaidEnemySpeedMul: number = 1;
+  private caveRaidEnemySpawnIntervalMs: number = 2100;
+  private caveRaidMobileMoveX: number = 0;
+  private caveRaidMobileMoveY: number = 0;
+  private caveRaidStatusText: Phaser.GameObjects.Text | null = null;
+  private caveRaidHpText: Phaser.GameObjects.Text | null = null;
+  private caveRaidTimerText: Phaser.GameObjects.Text | null = null;
+  private caveRaidEnemies: CaveRaidEnemy[] = [];
+  private caveRaidProjectiles: CaveRaidProjectile[] = [];
+  private caveRaidTraps: CaveRaidTrap[] = [];
+  private forestHuntMiniGameActive: boolean = false;
+  private forestHuntResultResolved: boolean = false;
+  private forestHuntArena: Phaser.Geom.Rectangle | null = null;
+  private forestHuntGroundY: number = 0;
+  private forestHuntPlayerSprite: Phaser.GameObjects.Rectangle | null = null;
+  private forestHuntPreySprite: Phaser.GameObjects.Rectangle | null = null;
+  private forestHuntPlayerIcon: Phaser.GameObjects.Image | null = null;
+  private forestHuntPreyIcon: Phaser.GameObjects.Image | null = null;
+  private forestHuntHintIcon: Phaser.GameObjects.Image | null = null;
+  private forestHuntSightVisual: Phaser.GameObjects.Rectangle | null = null;
+  private forestHuntClue: ForestHuntClue | null = null;
+  private forestHuntStatusText: Phaser.GameObjects.Text | null = null;
+  private forestHuntPhaseText: Phaser.GameObjects.Text | null = null;
+  private forestHuntAlertText: Phaser.GameObjects.Text | null = null;
+  private forestHuntActionHintText: Phaser.GameObjects.Text | null = null;
+  private forestHuntPhase: 'stealth' | 'burst' = 'stealth';
+  private forestHuntPhaseElapsedMs: number = 0;
+  private forestHuntStealthDurationMs: number = 5200;
+  private forestHuntBurstDurationMs: number = 2400;
+  private forestHuntRoundStealthSuccess: boolean = false;
+  private forestHuntAlertMeter: number = 0;
+  private forestHuntDetections: number = 0;
+  private forestHuntBreathCooldownUntil: number = 0;
+  private forestHuntPlayerSpeed: number = 0.24;
+  private forestHuntPreyVx: number = 0.082;
+  private forestHuntPreyFacing: number = 1;
+  private forestHuntMobileMoveX: number = 0;
+  private forestHuntBurstCursor: number = 0.5;
+  private forestHuntBurstCursorDir: number = 1;
+  private forestHuntBurstCursorSpeed: number = 0.00106;
+  private forestHuntBurstTargetCenter: number = 0.5;
+  private forestHuntBurstTargetDir: number = 1;
+  private forestHuntBurstTargetSpeed: number = 0.00052;
+  private forestHuntBurstTargetWidth: number = 0.22;
+  private forestHuntBurstPerfectRatio: number = 0.42;
+  private cityScavengeMiniGameActive: boolean = false;
+  private cityScavengeResultResolved: boolean = false;
+  private cityScavengeArena: Phaser.Geom.Rectangle | null = null;
+  private cityScavengePlayerSprite: Phaser.GameObjects.Rectangle | null = null;
+  private cityScavengeExtractZone: Phaser.GameObjects.Rectangle | null = null;
+  private cityScavengeStatusText: Phaser.GameObjects.Text | null = null;
+  private cityScavengeTimerText: Phaser.GameObjects.Text | null = null;
+  private cityScavengeCarryText: Phaser.GameObjects.Text | null = null;
+  private cityScavengeActionHintText: Phaser.GameObjects.Text | null = null;
+  private cityScavengeRouteText: Phaser.GameObjects.Text | null = null;
+  private cityScavengeRoute: 'alley' | 'market' | 'rooftop' = 'alley';
+  private cityScavengeRouteSelected: boolean = false;
+  private cityScavengeElapsedMs: number = 0;
+  private cityScavengeTimeLimitMs: number = 15000;
+  private cityScavengeCarryWeight: number = 0;
+  private cityScavengeCarryCap: number = 20;
+  private cityScavengeLootScore: number = 0;
+  private cityScavengeScoreTarget: number = 24;
+  private cityScavengePlayerBaseSpeed: number = 0.27;
+  private cityScavengeMoveX: number = 0;
+  private cityScavengeMoveY: number = 0;
+  private cityScavengeTrapCooldownUntil: number = 0;
+  private cityScavengeLanes: number[] = [];
+  private cityScavengeLootNodes: CityScavengeLootNode[] = [];
+  private cityScavengePatrols: CityScavengePatrol[] = [];
+  private cityScavengeRouteRewardMul: number = 1;
+  private cityScavengeRouteDangerMul: number = 1;
+  private cityScavengeExtracted: boolean = false;
+  private dayLifePulseTimer: Phaser.Time.TimerEvent | null = null;
+  private daySpotBonuses: Map<string, DayLifeSpotBonus> = new Map();
+  private dayExplorationChallenge: DayExplorationChallenge | null = null;
+  private dayChallengeHintCooldownUntil: number = 0;
+  private scavengeDurabilityStacks: number = 0;
+  private scavengeDurabilityPenaltyUntil: number = 0;
+  public scavengeDurabilityPenaltyStartAt: number = 0;
+  public scavengeDurabilityPenaltyDurationMs: number = 0;
 
   // Last known companion data for roster sync
   private lastCompanionRosterSignature: string = '';
@@ -416,6 +825,10 @@ export default class GameScene extends Phaser.Scene {
   private turretIdSeed: number = 0;
   private bulletTrailTick: number = 0;
   private interactKey?: Phaser.Input.Keyboard.Key;
+  private attackKey?: Phaser.Input.Keyboard.Key;
+  private moveLeftKey?: Phaser.Input.Keyboard.Key;
+  private moveRightKey?: Phaser.Input.Keyboard.Key;
+  private jumpKey?: Phaser.Input.Keyboard.Key;
   private emergencyExitKey?: Phaser.Input.Keyboard.Key;
   private interactionDebounceUntil: number = 0;
   private weaponMasteryKills: Record<WeaponType, number> = {
@@ -430,7 +843,43 @@ export default class GameScene extends Phaser.Scene {
   private arOverdriveCharge: number = 0;
   private arOverdriveActiveUntil: number = 0;
   private arOverdrivePulseAt: number = 0;
+  private battleMomentum: number = 0;
+  private battleMomentumBoostUntil: number = 0;
+  private battleMomentumPulseAt: number = 0;
+  private levelSurgeUntil: number = 0;
+  private levelSurgePulseAt: number = 0;
+  private protocolAuraContainer: Phaser.GameObjects.Container | null = null;
+  private protocolAuraInner: Phaser.GameObjects.Arc | null = null;
+  private protocolAuraOuter: Phaser.GameObjects.Arc | null = null;
+  private protocolAuraNodes: Phaser.GameObjects.Arc[] = [];
+  private protocolAuraColor: number = 0x22d3ee;
+  private protocolAuraLevel: number = 0;
+  private protocolAuraBoostUntil: number = 0;
+  private protocolAuraPulseAt: number = 0;
   private currentPowerTier: 1 | 2 | 3 = 1;
+  private lastAppliedUpgradeLevel: number = 0;
+  private nextGearResonanceCheckAt: number = 0;
+  private gearResonanceSignature: string = '';
+  private gearResonanceDamageMul: number = 1;
+  private gearResonanceFireRateMul: number = 1;
+  private gearResonanceSpeedMul: number = 1;
+  private gearResonanceProjectileBonus: number = 0;
+  private gearResonanceLootMul: number = 1;
+  private playerUpgrades: {
+    fireRateBonus: number;
+    damageBonus: number;
+    healthRegen: number;
+    moveSpeedBonus: number;
+    companionDamage: number;
+    turretFireRate: number;
+  } = {
+    fireRateBonus: 0,
+    damageBonus: 0,
+    healthRegen: 0,
+    moveSpeedBonus: 0,
+    companionDamage: 0,
+    turretFireRate: 0,
+  };
   private mobileViewport: boolean = false;
   private lowPerfMode: boolean = false;
   private ultraLowPerfMode: boolean = false;
@@ -517,6 +966,8 @@ export default class GameScene extends Phaser.Scene {
     // Reset state
     gameState.resetRun();
     this.permanentTalentBonuses = gameState.getPermanentTalentBonuses();
+    this.dayChallengeMasteryBonuses = gameState.getDayChallengeMasteryBonuses();
+    this.dayOpsRenownBonuses = gameState.getDayOpsRenownBonuses();
     this.activeRunMutators = [];
     this.runMutatorEffects = { ...DEFAULT_RUN_MUTATOR_EFFECTS };
     this.runEventOpen = false;
@@ -524,12 +975,179 @@ export default class GameScene extends Phaser.Scene {
     this.runEventAutoPickTimer = null;
     this.runEventContainer?.destroy();
     this.runEventContainer = null;
+    this.pendingDayRunEventAfterChallenge = false;
+    this.dayChallengeSelectionOpen = false;
+    this.dayChallengeSelectionContainer?.destroy();
+    this.dayChallengeSelectionContainer = null;
+    this.dayChallengePendingChoices = [];
+    this.dayChallengeBranchSelected = null;
+    this.dayChallengeDayRewardMul = 1;
+    this.dayChallengeDayDangerMul = 1;
+    this.dayChallengeDayXpMul = 1;
+    this.dayOpsContracts = [];
+    this.dayOpsNightPrepStacks = 0;
+    this.nightDirectiveSelectionOpen = false;
+    this.nightDirectiveSelectionContainer?.destroy();
+    this.nightDirectiveSelectionContainer = null;
+    this.nightDirectiveAutoPickTimer?.remove(false);
+    this.nightDirectiveAutoPickTimer = null;
+    this.nightDirectiveId = null;
+    this.nightDirectiveEffects = {
+      playerDamageMul: 1,
+      companionDamageMul: 1,
+      turretDamageMul: 1,
+      residentDamageMul: 1,
+      lootMul: 1,
+      xpMul: 1,
+      enemyPressureMul: 1,
+    };
+    this.nightDirectivePressureNextAt = 0;
+    this.daySpotMiniGameOpen = false;
+    this.daySpotMiniGameContainer?.destroy();
+    this.daySpotMiniGameContainer = null;
+    this.daySpotMiniGameSpot = null;
+    this.daySpotMiniGameRisk = 'safe';
+    this.daySpotMiniGameMode = 'fish';
+    this.daySpotMiniGameCursor = 0.5;
+    this.daySpotMiniGameCursorDir = 1;
+    this.daySpotMiniGameTargetCenter = 0.5;
+    this.daySpotMiniGameTargetDir = 1;
+    this.daySpotMiniGameTargetWidth = 0.24;
+    this.daySpotMiniGamePerfectRatio = 0.4;
+    this.daySpotMiniGameTrapCenter = -1;
+    this.daySpotMiniGameTrapWidth = 0;
+    this.daySpotMiniGameProfile = null;
+    this.daySpotMiniGameCursorVisual = null;
+    this.daySpotMiniGameTargetVisual = null;
+    this.daySpotMiniGamePerfectVisual = null;
+    this.daySpotMiniGameTrapVisual = null;
+    this.daySpotMiniGameTrapIcon = null;
+    this.daySpotMiniGameTrapIcon = null;
+    this.daySpotMiniGameRoundText = null;
+    this.daySpotMiniGameStageText = null;
+    this.daySpotMiniGameActionLabel = null;
+    this.daySpotMiniGameRound = 1;
+    this.daySpotMiniGameRoundsTotal = 1;
+    this.daySpotMiniGameScore = 0;
+    this.daySpotMiniGameTrapHits = 0;
+    this.caveRaidMiniGameActive = false;
+    this.caveRaidResultResolved = false;
+    this.caveRaidArena = null;
+    this.caveRaidGroundY = 0;
+    this.caveRaidSurfaces = [];
+    this.caveRaidPlayerSprite = null;
+    this.caveRaidPlayerIcon = null;
+    this.caveRaidPlayerIcon = null;
+    this.caveRaidPlayerVy = 0;
+    this.caveRaidPlayerHpMax = 100;
+    this.caveRaidPlayerHp = 100;
+    this.caveRaidPlayerSpeed = 0.26;
+    this.caveRaidPlayerJumpForce = 0.46;
+    this.caveRaidPlayerGrounded = true;
+    this.caveRaidPlayerJumpCooldownUntil = 0;
+    this.caveRaidPlayerAttackCooldownUntil = 0;
+    this.caveRaidPlayerInvulUntil = 0;
+    this.caveRaidElapsedMs = 0;
+    this.caveRaidDurationMs = 36000;
+    this.caveRaidStage = 1;
+    this.caveRaidStageProgress = 0;
+    this.caveRaidStageObjective = 4;
+    this.caveRaidKills = 0;
+    this.caveRaidBossSpawned = false;
+    this.caveRaidBossKilled = false;
+    this.caveRaidBossSprite = null;
+    this.caveRaidBossNextSkillAt = 0;
+    this.caveRaidNextSpawnAt = 0;
+    this.caveRaidNextTrapAt = 0;
+    this.caveRaidEnemyHpMul = 1;
+    this.caveRaidEnemySpeedMul = 1;
+    this.caveRaidEnemySpawnIntervalMs = 2100;
+    this.caveRaidMobileMoveX = 0;
+    this.caveRaidMobileMoveY = 0;
+    this.caveRaidStatusText = null;
+    this.caveRaidHpText = null;
+    this.caveRaidTimerText = null;
+    this.caveRaidEnemies = [];
+    this.caveRaidProjectiles = [];
+    this.caveRaidTraps = [];
+    this.forestHuntMiniGameActive = false;
+    this.forestHuntResultResolved = false;
+    this.forestHuntArena = null;
+    this.forestHuntGroundY = 0;
+    this.forestHuntPlayerSprite = null;
+    this.forestHuntPreySprite = null;
+    this.forestHuntPlayerIcon = null;
+    this.forestHuntPreyIcon = null;
+    this.forestHuntHintIcon = null;
+    this.forestHuntSightVisual = null;
+    this.forestHuntClue = null;
+    this.forestHuntStatusText = null;
+    this.forestHuntPhaseText = null;
+    this.forestHuntAlertText = null;
+    this.forestHuntActionHintText = null;
+    this.forestHuntPhase = 'stealth';
+    this.forestHuntPhaseElapsedMs = 0;
+    this.forestHuntStealthDurationMs = 5200;
+    this.forestHuntBurstDurationMs = 2400;
+    this.forestHuntRoundStealthSuccess = false;
+    this.forestHuntAlertMeter = 0;
+    this.forestHuntDetections = 0;
+    this.forestHuntBreathCooldownUntil = 0;
+    this.forestHuntPlayerSpeed = 0.24;
+    this.forestHuntPreyVx = 0.082;
+    this.forestHuntPreyFacing = 1;
+    this.forestHuntMobileMoveX = 0;
+    this.forestHuntBurstCursor = 0.5;
+    this.forestHuntBurstCursorDir = 1;
+    this.forestHuntBurstCursorSpeed = 0.00106;
+    this.forestHuntBurstTargetCenter = 0.5;
+    this.forestHuntBurstTargetDir = 1;
+    this.forestHuntBurstTargetSpeed = 0.00052;
+    this.forestHuntBurstTargetWidth = 0.22;
+    this.forestHuntBurstPerfectRatio = 0.42;
+    this.cityScavengeMiniGameActive = false;
+    this.cityScavengeResultResolved = false;
+    this.cityScavengeArena = null;
+    this.cityScavengePlayerSprite = null;
+    this.cityScavengeExtractZone = null;
+    this.cityScavengeStatusText = null;
+    this.cityScavengeTimerText = null;
+    this.cityScavengeCarryText = null;
+    this.cityScavengeActionHintText = null;
+    this.cityScavengeRouteText = null;
+    this.cityScavengeRoute = 'alley';
+    this.cityScavengeRouteSelected = false;
+    this.cityScavengeElapsedMs = 0;
+    this.cityScavengeTimeLimitMs = 15000;
+    this.cityScavengeCarryWeight = 0;
+    this.cityScavengeCarryCap = 20;
+    this.cityScavengeLootScore = 0;
+    this.cityScavengeScoreTarget = 24;
+    this.cityScavengePlayerBaseSpeed = 0.27;
+    this.cityScavengeMoveX = 0;
+    this.cityScavengeMoveY = 0;
+    this.cityScavengeTrapCooldownUntil = 0;
+    this.cityScavengeLanes = [];
+    this.cityScavengeLootNodes.forEach((node) => {
+      node.sprite.destroy();
+      node.pulse.destroy();
+      node.label.destroy();
+    });
+    this.cityScavengeLootNodes = [];
+    this.cityScavengePatrols.forEach((patrol) => patrol.sprite.destroy());
+    this.cityScavengePatrols = [];
+    this.cityScavengeRouteRewardMul = 1;
+    this.cityScavengeRouteDangerMul = 1;
+    this.cityScavengeExtracted = false;
     this.pendingNightWaveStartAfterEvent = false;
     this.rollRunMutators();
     this.isGameOver = false;
     this.isBuildMode = false;
     this.comboCount = 0;
     this.comboTimer = 0;
+    this.battleMomentum = 0;
+    this.battleMomentumBoostUntil = 0;
+    this.battleMomentumPulseAt = 0;
     this.interactables = [];
     this.facilityInteractables = [];
     this.explorationSpots = [];
@@ -551,7 +1169,32 @@ export default class GameScene extends Phaser.Scene {
     this.arOverdriveCharge = 0;
     this.arOverdriveActiveUntil = 0;
     this.arOverdrivePulseAt = 0;
+    this.levelSurgeUntil = 0;
+    this.levelSurgePulseAt = 0;
+    this.protocolAuraContainer?.destroy();
+    this.protocolAuraContainer = null;
+    this.protocolAuraInner = null;
+    this.protocolAuraOuter = null;
+    this.protocolAuraNodes = [];
+    this.protocolAuraColor = 0x22d3ee;
+    this.protocolAuraLevel = 0;
+    this.protocolAuraBoostUntil = 0;
+    this.protocolAuraPulseAt = 0;
+    this.nextGearResonanceCheckAt = 0;
+    this.gearResonanceSignature = '';
+    this.gearResonanceDamageMul = 1;
+    this.gearResonanceFireRateMul = 1;
+    this.gearResonanceSpeedMul = 1;
+    this.gearResonanceProjectileBonus = 0;
+    this.gearResonanceLootMul = 1;
     this.currentPowerTier = 1;
+    this.lastAppliedUpgradeLevel = 0;
+    this.playerUpgrades.fireRateBonus = 0;
+    this.playerUpgrades.damageBonus = 0;
+    this.playerUpgrades.healthRegen = 0;
+    this.playerUpgrades.moveSpeedBonus = 0;
+    this.playerUpgrades.companionDamage = 0;
+    this.playerUpgrades.turretFireRate = 0;
     this.nextCompanionRosterSyncAt = 0;
     this.nextExplorationUiUpdateAt = 0;
     this.nextResidentAssistUpdateAt = 0;
@@ -572,6 +1215,10 @@ export default class GameScene extends Phaser.Scene {
       this.dayResidentEconomyTimer.remove(false);
       this.dayResidentEconomyTimer = null;
     }
+    if (this.dayLifePulseTimer) {
+      this.dayLifePulseTimer.remove(false);
+      this.dayLifePulseTimer = null;
+    }
     this.facilityOccupants.clear();
     this.residentDayYieldNextAt.clear();
     this.residentDefenseNextFireAt.clear();
@@ -580,7 +1227,16 @@ export default class GameScene extends Phaser.Scene {
     this.companionCombatRecentChatter.clear();
     this.companionCombatNextAt.clear();
     this.dayActivityUsage.clear();
+    this.daySpotBonuses.clear();
+    this.dayExplorationChallenge = null;
+    this.dayChallengeHintCooldownUntil = 0;
+    this.scavengeDurabilityStacks = 0;
+    this.scavengeDurabilityPenaltyUntil = 0;
+    this.scavengeDurabilityPenaltyStartAt = 0;
+    this.scavengeDurabilityPenaltyDurationMs = 0;
     this.explorationStatusNextAt = 0;
+    this.dayAdventureChain = 0;
+    this.dayAdventureLastAt = 0;
     this.clearResidentAssistTask();
 
     // World
@@ -666,6 +1322,11 @@ export default class GameScene extends Phaser.Scene {
       loop: true,
       callback: () => this.updateDayResidentEconomy(),
     });
+    this.dayLifePulseTimer = this.time.addEvent({
+      delay: 3200,
+      loop: true,
+      callback: () => this.maybeEmitDayLifeAtmosphere(),
+    });
 
     // Initialize systems
     this.weatherSystem = new WeatherSystem(this, {
@@ -679,8 +1340,8 @@ export default class GameScene extends Phaser.Scene {
     this.enemySystem = new EnemySystem(this, this.enemies, this.player);
     this.cursors = this.input.keyboard!.createCursorKeys();
 
-    const upgrades = { fireRateBonus: 0, damageBonus: 0, healthRegen: 0, moveSpeedBonus: 0, companionDamage: 0, turretFireRate: 0 };
-    this.playerSystem = new PlayerSystem(this, this.player, this.cursors, upgrades);
+    this.playerSystem = new PlayerSystem(this, this.player, this.cursors, this.playerUpgrades);
+    this.applyDynamicPlayerUpgradeBonuses(false);
 
     this.dayCycleSystem = new DayCycleSystem(this);
     this.dayCycleSystem.start();
@@ -719,6 +1380,9 @@ export default class GameScene extends Phaser.Scene {
 
     // Create HUD elements in game scene
     this.createHUD();
+    this.createOrRefreshDayExplorationChallenge(true);
+    this.createOrRefreshDayOpsContracts(true);
+    this.updateGearResonanceState(true);
     this.showRunMutatorBriefing();
 
     // Sync companion presence with state
@@ -787,6 +1451,53 @@ export default class GameScene extends Phaser.Scene {
       }
       return { ok: true, period, id: picked.id };
     };
+    (window as any).__debug_open_cave_raid = () => {
+      if (this.dayChallengeSelectionOpen) {
+        const fallbackChoice = this.dayChallengePendingChoices[0];
+        if (fallbackChoice) {
+          this.selectDayExplorationChallenge(fallbackChoice);
+        } else {
+          this.closeDayChallengeSelectionPanel();
+        }
+      }
+      if (this.daySpotMiniGameOpen) return { ok: false, reason: 'already_open' };
+      const spot = this.explorationSpots.find((s) => s.actionType === 'cave_explore');
+      if (!spot) return { ok: false, reason: 'no_cave_spot' };
+      this.openDayExplorationMiniGame(spot);
+      return { ok: true, spotId: spot.id };
+    };
+    (window as any).__debug_open_forest_hunt = () => {
+      if (this.dayChallengeSelectionOpen) {
+        const fallbackChoice = this.dayChallengePendingChoices.find((choice) => choice.actionType === 'hunt')
+          || this.dayChallengePendingChoices[0];
+        if (fallbackChoice) {
+          this.selectDayExplorationChallenge(fallbackChoice);
+        } else {
+          this.closeDayChallengeSelectionPanel();
+        }
+      }
+      if (this.daySpotMiniGameOpen) return { ok: false, reason: 'already_open' };
+      const spot = this.explorationSpots.find((s) => s.actionType === 'hunt');
+      if (!spot) return { ok: false, reason: 'no_forest_spot' };
+      this.openDayExplorationMiniGame(spot);
+      return { ok: true, spotId: spot.id };
+    };
+    (window as any).__debug_open_city_scavenge = () => {
+      if (this.dayChallengeSelectionOpen) {
+        const fallbackChoice = this.dayChallengePendingChoices.find((choice) => choice.actionType === 'scavenge')
+          || this.dayChallengePendingChoices[0];
+        if (fallbackChoice) {
+          this.selectDayExplorationChallenge(fallbackChoice);
+        } else {
+          this.closeDayChallengeSelectionPanel();
+        }
+      }
+      if (this.daySpotMiniGameOpen) return { ok: false, reason: 'already_open' };
+      const spot = this.explorationSpots.find((s) => s.actionType === 'scavenge');
+      if (!spot) return { ok: false, reason: 'no_city_spot' };
+      this.openDayExplorationMiniGame(spot);
+      return { ok: true, spotId: spot.id };
+    };
     (window as any).render_game_to_text = () => {
       const p = this.player;
       const resources = gameState.data.resources;
@@ -847,6 +1558,50 @@ export default class GameScene extends Phaser.Scene {
           selectedBuildingId: this.selectedBuildingId,
           selectedCategory: this.isBuildMode ? 'building' : null,
         },
+        dayChallenge: this.dayExplorationChallenge
+          ? {
+            branch: this.dayExplorationChallenge.branch,
+            branchNameCN: this.dayExplorationChallenge.branchNameCN,
+            progress: this.dayExplorationChallenge.progress,
+            required: this.dayExplorationChallenge.required,
+            completed: this.dayExplorationChallenge.completed,
+          }
+          : null,
+        dayChallengeSelectionOpen: this.dayChallengeSelectionOpen,
+        dayChallengeBranchSelected: this.dayChallengeBranchSelected,
+        dayChallengeChoices: this.dayChallengePendingChoices.map((choice) => ({
+          branch: choice.branch,
+          title: choice.title,
+          actionType: choice.actionType,
+          targetQuality: choice.targetQuality,
+        })),
+        dayMiniGame: {
+          open: this.daySpotMiniGameOpen,
+          mode: this.daySpotMiniGameMode,
+          caveActive: this.caveRaidMiniGameActive,
+          caveHp: Math.max(0, Math.round(this.caveRaidPlayerHp)),
+          caveStage: this.caveRaidStage,
+          caveStageProgress: this.caveRaidStageProgress,
+          caveStageObjective: this.caveRaidStageObjective,
+          caveKills: this.caveRaidKills,
+          caveTrapHits: this.daySpotMiniGameTrapHits,
+          caveBossSpawned: this.caveRaidBossSpawned,
+          caveBossKilled: this.caveRaidBossKilled,
+          forestActive: this.forestHuntMiniGameActive,
+          forestPhase: this.forestHuntPhase,
+          forestAlert: Math.round(this.forestHuntAlertMeter),
+          forestDetections: this.forestHuntDetections,
+          cityActive: this.cityScavengeMiniGameActive,
+          cityRoute: this.cityScavengeRoute,
+          cityRouteSelected: this.cityScavengeRouteSelected,
+          cityCarry: this.cityScavengeCarryWeight,
+          cityCarryCap: this.cityScavengeCarryCap,
+          cityScore: this.cityScavengeLootScore,
+          cityScoreTarget: this.cityScavengeScoreTarget,
+          cityTimer: Math.max(0, Math.ceil((this.cityScavengeTimeLimitMs - this.cityScavengeElapsedMs) / 1000)),
+          cityAlarms: this.daySpotMiniGameTrapHits,
+          cityExtracted: this.cityScavengeExtracted,
+        },
         population: {
           used: BaseSystem.getPopulationUsage(),
           cap: BaseSystem.getPopulationCapacity(),
@@ -863,6 +1618,29 @@ export default class GameScene extends Phaser.Scene {
           lootGainMul: Number(this.runMutatorEffects.lootGainMul.toFixed(3)),
           dayFoodConsumptionMul: Number(this.runMutatorEffects.dayFoodConsumptionMul.toFixed(3)),
           incomingDamageMul: Number(this.runMutatorEffects.incomingDamageMul.toFixed(3)),
+        },
+        dayOps: {
+          prepStacks: this.dayOpsNightPrepStacks,
+          prepCap: this.getDayOpsPrepStackCap(),
+          renown: gameState.getDayOpsRenown(),
+          contracts: this.dayOpsContracts.map((contract) => ({
+            title: contract.title,
+            actionType: contract.actionType,
+            stage: contract.stage,
+            progress: contract.progress,
+            target: contract.target,
+            completed: contract.completed,
+          })),
+        },
+        nightDirective: {
+          open: this.nightDirectiveSelectionOpen,
+          id: this.nightDirectiveId,
+          effects: this.nightDirectiveEffects,
+        },
+        battleMomentum: {
+          gauge: Math.round(this.battleMomentum),
+          active: this.isBattleMomentumActive(),
+          remainMs: Math.max(0, Math.round(this.battleMomentumBoostUntil - this.time.now)),
         },
         permanentTalents: {
           levels: gameState.meta.permanentTalents,
@@ -912,6 +1690,8 @@ export default class GameScene extends Phaser.Scene {
     this.runMutatorEffects.lootGainMul *= this.permanentTalentBonuses.economyLootMul;
     this.runMutatorEffects.dayActivityGainMul *= this.permanentTalentBonuses.companionDayGainMul * this.permanentTalentBonuses.economyDayGainMul;
     this.runMutatorEffects.dayFoodConsumptionMul *= this.permanentTalentBonuses.economyFoodUseMul;
+    this.dayChallengeMasteryBonuses = gameState.getDayChallengeMasteryBonuses();
+    this.runMutatorEffects.playerDamageMul *= this.dayChallengeMasteryBonuses.extremeDamageMul;
 
     gameState.data.baseStats.xpMultiplier = Number(
       (gameState.data.baseStats.xpMultiplier * this.runMutatorEffects.xpMul).toFixed(3)
@@ -931,11 +1711,28 @@ export default class GameScene extends Phaser.Scene {
 
   private getRunLootGainMultiplier(): number {
     const perkMul = gameState.getBitcoinPerkBonuses().lootGainMul || 1;
-    return Phaser.Math.Clamp(this.runMutatorEffects.lootGainMul * perkMul, 0.45, 2.8);
+    const nightMul = gameState.data.isNight ? this.nightDirectiveEffects.lootMul : 1;
+    return Phaser.Math.Clamp(this.runMutatorEffects.lootGainMul * perkMul * nightMul * this.gearResonanceLootMul, 0.45, 3.4);
   }
 
   private getRunDayActivityGainMultiplier(): number {
-    return Phaser.Math.Clamp(this.runMutatorEffects.dayActivityGainMul, 0.55, 2.2);
+    const pacing = this.getRunPacingProfile();
+    return Phaser.Math.Clamp(
+      this.runMutatorEffects.dayActivityGainMul
+      * this.dayChallengeDayRewardMul
+      * pacing.dayRewardMul
+      * this.dayOpsRenownBonuses.dayRewardMul,
+      0.55,
+      3.4
+    );
+  }
+
+  private getDayChallengeDangerMultiplier(): number {
+    return Phaser.Math.Clamp(this.dayChallengeDayDangerMul, 0.72, 1.8);
+  }
+
+  private getDayChallengeXpMultiplier(): number {
+    return Phaser.Math.Clamp(this.dayChallengeDayXpMul, 0.8, 2.2);
   }
 
   private getRunFoodConsumptionMultiplier(): number {
@@ -956,7 +1753,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private maybeTriggerRunEvent(period: RunEventPeriod): boolean {
-    if (this.isGameOver || this.runEventOpen) return false;
+    if (this.isGameOver || this.runEventOpen || this.dayChallengeSelectionOpen) return false;
     const pool = RUN_EVENT_DEFS.filter((def) => def.period === period);
     if (pool.length <= 0) return false;
     const baseChance = period === 'night' ? 0.82 : 0.68;
@@ -1177,7 +1974,7 @@ export default class GameScene extends Phaser.Scene {
     if (choice.xp) {
       const xpBase = Phaser.Math.Between(choice.xp[0], choice.xp[1]);
       const xp = Math.max(1, Math.round(xpBase * rewardMul));
-      gameState.addExperience(xp);
+      this.grantExperience(xp);
       rewardParts.push(`+XP${xp}`);
     }
 
@@ -1226,8 +2023,264 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.pendingNightWaveStartAfterEvent) {
       this.pendingNightWaveStartAfterEvent = false;
-      this.waveSystem.startNightWaves();
+      this.openNightDirectiveSelectionPanel();
     }
+  }
+
+  private closeNightDirectiveSelectionPanel(): void {
+    if (!this.nightDirectiveSelectionOpen && !this.nightDirectiveSelectionContainer) return;
+    this.nightDirectiveSelectionOpen = false;
+    this.nightDirectiveAutoPickTimer?.remove(false);
+    this.nightDirectiveAutoPickTimer = null;
+    this.nightDirectiveSelectionContainer?.destroy();
+    this.nightDirectiveSelectionContainer = null;
+    this.setUISceneInputEnabled(true);
+    if (!this.currentFacility && !this.daySpotMiniGameOpen && !this.dayChallengeSelectionOpen && !this.runEventOpen) {
+      this.playerSystem?.setMovementEnabled(true);
+    }
+  }
+
+  private buildNightDirectiveIcon(
+    parent: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    id: NightDirectiveId,
+    color: number
+  ): void {
+    const halo = this.add.circle(x, y, 21, color, 0.18).setStrokeStyle(1, color, 0.95);
+    const ring = this.add.circle(x, y, 14, 0x0b1220, 0.92).setStrokeStyle(1, 0xe2e8f0, 0.55);
+    parent.add([halo, ring]);
+
+    const iconNodes: Phaser.GameObjects.Shape[] = [];
+    if (id === 'fortify') {
+      const shield = this.add.polygon(x, y + 1, [0, -9, 8, -2, 5, 8, 0, 12, -5, 8, -8, -2], color, 0.9)
+        .setStrokeStyle(1, 0xe2e8f0, 0.8);
+      const strip = this.add.rectangle(x, y, 4, 12, 0xe2e8f0, 0.8);
+      iconNodes.push(shield, strip);
+    } else if (id === 'assault') {
+      const bladeA = this.add.rectangle(x - 1, y - 1, 4, 18, color, 0.95).setAngle(35);
+      const bladeB = this.add.rectangle(x + 1, y + 1, 4, 18, 0xf8fafc, 0.88).setAngle(-35);
+      const spark = this.add.star(x, y - 8, 4, 1.2, 3.8, 0xfacc15, 0.9);
+      iconNodes.push(bladeA, bladeB, spark);
+    } else {
+      const crate = this.add.rectangle(x, y + 2, 15, 10, color, 0.9).setStrokeStyle(1, 0xe2e8f0, 0.7);
+      const handle = this.add.rectangle(x, y - 5, 8, 3, 0xe2e8f0, 0.75);
+      const chip = this.add.rectangle(x + 2, y + 2, 3, 3, 0x67e8f9, 0.9);
+      iconNodes.push(crate, handle, chip);
+    }
+    parent.add(iconNodes);
+
+    this.tweens.add({
+      targets: halo,
+      alpha: { from: 0.18, to: 0.42 },
+      scale: { from: 1, to: 1.2 },
+      duration: id === 'assault' ? 620 : 840,
+      yoyo: true,
+      repeat: -1,
+    });
+    this.tweens.add({
+      targets: iconNodes,
+      scaleX: { from: 1, to: id === 'assault' ? 1.12 : 1.06 },
+      scaleY: { from: 1, to: id === 'assault' ? 1.12 : 1.06 },
+      angle: id === 'assault' ? { from: -2, to: 2 } : 0,
+      duration: id === 'assault' ? 280 : 620,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  private openNightDirectiveSelectionPanel(): void {
+    if (this.isGameOver) return;
+    if (!gameState.data.isNight) return;
+    this.closeNightDirectiveSelectionPanel();
+    this.nightDirectiveSelectionOpen = true;
+    this.setUISceneInputEnabled(false);
+    this.playerSystem?.setMovementEnabled(false);
+
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const uiFont = this.getUIFontFamily();
+    const mobilePortrait = this.isMobilePortraitViewport();
+    const compactLayout = mobilePortrait || w <= 900;
+    const container = this.add.container(0, 0).setDepth(3390).setScrollFactor(0);
+    this.nightDirectiveSelectionContainer = container;
+
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x020617, 0.76).setScrollFactor(0);
+    container.add(overlay);
+    const panelW = compactLayout ? Math.min(460, w - 22) : Math.min(830, w - 48);
+    const panelH = compactLayout ? Math.min(h - 26, 700) : Math.min(390, h - 80);
+    const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, 0x0f172a, 0.97)
+      .setScrollFactor(0)
+      .setStrokeStyle(2, 0xf59e0b, 0.85);
+    container.add(panel);
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 16, '夜间战术线 · 指令选择', {
+      fontSize: this.worldFs(compactLayout ? 23 : 24, compactLayout ? 20 : 21),
+      color: '#f8fafc',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0));
+    if (this.mobileViewport) {
+      container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 42, '手机端：直接点击下方大按钮执行指令', {
+        fontSize: this.worldFs(12, 11),
+        color: '#93c5fd',
+        fontFamily: uiFont,
+      }).setOrigin(0.5, 0));
+    }
+    const prepCap = this.getDayOpsPrepStackCap();
+    const prepBonus = this.dayOpsNightPrepStacks > 0
+      ? `白天筹备层数 ${this.dayOpsNightPrepStacks}/${prepCap}（夜战加成 x${(1 + Math.min(0.24, this.dayOpsNightPrepStacks * 0.04)).toFixed(2)}）`
+      : '白天筹备层数 0（先完成白天委托可强化夜战）';
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + (this.mobileViewport ? 60 : 52), prepBonus, {
+      fontSize: this.worldFs(13, 12),
+      color: '#fbbf24',
+      fontFamily: uiFont,
+    }).setOrigin(0.5, 0));
+
+    const ids: NightDirectiveId[] = ['fortify', 'assault', 'salvage'];
+    const cardGap = compactLayout ? 10 : 12;
+    const cardW = compactLayout ? panelW - 34 : Math.floor((panelW - 64) / 3);
+    const cardH = compactLayout
+      ? Math.floor((panelH - (this.mobileViewport ? 158 : 138) - cardGap * 2) / 3)
+      : panelH - 110;
+    const startX = compactLayout ? w / 2 : w / 2 - cardW - 12;
+    const centerY = compactLayout ? (h / 2 - panelH / 2 + 116 + cardH / 2) : (h / 2 + 14);
+    ids.forEach((id, index) => {
+      const def = NIGHT_DIRECTIVE_DEFS[id];
+      const x = compactLayout ? startX : startX + index * (cardW + cardGap);
+      const y = compactLayout ? centerY + index * (cardH + cardGap) : centerY;
+      const card = this.add.rectangle(x, centerY, cardW, cardH, 0x0b1220, 0.96)
+        .setPosition(x, y)
+        .setScrollFactor(0)
+        .setStrokeStyle(2, def.color, 0.92)
+        .setInteractive({ useHandCursor: true });
+      const texts = [
+        this.add.text(x, y - cardH / 2 + 14, def.nameCN, {
+          fontSize: this.worldFs(compactLayout ? 19 : 21, compactLayout ? 16 : 17),
+          color: '#e2e8f0',
+          fontFamily: uiFont,
+          fontStyle: 'bold',
+        }).setOrigin(0.5, 0),
+        this.add.text(x, y - cardH / 2 + 40, def.summaryCN, {
+          fontSize: this.worldFs(13, 11),
+          color: '#94a3b8',
+          fontFamily: uiFont,
+          align: 'center',
+          wordWrap: { width: cardW - 64, useAdvancedWrap: true },
+        }).setOrigin(0.5, 0),
+        this.add.text(x + (compactLayout ? 6 : 0), y + 4, `伤害x${def.effects.playerDamageMul.toFixed(2)} · 掉落x${def.effects.lootMul.toFixed(2)}\n压力x${def.effects.enemyPressureMul.toFixed(2)} · 经验x${def.effects.xpMul.toFixed(2)}`, {
+          fontSize: this.worldFs(12, 10),
+          color: '#93c5fd',
+          fontFamily: uiFont,
+          align: 'center',
+          lineSpacing: 4,
+          wordWrap: { width: cardW - 52, useAdvancedWrap: true },
+        }).setOrigin(0.5, 0.5),
+      ];
+      const actionBtn = this.add.rectangle(
+        x,
+        y + cardH / 2 - 20,
+        compactLayout ? cardW - 20 : 108,
+        compactLayout ? 30 : 26,
+        def.color,
+        0.2
+      ).setScrollFactor(0).setStrokeStyle(1, def.color, 0.95).setInteractive({ useHandCursor: true });
+      const actionText = this.add.text(x, y + cardH / 2 - 20, compactLayout ? '触控执行指令' : '点击执行', {
+          fontSize: this.worldFs(compactLayout ? 13 : 12, compactLayout ? 11 : 10),
+          color: '#64748b',
+          fontFamily: uiFont,
+        }).setOrigin(0.5);
+      const pick = () => this.applyNightDirective(id);
+      card.on('pointerdown', pick);
+      actionBtn.on('pointerdown', pick);
+      actionText.setInteractive({ useHandCursor: true }).on('pointerdown', pick);
+      card.on('pointerover', () => card.setStrokeStyle(2, def.color, 1));
+      card.on('pointerout', () => card.setStrokeStyle(2, def.color, 0.92));
+      actionBtn.on('pointerover', () => actionBtn.setFillStyle(def.color, 0.34));
+      actionBtn.on('pointerout', () => actionBtn.setFillStyle(def.color, 0.2));
+      this.tweens.add({
+        targets: actionBtn,
+        alpha: { from: 0.62, to: 1 },
+        duration: 740 + index * 80,
+        yoyo: true,
+        repeat: -1,
+      });
+      container.add([card, ...texts, actionBtn, actionText]);
+      this.buildNightDirectiveIcon(container, x - cardW / 2 + 30, y - cardH / 2 + 28, id, def.color);
+    });
+
+    this.nightDirectiveAutoPickTimer = this.time.delayedCall(12000, () => {
+      if (!this.nightDirectiveSelectionOpen) return;
+      const fallback = ids[Math.floor(Math.random() * ids.length)];
+      this.applyNightDirective(fallback);
+    });
+  }
+
+  private applyNightDirective(id: NightDirectiveId): void {
+    const def = NIGHT_DIRECTIVE_DEFS[id];
+    if (!def) return;
+    const pacing = this.getRunPacingProfile();
+    const prepMul = 1 + Math.min(0.24, this.dayOpsNightPrepStacks * 0.04);
+    const renownMul = this.dayOpsRenownBonuses.nightDirectiveDamageMul || 1;
+    this.nightDirectiveId = id;
+    this.nightDirectiveEffects = {
+      playerDamageMul: Number((def.effects.playerDamageMul * prepMul * renownMul * pacing.combatMul).toFixed(3)),
+      companionDamageMul: Number((def.effects.companionDamageMul * prepMul * renownMul * pacing.combatMul).toFixed(3)),
+      turretDamageMul: Number((def.effects.turretDamageMul * prepMul * renownMul * pacing.combatMul).toFixed(3)),
+      residentDamageMul: Number((def.effects.residentDamageMul * prepMul).toFixed(3)),
+      lootMul: Number(def.effects.lootMul.toFixed(3)),
+      xpMul: Number(def.effects.xpMul.toFixed(3)),
+      enemyPressureMul: Number((def.effects.enemyPressureMul * pacing.nightPressureMul).toFixed(3)),
+    };
+    const baseDelay = id === 'assault' ? 9500 : id === 'salvage' ? 12200 : 14200;
+    this.nightDirectivePressureNextAt = this.time.now + Math.max(5500, Math.round(baseDelay / Math.max(0.65, this.nightDirectiveEffects.enemyPressureMul)));
+    this.closeNightDirectiveSelectionPanel();
+    this.showFloatingText(this.cameras.main.width / 2, 198, `夜间指令已执行：${def.nameCN}`, '#fbbf24', true);
+    this.showFloatingText(
+      this.cameras.main.width / 2,
+      224,
+      `伤害x${this.nightDirectiveEffects.playerDamageMul.toFixed(2)} · 掉落x${this.nightDirectiveEffects.lootMul.toFixed(2)} · 压力x${this.nightDirectiveEffects.enemyPressureMul.toFixed(2)}`,
+      '#93c5fd',
+      true
+    );
+    this.waveSystem.startNightWaves();
+  }
+
+  private updateNightDirectivePressure(): void {
+    if (!gameState.data.isNight) return;
+    if (!this.nightDirectiveId) return;
+    if (this.time.now < this.nightDirectivePressureNextAt) return;
+    if (this.runEventOpen || this.dayChallengeSelectionOpen || this.daySpotMiniGameOpen || this.nightDirectiveSelectionOpen) return;
+    const pressureMul = this.nightDirectiveEffects.enemyPressureMul;
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    const wave = Math.max(1, gameState.data.currentWave || 1);
+    const baseCount = this.nightDirectiveId === 'assault' ? 2 : 1;
+    const extra = pressureMul > 1 ? Phaser.Math.Between(0, Math.max(1, Math.floor((pressureMul - 1) * 4))) : 0;
+    const spawnCount = Math.max(0, baseCount + extra + (day >= 6 ? 1 : 0));
+    for (let i = 0; i < spawnCount; i += 1) {
+      this.enemySystem.spawnEnemy(wave, day);
+    }
+    if (spawnCount > 0) {
+      const msg = this.nightDirectiveId === 'fortify'
+        ? `守线压力波 +${spawnCount}`
+        : this.nightDirectiveId === 'assault'
+          ? `猎杀反扑 +${spawnCount}`
+          : `回收惊动 +${spawnCount}`;
+      this.showFloatingText(this.cameras.main.width / 2, 244, msg, '#f97316', true);
+    }
+    if (this.nightDirectiveId === 'salvage' && Math.random() < 0.55) {
+      const scrap = Phaser.Math.Between(2, 4);
+      const metal = Phaser.Math.Between(1, 3);
+      gameState.addResource('scrap', scrap);
+      gameState.addResource('metal', metal);
+      if (Math.random() < 0.3) {
+        const btc = Number((0.02 + Math.random() * 0.06).toFixed(3));
+        gameState.addResource('bitcoin', btc);
+      }
+      events.emit('update-resources', gameState.data.resources);
+      this.showFloatingText(this.cameras.main.width / 2, 268, `夜间回收 +件${scrap} +金${metal}`, '#67e8f9', true);
+    }
+    const baseDelay = this.nightDirectiveId === 'assault' ? 9000 : this.nightDirectiveId === 'salvage' ? 11800 : 13800;
+    this.nightDirectivePressureNextAt = this.time.now + Math.max(5200, Math.round(baseDelay / Math.max(0.65, pressureMul)));
   }
 
   private setUISceneInputEnabled(enabled: boolean): void {
@@ -1895,6 +2948,408 @@ export default class GameScene extends Phaser.Scene {
     return baseLimit + Math.max(0, Math.floor(stationed / 2));
   }
 
+  private getRunPacingProfile(dayOverride?: number): {
+    xpMul: number;
+    dayRewardMul: number;
+    dayTargetMul: number;
+    dayDangerMul: number;
+    nightPressureMul: number;
+    combatMul: number;
+  } {
+    const day = Math.max(1, dayOverride || gameState.data.currentDay || 1);
+    if (day <= 1) {
+      return { xpMul: 1.38, dayRewardMul: 1.32, dayTargetMul: 0.82, dayDangerMul: 0.82, nightPressureMul: 0.84, combatMul: 1.08 };
+    }
+    if (day <= 2) {
+      return { xpMul: 1.26, dayRewardMul: 1.2, dayTargetMul: 0.88, dayDangerMul: 0.88, nightPressureMul: 0.9, combatMul: 1.06 };
+    }
+    if (day <= 3) {
+      return { xpMul: 1.14, dayRewardMul: 1.1, dayTargetMul: 0.94, dayDangerMul: 0.94, nightPressureMul: 0.95, combatMul: 1.04 };
+    }
+    if (day <= 7) {
+      return { xpMul: 1, dayRewardMul: 1, dayTargetMul: 1, dayDangerMul: 1, nightPressureMul: 1, combatMul: 1 };
+    }
+    if (day <= 12) {
+      return { xpMul: 0.93, dayRewardMul: 0.96, dayTargetMul: 1.08, dayDangerMul: 1.08, nightPressureMul: 1.08, combatMul: 0.98 };
+    }
+    return { xpMul: 0.86, dayRewardMul: 0.92, dayTargetMul: 1.16, dayDangerMul: 1.18, nightPressureMul: 1.16, combatMul: 0.96 };
+  }
+
+  private getOpsResourceShortName(key: keyof Resources): string {
+    const shortName: Record<keyof Resources, string> = {
+      wood: '木',
+      metal: '金',
+      food: '食',
+      water: '水',
+      scrap: '件',
+      medical: '医',
+      ammo: '弹',
+      energyCore: '核',
+      bitcoin: '₿',
+    };
+    return shortName[key];
+  }
+
+  private formatResourcePack(resources: Partial<Record<keyof Resources, number>>, prefix: string = '+'): string {
+    const parts: string[] = [];
+    (Object.keys(resources) as Array<keyof Resources>).forEach((key) => {
+      const amount = Math.max(0, Math.round(resources[key] || 0));
+      if (amount <= 0) return;
+      parts.push(`${prefix}${this.getOpsResourceShortName(key)}${amount}`);
+    });
+    return parts.join(' ');
+  }
+
+  private getDayOpsQualityRank(requirement: DayOpsQualityRequirement): number {
+    if (requirement === 'perfect') return 2;
+    if (requirement === 'good') return 1;
+    return 0;
+  }
+
+  private getDayOpsContractsByStage(
+    stage: DayOpsStage,
+    actionType?: ExplorationActionType
+  ): DayOpsContract[] {
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    return this.dayOpsContracts.filter((contract) => (
+      contract.day === day
+      && contract.stage === stage
+      && (!actionType || contract.actionType === actionType)
+    ));
+  }
+
+  private getPendingDayOpsContracts(actionType: ExplorationActionType): DayOpsContract[] {
+    return this.getDayOpsContractsByStage('execute', actionType);
+  }
+
+  private getDayOpsContractsForAction(actionType: ExplorationActionType): DayOpsContract[] {
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    return this.dayOpsContracts.filter((contract) => (
+      contract.day === day
+      && contract.actionType === actionType
+      && contract.stage !== 'done'
+    ));
+  }
+
+  private getDayOpsPrepStackCap(): number {
+    return 8 + Math.max(0, this.dayOpsRenownBonuses.prepCapBonus || 0);
+  }
+
+  private buildDayOpsContracts(day: number): DayOpsContract[] {
+    const templatePool: Array<{
+      actionType: ExplorationActionType;
+      title: string;
+      desc: string;
+      prepDesc: string;
+      requiredQuality: DayOpsQualityRequirement;
+      riskyOnly: boolean;
+      baseTarget: number;
+      prepGain: number;
+      basePrepCost: Partial<Record<keyof Resources, number>>;
+      renownGain: number;
+      reward: {
+        resources: Partial<Record<keyof Resources, number>>;
+        xp: number;
+        bitcoin?: number;
+      };
+    }> = [
+      {
+        actionType: 'fish',
+        title: '河道补给线',
+        desc: '维持渔点供给，保障饮食与净水',
+        prepDesc: '先在任务官处领取渔具与净水箱',
+        requiredQuality: 'good',
+        riskyOnly: false,
+        baseTarget: 2,
+        prepGain: 1,
+        basePrepCost: { wood: 1, scrap: 1 },
+        renownGain: 1,
+        reward: { resources: { food: 5, water: 4 }, xp: 16, bitcoin: 0.02 },
+      },
+      {
+        actionType: 'swim',
+        title: '水域机动训练',
+        desc: '提升行动效率并测试应急恢复',
+        prepDesc: '先领取训练包与应急补给',
+        requiredQuality: 'good',
+        riskyOnly: false,
+        baseTarget: 2,
+        prepGain: 1,
+        basePrepCost: { water: 1, medical: 1 },
+        renownGain: 1,
+        reward: { resources: { water: 3, medical: 2 }, xp: 14, bitcoin: 0.02 },
+      },
+      {
+        actionType: 'hunt',
+        title: '林区狩猎任务',
+        desc: '补充食物与弹药，准备夜战物资',
+        prepDesc: '先补充弹药并布置诱饵线',
+        requiredQuality: 'good',
+        riskyOnly: true,
+        baseTarget: 2,
+        prepGain: 2,
+        basePrepCost: { ammo: 1, food: 1 },
+        renownGain: 2,
+        reward: { resources: { food: 6, ammo: 4, metal: 2 }, xp: 22, bitcoin: 0.04 },
+      },
+      {
+        actionType: 'scavenge',
+        title: '城区回收行动',
+        desc: '限时回收可用零件与医疗',
+        prepDesc: '先准备负重包并登记搜刮路线',
+        requiredQuality: 'good',
+        riskyOnly: false,
+        baseTarget: 2,
+        prepGain: 2,
+        basePrepCost: { water: 1, scrap: 1, medical: 1 },
+        renownGain: 2,
+        reward: { resources: { scrap: 6, metal: 4, medical: 2 }, xp: 20, bitcoin: 0.05 },
+      },
+      {
+        actionType: 'cave_explore',
+        title: '洞穴深潜突袭',
+        desc: '攻坚洞穴线路，争夺能量资源',
+        prepDesc: '先完成突袭装填与侦察校准',
+        requiredQuality: 'perfect',
+        riskyOnly: true,
+        baseTarget: 1,
+        prepGain: 3,
+        basePrepCost: { ammo: 2, medical: 1, metal: 1 },
+        renownGain: 3,
+        reward: { resources: { scrap: 6, metal: 5, energyCore: 1 }, xp: 30, bitcoin: 0.08 },
+      },
+    ];
+    const week = Math.max(1, gameState.data.currentWeek || 1);
+    const pacing = this.getRunPacingProfile(day);
+    const dayBoost = day >= 4 ? 1 : 0;
+    const picks = Phaser.Utils.Array.Shuffle([...templatePool]).slice(0, 2);
+    return picks.map((tpl, idx) => {
+      const target = Phaser.Math.Clamp(
+        Math.round((tpl.baseTarget + (tpl.requiredQuality === 'perfect' ? 0 : dayBoost) + (week >= 3 ? 1 : 0)) * pacing.dayTargetMul),
+        1,
+        tpl.requiredQuality === 'perfect' ? 4 : 6
+      );
+      const scale = (1 + day * 0.03 + week * 0.06) * pacing.dayRewardMul * this.dayOpsRenownBonuses.dayRewardMul;
+      const rewardResources: Partial<Record<keyof Resources, number>> = {};
+      (Object.keys(tpl.reward.resources) as Array<keyof Resources>).forEach((key) => {
+        const base = tpl.reward.resources[key] || 0;
+        rewardResources[key] = Math.max(1, Math.round(base * scale));
+      });
+      const prepCost: Partial<Record<keyof Resources, number>> = {};
+      (Object.keys(tpl.basePrepCost) as Array<keyof Resources>).forEach((key) => {
+        const base = tpl.basePrepCost[key] || 0;
+        const scaled = Math.max(1, Math.round(base * (0.92 + week * 0.06) * pacing.dayTargetMul));
+        prepCost[key] = scaled;
+      });
+      return {
+        id: `day_ops_${day}_${idx}_${tpl.actionType}`,
+        actionType: tpl.actionType,
+        title: tpl.title,
+        desc: tpl.desc,
+        prepDesc: tpl.prepDesc,
+        requiredQuality: tpl.requiredQuality,
+        riskyOnly: tpl.riskyOnly,
+        target,
+        progress: 0,
+        prepGain: tpl.prepGain,
+        stage: 'prep',
+        prepCost,
+        handoffNpc: 'commander',
+        renownGain: tpl.renownGain,
+        reward: {
+          resources: rewardResources,
+          xp: Math.max(8, Math.round(tpl.reward.xp * (1 + day * 0.02) * pacing.xpMul * this.dayOpsRenownBonuses.dayXpMul)),
+          bitcoin: Number(((tpl.reward.bitcoin || 0) * (1 + day * 0.03)).toFixed(3)),
+        },
+        completed: false,
+        day,
+      } as DayOpsContract;
+    });
+  }
+
+  private createOrRefreshDayOpsContracts(showAnnouncement: boolean): void {
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    this.dayOpsContracts = this.buildDayOpsContracts(day);
+    this.dayOpsNightPrepStacks = 0;
+    if (!showAnnouncement || this.dayOpsContracts.length <= 0) return;
+    const brief = this.dayOpsContracts.map((contract, idx) => {
+      const quality = contract.requiredQuality === 'perfect' ? '完美' : contract.requiredQuality === 'good' ? '良好' : '任意';
+      const risk = contract.riskyOnly ? '冒险限定' : '稳妥/冒险均可';
+      const prep = this.formatResourcePack(contract.prepCost, '');
+      const stageText = idx === 0 ? '前置' : '执行';
+      return `${stageText} ${contract.title} · ${quality} ${contract.target}次 · ${risk} · 备资 ${prep || '无'}`;
+    });
+    this.showFloatingText(this.cameras.main.width / 2, 286, `白天委托: ${brief[0]}`, '#fbbf24', true);
+    if (brief[1]) {
+      this.showFloatingText(this.cameras.main.width / 2, 312, `白天委托: ${brief[1]}`, '#f59e0b', true);
+    }
+  }
+
+  private tryPrepareDayOpsContract(
+    contract: DayOpsContract,
+    sourceLabel: string,
+    silent: boolean = false
+  ): boolean {
+    if (contract.stage !== 'prep') return false;
+    const canPrep = gameState.canAfford(contract.prepCost);
+    if (!canPrep) {
+      if (!silent) {
+        const need = this.formatResourcePack(contract.prepCost, '');
+        this.showFloatingText(
+          this.player.x,
+          this.player.y - 32,
+          `${contract.title} 前置不足：${need}`,
+          '#ef4444',
+          false
+        );
+      }
+      return false;
+    }
+    gameState.spendResources(contract.prepCost);
+    contract.stage = 'execute';
+    events.emit('update-resources', gameState.data.resources);
+    if (!silent) {
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 28,
+        `${sourceLabel}完成前置：${contract.title}（开始执行）`,
+        '#22d3ee',
+        false
+      );
+    }
+    this.updateExplorationSpotStatus(true);
+    return true;
+  }
+
+  private prepareDayOpsFromCommander(): { prepared: number; blocked: number } {
+    const prepContracts = this.getDayOpsContractsByStage('prep');
+    if (prepContracts.length <= 0) return { prepared: 0, blocked: 0 };
+    let prepared = 0;
+    let blocked = 0;
+    prepContracts.forEach((contract) => {
+      if (this.tryPrepareDayOpsContract(contract, '任务官', true)) prepared += 1;
+      else blocked += 1;
+    });
+    if (prepared > 0) {
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 54,
+        `任务官已下发 ${prepared} 项执行委托`,
+        '#38bdf8',
+        false
+      );
+    }
+    if (blocked > 0) {
+      const sample = prepContracts.find((contract) => contract.stage === 'prep');
+      const need = sample ? this.formatResourcePack(sample.prepCost, '') : '';
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 32,
+        `前置物资不足 ${blocked} 项${need ? ` · 例: ${need}` : ''}`,
+        '#f97316',
+        false
+      );
+    }
+    this.updateExplorationSpotStatus(true);
+    return { prepared, blocked };
+  }
+
+  private tryAutoPrepareDayOpsForSpot(spot: ExplorationSpot): void {
+    const prepContracts = this.getDayOpsContractsByStage('prep', spot.actionType);
+    if (prepContracts.length <= 0) return;
+    const contract = prepContracts[0];
+    this.tryPrepareDayOpsContract(contract, spot.name);
+  }
+
+  private applyDayOpsContractProgress(
+    spot: ExplorationSpot,
+    quality: 'poor' | 'good' | 'perfect',
+    risky: boolean
+  ): void {
+    const contracts = this.getPendingDayOpsContracts(spot.actionType);
+    if (contracts.length <= 0) return;
+    const qRank = this.getDayChallengeQualityRank(quality);
+    contracts.forEach((contract) => {
+      const reqRank = this.getDayOpsQualityRank(contract.requiredQuality);
+      if (qRank < reqRank) return;
+      if (contract.riskyOnly && !risky) return;
+      contract.progress = Math.min(contract.target, contract.progress + 1);
+      if (contract.progress >= contract.target && contract.stage === 'execute') {
+        contract.stage = 'handoff';
+        const qualityCN = contract.requiredQuality === 'perfect' ? '完美' : contract.requiredQuality === 'good' ? '良好' : '任意';
+        this.showFloatingText(
+          this.cameras.main.width / 2,
+          338,
+          `委托执行完成：${contract.title}（${qualityCN}） · 去任务官交付`,
+          '#22d3ee',
+          true
+        );
+      }
+    });
+    this.updateExplorationSpotStatus(true);
+  }
+
+  private handoffDayOpsContract(contract: DayOpsContract): void {
+    if (contract.stage !== 'handoff' || contract.completed) return;
+    const rewardTexts: string[] = [];
+    (Object.keys(contract.reward.resources) as Array<keyof Resources>).forEach((key) => {
+      const amount = Math.max(0, Math.round(contract.reward.resources[key] || 0));
+      if (amount <= 0) return;
+      gameState.addResource(key, amount);
+      QuestSystem.updateProgress('collect', key, amount);
+      rewardTexts.push(`+${this.getOpsResourceShortName(key)}${amount}`);
+    });
+    if ((contract.reward.bitcoin || 0) > 0) {
+      const btc = Number((contract.reward.bitcoin || 0).toFixed(3));
+      gameState.addResource('bitcoin', btc);
+      rewardTexts.push(`+₿${btc.toFixed(3)}`);
+    }
+    const xp = Math.max(6, Math.round(contract.reward.xp || 0));
+    this.grantExperience(xp);
+    rewardTexts.push(`+XP${xp}`);
+    const prepCap = this.getDayOpsPrepStackCap();
+    this.dayOpsNightPrepStacks = Math.min(prepCap, this.dayOpsNightPrepStacks + Math.max(1, contract.prepGain || 1));
+    rewardTexts.push(`夜战筹备+${Math.max(1, contract.prepGain || 1)}/${prepCap}`);
+    const renown = gameState.addDayOpsRenown(Math.max(1, contract.renownGain || 1));
+    this.dayOpsRenownBonuses = gameState.getDayOpsRenownBonuses();
+    rewardTexts.push(`永久声望+${Math.max(1, contract.renownGain || 1)}(Lv.${renown})`);
+    contract.stage = 'done';
+    contract.completed = true;
+    events.emit('update-resources', gameState.data.resources);
+    this.showFloatingText(
+      this.cameras.main.width / 2,
+      338,
+      `委托交付：${contract.title} · ${rewardTexts.join(' ')}`,
+      '#22d3ee',
+      true
+    );
+    this.updateExplorationSpotStatus(true);
+  }
+
+  private handoffReadyDayOpsContracts(): number {
+    const ready = this.getDayOpsContractsByStage('handoff');
+    if (ready.length <= 0) return 0;
+    ready.forEach((contract) => this.handoffDayOpsContract(contract));
+    return ready.length;
+  }
+
+  private getActiveDaySpotBonus(spotId: string): DayLifeSpotBonus | null {
+    const bonus = this.daySpotBonuses.get(spotId);
+    if (!bonus) return null;
+    if (bonus.expiresAt <= this.time.now) {
+      this.daySpotBonuses.delete(spotId);
+      return null;
+    }
+    return bonus;
+  }
+
+  private consumeDaySpotBonus(spotId: string): DayLifeSpotBonus | null {
+    const bonus = this.getActiveDaySpotBonus(spotId);
+    if (!bonus) return null;
+    this.daySpotBonuses.delete(spotId);
+    return bonus;
+  }
+
   private getExplorationSpotResidentCount(spotId: string): number {
     let count = 0;
     for (const [, container] of this.baseResidents.entries()) {
@@ -1930,12 +3385,53 @@ export default class GameScene extends Phaser.Scene {
       const used = this.getActivityUsage(spot.actionType);
       const usageLimit = this.getActivityUsageLimit(spot.actionType);
       const active = this.getExplorationSpotResidentCount(spot.id);
+      const bonus = this.getActiveDaySpotBonus(spot.id);
+      const challenge = this.dayExplorationChallenge;
+      const challengeOnSpot = !!challenge
+        && !challenge.completed
+        && challenge.day === Math.max(1, gameState.data.currentDay || 1)
+        && challenge.actionType === spot.actionType;
+      const contractsOnSpot = this.getDayOpsContractsForAction(spot.actionType);
+      const prepContracts = contractsOnSpot.filter((contract) => contract.stage === 'prep');
+      const executeContracts = contractsOnSpot.filter((contract) => contract.stage === 'execute');
+      const handoffContracts = contractsOnSpot.filter((contract) => contract.stage === 'handoff');
+      const contractProgress = executeContracts.reduce((sum, contract) => sum + contract.progress, 0);
+      const contractTarget = executeContracts.reduce((sum, contract) => sum + contract.target, 0);
       if (gameState.data.isNight) {
-        spot.statusText.setText('夜间封锁');
-        spot.statusText.setColor('#64748b');
+        const directiveText = this.nightDirectiveId
+          ? `夜间${NIGHT_DIRECTIVE_DEFS[this.nightDirectiveId].nameCN}`
+          : '夜间封锁';
+        spot.statusText.setText(directiveText);
+        spot.statusText.setColor(this.nightDirectiveId ? '#fbbf24' : '#64748b');
       } else if (active > 0) {
-        spot.statusText.setText(`执行中${active} · ${used}/${usageLimit}`);
-        spot.statusText.setColor('#38bdf8');
+        const tag = challengeOnSpot
+          ? '挑战'
+          : handoffContracts.length > 0
+            ? '交付'
+            : executeContracts.length > 0
+              ? '委托'
+              : prepContracts.length > 0
+                ? '前置'
+                : bonus
+                  ? '热点'
+                  : '执行';
+        spot.statusText.setText(`${tag}中${active} · ${used}/${usageLimit}`);
+        spot.statusText.setColor(challengeOnSpot ? '#22d3ee' : (bonus?.color || '#38bdf8'));
+      } else if (handoffContracts.length > 0) {
+        spot.statusText.setText(`待交付${handoffContracts.length} · ${used}/${usageLimit}`);
+        spot.statusText.setColor('#22d3ee');
+      } else if (executeContracts.length > 0) {
+        spot.statusText.setText(`执行:${contractProgress}/${contractTarget} · ${used}/${usageLimit}`);
+        spot.statusText.setColor('#fbbf24');
+      } else if (prepContracts.length > 0) {
+        spot.statusText.setText(`前置:${prepContracts.length}项 · ${used}/${usageLimit}`);
+        spot.statusText.setColor('#f59e0b');
+      } else if (challengeOnSpot) {
+        spot.statusText.setText(`${challenge?.branchNameCN || '挑战'}:${challenge?.progress || 0}/${challenge?.required || 0} · ${used}/${usageLimit}`);
+        spot.statusText.setColor('#22d3ee');
+      } else if (bonus) {
+        spot.statusText.setText(`热点:${bonus.label} · ${used}/${usageLimit}`);
+        spot.statusText.setColor(bonus.color);
       } else {
         spot.statusText.setText(`${used}/${usageLimit}`);
         spot.statusText.setColor('#64748b');
@@ -1962,17 +3458,46 @@ export default class GameScene extends Phaser.Scene {
 
   private getExplorationHintText(spot: ExplorationSpot): string {
     if (gameState.data.isNight) {
-      return `[E] ${spot.name} · 夜间封锁`;
+      const directiveText = this.nightDirectiveId ? ` · 夜策:${NIGHT_DIRECTIVE_DEFS[this.nightDirectiveId].nameCN}` : '';
+      return `[E] ${spot.name} · 夜间封锁${directiveText}`;
     }
+    const bonus = this.getActiveDaySpotBonus(spot.id);
+    const bonusText = bonus ? ` · 热点:${bonus.label}` : '';
+    const challenge = this.dayExplorationChallenge;
+    const challengeText = challenge && !challenge.completed && challenge.day === Math.max(1, gameState.data.currentDay || 1) && challenge.actionType === spot.actionType
+      ? ` · ${challenge.branchNameCN}挑战${challenge.progress}/${challenge.required}`
+      : '';
+    const contracts = this.getDayOpsContractsForAction(spot.actionType);
+    const prepContracts = contracts.filter((c) => c.stage === 'prep');
+    const executeContracts = contracts.filter((c) => c.stage === 'execute');
+    const handoffContracts = contracts.filter((c) => c.stage === 'handoff');
+    const stageTexts: string[] = [];
+    if (prepContracts.length > 0) {
+      const samplePrep = this.formatResourcePack(prepContracts[0].prepCost, '');
+      stageTexts.push(`前置${prepContracts.length}项${samplePrep ? `(${samplePrep})` : ''}`);
+    }
+    if (executeContracts.length > 0) {
+      stageTexts.push(`执行${executeContracts.map((c) => `${c.progress}/${c.target}`).join('|')}`);
+    }
+    if (handoffContracts.length > 0) {
+      stageTexts.push(`交付${handoffContracts.length}项(任务官)`);
+    }
+    const contractText = stageTexts.length > 0 ? ` · 委托${stageTexts.join(' · ')}` : '';
     const zoneName = this.getWorldZoneNameCN(spot.zone);
     const usageLimit = this.getActivityUsageLimit(spot.actionType);
     const used = this.getActivityUsage(spot.actionType);
     const stationed = gameState.data.companions.filter((c) => c.status === 'base').length;
     const active = this.getExplorationSpotResidentCount(spot.id);
-    if (stationed <= 0) {
-      return `[E] ${spot.name}(${zoneName}) · 驻守伙伴会自动执行（当前0人，${used}/${usageLimit}）`;
+    const cdLeft = Math.max(0, Math.ceil((spot.cooldown - (this.time.now - spot.lastInteract)) / 1000));
+    if (cdLeft > 0) {
+      return `[E] ${spot.name}(${zoneName}) · 冷却${cdLeft}s · 今日${used}/${usageLimit}${bonusText}${challengeText}${contractText}`;
     }
-    return `[E] ${spot.name}(${zoneName}) · 驻守伙伴自动执行（执行中${active}人，${used}/${usageLimit}）`;
+    const chainText = this.dayAdventureChain > 1 ? `连携x${this.dayAdventureChain}` : '可触发连携';
+    const extraText = bonus ? ` · ${bonus.summary}` : '';
+    if (stationed <= 0) {
+      return `[E] ${spot.name}(${zoneName}) · 手动探索(${chainText})${extraText} · 驻守0人 · 今日${used}/${usageLimit}${bonusText}${challengeText}${contractText}`;
+    }
+    return `[E] ${spot.name}(${zoneName}) · 手动探索(${chainText})${extraText} + 自动执行${active}人 · 今日${used}/${usageLimit}${bonusText}${challengeText}${contractText}`;
   }
 
   private handleExplorationSpotInteraction(spot: ExplorationSpot): void {
@@ -1980,21 +3505,4272 @@ export default class GameScene extends Phaser.Scene {
       this.showFloatingText(this.player.x, this.player.y - 24, `${spot.name} 夜间封锁`, '#ef4444', false);
       return;
     }
+    this.tryAutoPrepareDayOpsForSpot(spot);
+    const usageLimit = this.getActivityUsageLimit(spot.actionType);
+    const used = this.getActivityUsage(spot.actionType);
+    const cdLeftMs = spot.cooldown - (this.time.now - spot.lastInteract);
+    if (cdLeftMs > 0) {
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 24,
+        `${spot.name} 冷却中 ${Math.ceil(cdLeftMs / 1000)}s`,
+        '#94a3b8',
+        false
+      );
+      return;
+    }
+    if (used >= usageLimit) {
+      this.showFloatingText(this.player.x, this.player.y - 24, `${spot.name} 今日次数已满 ${used}/${usageLimit}`, '#f59e0b', false);
+      return;
+    }
+    this.openDayExplorationMiniGame(spot);
+  }
+
+  private grantExperience(amount: number): void {
+    const pacing = this.getRunPacingProfile();
+    let xpMul = gameState.data.isNight ? this.nightDirectiveEffects.xpMul : 1;
+    xpMul *= pacing.xpMul;
+    if (!gameState.data.isNight) {
+      xpMul *= this.dayOpsRenownBonuses.dayXpMul;
+    }
+    const safeAmount = Math.max(0, Math.floor(amount * xpMul));
+    if (safeAmount <= 0) return;
+    const oldLevel = gameState.data.playerLevel || 1;
+    const leveledUp = gameState.addExperience(safeAmount);
+    events.emit(GameEvents.PLAYER_EXP_CHANGE, {
+      current: gameState.data.playerExp,
+      max: gameState.data.expToNextLevel,
+    });
+    if (leveledUp || (gameState.data.playerLevel || 1) > oldLevel) {
+      events.emit(GameEvents.PLAYER_LEVEL_UP, { level: gameState.data.playerLevel });
+    }
+  }
+
+  private executeActiveExploration(
+    spot: ExplorationSpot,
+    stationed: number,
+    active: number,
+    used: number,
+    usageLimit: number,
+    options?: {
+      quality?: 'poor' | 'good' | 'perfect';
+      risky?: boolean;
+      trapHit?: boolean;
+    }
+  ): void {
+    this.dayActivityUsage.set(spot.actionType, used + 1);
+    spot.lastInteract = this.time.now;
+    const spotBonus = this.consumeDaySpotBonus(spot.id);
+
+    const chainGap = this.time.now - this.dayAdventureLastAt;
+    this.dayAdventureChain = chainGap <= 18000 ? Math.min(8, this.dayAdventureChain + 1) : 1;
+    this.dayAdventureLastAt = this.time.now;
+
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    const level = Math.max(1, gameState.data.playerLevel || 1);
+    const quality = options?.quality || 'good';
+    const risky = !!options?.risky;
+    const trapHit = !!options?.trapHit;
+    const failed = quality === 'poor';
+    const qualityMul = quality === 'perfect' ? 1.35 : quality === 'poor' ? 0.76 : 1;
+    const chainMul = 1 + Math.min(0.45, Math.max(0, this.dayAdventureChain - 1) * 0.08);
+    const supportMul = 1 + Math.min(0.35, stationed * 0.03 + active * 0.05);
+    const levelMul = 1 + Math.min(0.55, (level - 1) * 0.02);
+    const runMul = this.getRunDayActivityGainMultiplier();
+    const pacing = this.getRunPacingProfile(day);
+    const riskRewardMul = risky ? 1.28 : 1;
+    const riskDangerMul = risky ? 1.36 : 1;
+    let rewardMul = Phaser.Math.Clamp(chainMul * supportMul * levelMul * runMul * qualityMul * riskRewardMul, 0.62, 3.9);
+    let dangerMul = Phaser.Math.Clamp(
+      (1 + day * 0.025 + Math.max(0, this.dayAdventureChain - 1) * 0.06) * riskDangerMul * this.getDayChallengeDangerMultiplier() * pacing.dayDangerMul,
+      0.82,
+      2.8
+    );
+    if (spotBonus) {
+      rewardMul = Phaser.Math.Clamp(rewardMul * spotBonus.rewardMul, 0.62, 4.5);
+      dangerMul = Phaser.Math.Clamp(dangerMul * spotBonus.dangerMul, 1, 3.2);
+    }
+    const outcomeRoll = Math.random() + (this.dayAdventureChain - 1) * 0.03 + Math.min(0.12, stationed * 0.01) + (quality === 'perfect' ? 0.08 : 0) + (risky ? 0.06 : 0);
+
+    const addResource = (key: keyof Resources, base: number): number => {
+      const amount = Math.max(1, Math.round(base * rewardMul));
+      gameState.addResource(key, amount);
+      QuestSystem.updateProgress('collect', key, amount);
+      return amount;
+    };
+    const setDayBuff = (kind: 'trade' | 'morale' | 'training') => {
+      gameState.data.storyFlags[`day_buff_${kind}_${day}`] = true;
+    };
+    const spawnThreat = (min: number, max: number, label: string): number => {
+      const amount = Phaser.Math.Between(min, max);
+      for (let i = 0; i < amount; i += 1) {
+        this.enemySystem.spawnEnemy(Math.max(1, gameState.data.currentWave || 1), day);
+      }
+      this.showFloatingText(this.player.x, this.player.y - 84, `${label} +${amount}敌`, '#ef4444', false);
+      return amount;
+    };
+
+    let summary = '';
+    let detail = '';
+    let color = '#93c5fd';
+    let xp = 0;
+    const penaltyNotes: string[] = [];
+    let penaltyThreatCount = 0;
+    let penaltyDamageTaken = 0;
+
+    if (spot.actionType === 'fish') {
+      if (failed) {
+        rewardMul *= 0.66;
+        dangerMul *= 0.72;
+      }
+      const fishFoodBase = quality === 'perfect' ? 7 : quality === 'good' ? 4 : 2;
+      const fishWaterBase = quality === 'perfect' ? 4 : quality === 'good' ? 2 : 1;
+      const food = addResource('food', fishFoodBase);
+      const water = addResource('water', fishWaterBase);
+      xp = quality === 'perfect' ? 20 : quality === 'good' ? 11 : 6;
+      color = '#38bdf8';
+      summary = failed
+        ? `河流失手 +食物${food} +净水${water}`
+        : `河流渔获 +食物${food} +净水${water}`;
+      if (failed) {
+        penaltyNotes.push('河流失手：仅获得低收益');
+      }
+      if (!failed && outcomeRoll > 1.08) {
+        const btc = Number((0.03 + Math.random() * 0.12).toFixed(3));
+        gameState.addResource('bitcoin', btc);
+        setDayBuff('trade');
+        detail = `捞到黑市箱 · +₿${btc.toFixed(3)} · 今日交易加成`;
+      } else if (!failed && Math.random() < 0.16 * dangerMul) {
+        spawnThreat(1, Math.max(2, Math.round(2 * dangerMul)), '惊动河岸异群');
+      }
+    } else if (spot.actionType === 'swim') {
+      if (failed) {
+        rewardMul *= 0.72;
+        dangerMul *= 0.75;
+      }
+      const water = addResource('water', quality === 'perfect' ? 3 : quality === 'good' ? 2 : 1);
+      const healBase = quality === 'perfect' ? 18 : quality === 'good' ? 12 : 5;
+      const heal = Math.max(3, Math.round(healBase * rewardMul * 0.72));
+      events.emit(GameEvents.PLAYER_HEAL_REQUEST, { amount: heal, source: '河流机动训练' });
+      xp = quality === 'perfect' ? 16 : quality === 'good' ? 10 : 6;
+      color = '#60a5fa';
+      summary = failed
+        ? `河道失衡 +净水${water} · 恢复${heal}`
+        : `河道机动 +净水${water} · 恢复${heal}`;
+      if (failed) {
+        penaltyNotes.push('河道失衡：仅获得低收益');
+      }
+      if (!failed && outcomeRoll > 1.06) {
+        this.levelSurgeUntil = Math.max(this.levelSurgeUntil, this.time.now + 10000);
+        this.levelSurgePulseAt = this.time.now;
+        detail = '触发急速状态：10秒火力提速';
+      }
+    } else if (spot.actionType === 'hunt') {
+      const food = addResource('food', quality === 'perfect' ? 6 : quality === 'good' ? 4 : 2);
+      const ammo = addResource('ammo', quality === 'perfect' ? 4 : quality === 'good' ? 3 : 1);
+      xp = quality === 'perfect' ? 22 : quality === 'good' ? 14 : 8;
+      color = '#22c55e';
+      summary = failed
+        ? `森林受挫 +食物${food} +弹药${ammo}`
+        : `森林猎取 +食物${food} +弹药${ammo}`;
+      if (failed) {
+        const hurt = Phaser.Math.Between(6, 12) + (risky ? 2 : 0);
+        events.emit(GameEvents.PLAYER_HIT, { damage: hurt });
+        penaltyDamageTaken = hurt;
+        penaltyNotes.push(`森林反噬 受伤-${hurt}`);
+      } else if (outcomeRoll > 1.07) {
+        const metal = addResource('metal', 2);
+        setDayBuff('training');
+        detail = `猎获军资 +金属${metal} · 今晚训练加成`;
+      } else if (Math.random() < 0.33 * dangerMul) {
+        spawnThreat(2, Math.max(4, Math.round(4 * dangerMul)), '枪声引来围猎者');
+      }
+    } else if (spot.actionType === 'scavenge') {
+      const medical = addResource('medical', quality === 'perfect' ? 3 : quality === 'good' ? 2 : 1);
+      const scrap = addResource('scrap', quality === 'perfect' ? 6 : quality === 'good' ? 4 : 2);
+      const metal = addResource('metal', quality === 'perfect' ? 4 : quality === 'good' ? 3 : 1);
+      xp = quality === 'perfect' ? 20 : quality === 'good' ? 13 : 7;
+      color = '#f59e0b';
+      summary = failed
+        ? `城区惊险撤离 +医疗${medical} +零件${scrap} +金属${metal}`
+        : `城区搜刮 +医疗${medical} +零件${scrap} +金属${metal}`;
+      if (failed) {
+        this.applyScavengeDurabilityPenalty(trapHit ? 2 : (risky ? 2 : 1), trapHit);
+        const reductionPercent = Math.round((1 - this.getScavengeDurabilityDamageMultiplier()) * 100);
+        penaltyNotes.push(`装备耐久下降 · 当前伤害-${reductionPercent}%`);
+      } else if (outcomeRoll > 1.08) {
+        const btc = Number((0.04 + Math.random() * 0.1).toFixed(3));
+        gameState.addResource('bitcoin', btc);
+        setDayBuff('trade');
+        detail = `回收高价芯片 · +₿${btc.toFixed(3)} · 今日交易加成`;
+      } else if (Math.random() < 0.3 * dangerMul) {
+        spawnThreat(1, Math.max(3, Math.round(3 * dangerMul)), '城区噪音触发追击');
+      }
+    } else {
+      const scrap = addResource('scrap', quality === 'perfect' ? 7 : quality === 'good' ? 5 : 2);
+      const metal = addResource('metal', quality === 'perfect' ? 5 : quality === 'good' ? 4 : 2);
+      const coreChance = quality === 'perfect' ? 0.4 : quality === 'good' ? 0.22 : 0.05;
+      const core = Math.random() < Phaser.Math.Clamp(coreChance * rewardMul, 0.03, 0.72) ? addResource('energyCore', 1) : 0;
+      xp = quality === 'perfect' ? 26 : quality === 'good' ? 16 : 8;
+      color = '#a78bfa';
+      summary = failed
+        ? `洞穴撤退 +零件${scrap} +金属${metal}${core > 0 ? ` +能量核${core}` : ''}`
+        : `山洞探险 +零件${scrap} +金属${metal}${core > 0 ? ` +能量核${core}` : ''}`;
+      if (failed) {
+        const dangerCount = spawnThreat(2, Math.max(6, Math.round(6 * dangerMul)), '洞穴失手引发围攻');
+        penaltyThreatCount = dangerCount;
+        penaltyNotes.push(`山洞惊动异群 +${dangerCount}敌`);
+      } else if (outcomeRoll > 1.1) {
+        setDayBuff('training');
+        setDayBuff('morale');
+        detail = '发现战术档案 · 今晚训练+士气双加成';
+      } else if (Math.random() < 0.38 * dangerMul) {
+        spawnThreat(2, Math.max(5, Math.round(5 * dangerMul)), '洞穴异动引发敌潮');
+      }
+    }
+
+    const safeXp = Math.max(
+      4,
+      Math.round(xp * rewardMul * 0.75 * this.getDayChallengeXpMultiplier()) + (spotBonus?.bonusXp || 0)
+    );
+    this.grantExperience(safeXp);
+    this.applyDayExplorationChallengeProgress(spot, quality, risky);
+    this.applyDayOpsContractProgress(spot, quality, risky);
+    events.emit('update-resources', gameState.data.resources);
+
+    const chainText = this.dayAdventureChain > 1 ? ` · 连携x${this.dayAdventureChain}` : '';
+    const qualityText = quality === 'perfect' ? '完美' : quality === 'poor' ? '失手' : '稳健';
+    const riskText = risky ? '冒险' : '稳妥';
+    this.showFloatingText(
+      this.player.x,
+      this.player.y - 24,
+      `${spot.name} 主动探索(${riskText}/${qualityText})${chainText}`,
+      '#fbbf24',
+      false
+    );
+    this.showFloatingText(this.player.x, this.player.y - 48, `${summary} · +XP${safeXp}`, color, false);
+    if (spotBonus) {
+      const bonusText = `生活热点: ${spotBonus.label} · ${spotBonus.summary}`;
+      detail = detail ? `${detail} · ${bonusText}` : bonusText;
+    }
+    if (penaltyNotes.length > 0) {
+      const penaltyText = penaltyNotes.join(' · ');
+      detail = detail ? `${detail} · ${penaltyText}` : penaltyText;
+      this.playExplorationFailureFeedback(spot.actionType, {
+        trapHit,
+        threatCount: penaltyThreatCount,
+        damageTaken: penaltyDamageTaken,
+      });
+    }
+    if (detail) {
+      this.showFloatingText(this.player.x, this.player.y - 72, detail, '#93c5fd', false);
+    } else {
+      this.showFloatingText(this.player.x, this.player.y - 72, `驻守支援 ${active}/${Math.max(1, stationed)} · 今日${used + 1}/${usageLimit}`, '#93c5fd', false);
+    }
+    this.updateExplorationSpotStatus(true);
+  }
+
+  private getDayChallengeQualityRank(quality: 'poor' | 'good' | 'perfect'): number {
+    if (quality === 'perfect') return 2;
+    if (quality === 'good') return 1;
+    return 0;
+  }
+
+  private getDayChallengeBranchNameCN(branch: DayChallengeBranch): string {
+    if (branch === 'stable') return '稳妥';
+    if (branch === 'adventure') return '冒险';
+    return '极限';
+  }
+
+  private getDayChallengeBranchDailyModifiers(branch: DayChallengeBranch): {
+    rewardMul: number;
+    dangerMul: number;
+    xpMul: number;
+    summary: string;
+  } {
+    if (branch === 'stable') {
+      return {
+        rewardMul: Number((1.03 * this.dayChallengeMasteryBonuses.stableRewardMul).toFixed(3)),
+        dangerMul: this.dayChallengeMasteryBonuses.stableDangerMitigationMul,
+        xpMul: 1,
+        summary: `白天探索更稳 · 风险x${this.dayChallengeMasteryBonuses.stableDangerMitigationMul.toFixed(2)}`,
+      };
+    }
+    if (branch === 'adventure') {
+      return {
+        rewardMul: Number((1.12 * this.dayChallengeMasteryBonuses.adventureRewardMul).toFixed(3)),
+        dangerMul: 1.14,
+        xpMul: 1.05,
+        summary: '白天收益上升 · 风险小幅提高',
+      };
+    }
+    return {
+      rewardMul: 1.28,
+      dangerMul: 1.34,
+      xpMul: Number((1.1 * this.dayChallengeMasteryBonuses.extremeXpMul).toFixed(3)),
+      summary: `高压推进 · 经验x${(1.1 * this.dayChallengeMasteryBonuses.extremeXpMul).toFixed(2)}`,
+    };
+  }
+
+  private getDayChallengeSpotName(actionType: ExplorationActionType): string {
+    if (actionType === 'fish') return '河流钓点';
+    if (actionType === 'swim') return '浅滩水域';
+    if (actionType === 'hunt') return '森林猎场';
+    if (actionType === 'scavenge') return '城区废墟';
+    return '山洞区域';
+  }
+
+  private buildDayChallengeForBranch(day: number, branch: DayChallengeBranch): DayExplorationChallenge {
+    const pacing = this.getRunPacingProfile(day);
+    const actionPool: ExplorationActionType[] = branch === 'stable'
+      ? ['fish', 'swim', 'scavenge']
+      : branch === 'adventure'
+        ? ['hunt', 'scavenge', 'fish', 'swim']
+        : ['cave_explore', 'hunt', 'scavenge'];
+    const actionType = Phaser.Utils.Array.GetRandom(actionPool);
+    const targetQuality: 'good' | 'perfect' = branch === 'stable'
+      ? 'good'
+      : branch === 'adventure'
+        ? (Math.random() < 0.62 ? 'good' : 'perfect')
+        : (Math.random() < 0.18 ? 'good' : 'perfect');
+    const requiredBase = actionType === 'cave_explore' ? 1 : actionType === 'swim' ? 2 : 3;
+    const branchAdd = branch === 'stable' ? 0 : branch === 'adventure' ? 1 : 2;
+    const dayAdd = day >= 4 ? 1 : 0;
+    const perfectAdd = targetQuality === 'perfect' ? 1 : 0;
+    const required = Phaser.Math.Clamp(
+      Math.round((requiredBase + branchAdd + dayAdd + perfectAdd) * pacing.dayTargetMul),
+      actionType === 'cave_explore' ? 1 : 2,
+      branch === 'extreme' ? 8 : 7
+    );
+
+    const rewardByType: Record<ExplorationActionType, DayExplorationChallenge['reward']> = {
+      fish: { resources: { food: 6, water: 5 }, xp: 20, bitcoin: 0.04 },
+      swim: { resources: { water: 4, medical: 2 }, xp: 18, bitcoin: 0.03 },
+      hunt: { resources: { food: 8, ammo: 5, metal: 2 }, xp: 24, bitcoin: 0.05 },
+      scavenge: { resources: { scrap: 8, metal: 5, medical: 3 }, xp: 24, bitcoin: 0.06 },
+      cave_explore: { resources: { scrap: 7, metal: 6, energyCore: 1 }, xp: 30, bitcoin: 0.08 },
+    };
+    const descByType: Record<ExplorationActionType, string> = {
+      fish: '在河流点位完成指定质量探索，补给渔获队',
+      swim: '在河道点位完成节奏锁定，提升队伍机动',
+      hunt: '在森林点位完成高质量狩猎，筹备夜战物资',
+      scavenge: '在城区点位完成安全搜刮，回收关键零件',
+      cave_explore: '在洞穴点位完成精准勘探，夺取核心资源',
+    };
+
+    const branchNameCN = this.getDayChallengeBranchNameCN(branch);
+    const branchRewardMul = branch === 'stable'
+      ? 0.92 * this.dayChallengeMasteryBonuses.stableRewardMul
+      : branch === 'adventure'
+        ? 1.22 * this.dayChallengeMasteryBonuses.adventureRewardMul
+        : 1.58;
+    const branchBitcoinMul = branch === 'adventure'
+      ? this.dayChallengeMasteryBonuses.adventureBitcoinMul
+      : branch === 'extreme'
+        ? 1.15
+        : 1;
+    const branchXpMul = branch === 'extreme'
+      ? 1.34 * this.dayChallengeMasteryBonuses.extremeXpMul
+      : branch === 'adventure'
+        ? 1.16
+        : 1;
+    const rewardBase = rewardByType[actionType];
+    const scaledResources: Partial<Record<keyof Resources, number>> = {};
+    (Object.keys(rewardBase.resources) as Array<keyof Resources>).forEach((key) => {
+      const amount = rewardBase.resources[key] || 0;
+      scaledResources[key] = Math.max(1, Math.round(
+        amount
+        * branchRewardMul
+        * pacing.dayRewardMul
+        * this.dayOpsRenownBonuses.dayRewardMul
+      ));
+    });
+    const dailyEffect = this.getDayChallengeBranchDailyModifiers(branch).summary;
+
+    return {
+      id: `day_challenge_${day}_${branch}_${actionType}_${targetQuality}`,
+      branch,
+      branchNameCN,
+      actionType,
+      targetQuality,
+      required,
+      progress: 0,
+      reward: {
+        resources: scaledResources,
+        xp: Math.max(12, Math.round(rewardBase.xp * branchXpMul * pacing.xpMul)),
+        bitcoin: Number(((rewardBase.bitcoin || 0) * branchRewardMul * branchBitcoinMul * pacing.dayRewardMul).toFixed(3)),
+      },
+      title: `${branchNameCN}挑战：${actionType === 'fish'
+        ? '河流补给线'
+        : actionType === 'swim'
+          ? '河道机动训练'
+          : actionType === 'hunt'
+            ? '林区猎获任务'
+            : actionType === 'scavenge'
+              ? '城区回收行动'
+              : '洞穴深潜行动'}`,
+      desc: descByType[actionType],
+      dailyEffect,
+      masteryGain: branch === 'stable' ? 1 : branch === 'adventure' ? 2 : 3,
+      completed: false,
+      day,
+    };
+  }
+
+  private selectDayExplorationChallenge(challenge: DayExplorationChallenge): void {
+    this.dayExplorationChallenge = {
+      ...challenge,
+      progress: 0,
+      completed: false,
+      day: Math.max(1, gameState.data.currentDay || 1),
+    };
+    this.dayChallengeBranchSelected = challenge.branch;
+    const dayMods = this.getDayChallengeBranchDailyModifiers(challenge.branch);
+    this.dayChallengeDayRewardMul = dayMods.rewardMul;
+    this.dayChallengeDayDangerMul = dayMods.dangerMul;
+    this.dayChallengeDayXpMul = dayMods.xpMul;
+    this.closeDayChallengeSelectionPanel();
+
+    const qualityText = challenge.targetQuality === 'perfect' ? '完美' : '良好及以上';
+    const spotName = this.getDayChallengeSpotName(challenge.actionType);
+    this.showFloatingText(this.cameras.main.width / 2, 208, `${challenge.title}`, '#22d3ee', true);
+    this.showFloatingText(
+      this.cameras.main.width / 2,
+      234,
+      `${spotName} · 目标${qualityText} ${challenge.required}次`,
+      '#93c5fd',
+      true
+    );
+    this.showFloatingText(
+      this.cameras.main.width / 2,
+      260,
+      `今日分支: ${challenge.branchNameCN} · ${challenge.dailyEffect}`,
+      '#fbbf24',
+      true
+    );
+    this.updateExplorationSpotStatus(true);
+    if (this.pendingDayRunEventAfterChallenge) {
+      this.pendingDayRunEventAfterChallenge = false;
+      this.maybeTriggerRunEvent('day');
+    }
+  }
+
+  private closeDayChallengeSelectionPanel(): void {
+    if (!this.dayChallengeSelectionOpen) return;
+    this.dayChallengeSelectionOpen = false;
+    this.dayChallengeSelectionContainer?.destroy();
+    this.dayChallengeSelectionContainer = null;
+    this.dayChallengePendingChoices = [];
+    this.setUISceneInputEnabled(true);
+    if (!this.currentFacility && !this.daySpotMiniGameOpen) {
+      this.playerSystem?.setMovementEnabled(true);
+    }
+  }
+
+  private openDayChallengeSelectionPanel(choices: DayExplorationChallenge[]): void {
+    this.closeDayChallengeSelectionPanel();
+    if (!choices || choices.length <= 0) return;
+    this.dayChallengeSelectionOpen = true;
+    this.dayChallengePendingChoices = choices;
+    this.setUISceneInputEnabled(false);
+    this.playerSystem?.setMovementEnabled(false);
+
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const uiFont = this.getUIFontFamily();
+    const container = this.add.container(0, 0).setDepth(3380).setScrollFactor(0);
+    this.dayChallengeSelectionContainer = container;
+
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x020617, 0.78).setScrollFactor(0);
+    container.add(overlay);
+    const panelW = Math.min(760, w - 48);
+    const panelH = Math.min(430, h - 70);
+    const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, 0x0f172a, 0.96)
+      .setScrollFactor(0)
+      .setStrokeStyle(2, 0x38bdf8, 0.85);
+    container.add(panel);
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 18, '每日挑战 · 三路分支', {
+      fontSize: this.worldFs(26, 22),
+      color: '#e2e8f0',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0));
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 54, '选择今日白天策略：稳妥 / 冒险 / 极限（将影响今日收益风险，并累积永久精通）', {
+      fontSize: this.worldFs(14, 13),
+      color: '#94a3b8',
+      fontFamily: uiFont,
+      align: 'center',
+    }).setOrigin(0.5, 0));
+
+    const cardW = Math.floor((panelW - 74) / 3);
+    const cardH = panelH - 128;
+    const startX = w / 2 - cardW - 12;
+    const startY = h / 2 + 10;
+    const masteryLevels = gameState.getDayChallengeMasteryLevels();
+    choices.forEach((choice, index) => {
+      const x = startX + index * (cardW + 12);
+      const branchColor = choice.branch === 'stable' ? 0x22c55e : choice.branch === 'adventure' ? 0xf59e0b : 0xef4444;
+      const card = this.add.rectangle(x, startY, cardW, cardH, 0x0b1220, 0.96)
+        .setScrollFactor(0)
+        .setStrokeStyle(2, branchColor, 0.92)
+        .setInteractive({ useHandCursor: true });
+      const qualityText = choice.targetQuality === 'perfect' ? '完美' : '良好';
+      const spotName = this.getDayChallengeSpotName(choice.actionType);
+      const rewardPreview: string[] = [];
+      (Object.entries(choice.reward.resources).slice(0, 3) as Array<[keyof Resources, number]>).forEach(([res, amount]) => {
+        const resName: Record<keyof Resources, string> = {
+          wood: '木',
+          metal: '金',
+          food: '食',
+          water: '水',
+          scrap: '件',
+          medical: '医',
+          ammo: '弹',
+          energyCore: '核',
+          bitcoin: '₿',
+        };
+        rewardPreview.push(`${resName[res]}+${Math.floor(amount || 0)}`);
+      });
+      if ((choice.reward.bitcoin || 0) > 0) {
+        rewardPreview.push(`₿+${(choice.reward.bitcoin || 0).toFixed(2)}`);
+      }
+      const masteryLv = masteryLevels[choice.branch] || 0;
+
+      const texts = [
+        this.add.text(x, startY - cardH / 2 + 16, choice.branchNameCN, {
+          fontSize: this.worldFs(21, 18),
+          color: '#f8fafc',
+          fontFamily: uiFont,
+          fontStyle: 'bold',
+        }).setOrigin(0.5, 0),
+        this.add.text(x, startY - cardH / 2 + 48, `精通 Lv.${masteryLv}`, {
+          fontSize: this.worldFs(13, 12),
+          color: '#67e8f9',
+          fontFamily: uiFont,
+        }).setOrigin(0.5, 0),
+        this.add.text(x, startY - cardH / 2 + 74, choice.title, {
+          fontSize: this.worldFs(15, 13),
+          color: '#cbd5e1',
+          fontFamily: uiFont,
+          align: 'center',
+          wordWrap: { width: cardW - 20, useAdvancedWrap: true },
+        }).setOrigin(0.5, 0),
+        this.add.text(x, startY - cardH / 2 + 128, `${spotName} · ${qualityText} ${choice.required}次`, {
+          fontSize: this.worldFs(13, 12),
+          color: '#fbbf24',
+          fontFamily: uiFont,
+          align: 'center',
+        }).setOrigin(0.5, 0),
+        this.add.text(x, startY - cardH / 2 + 154, choice.dailyEffect, {
+          fontSize: this.worldFs(12, 11),
+          color: '#93c5fd',
+          fontFamily: uiFont,
+          align: 'center',
+          wordWrap: { width: cardW - 24, useAdvancedWrap: true },
+        }).setOrigin(0.5, 0),
+        this.add.text(x, startY + cardH / 2 - 82, `完成奖励 ${rewardPreview.join(' · ')}`, {
+          fontSize: this.worldFs(12, 11),
+          color: '#86efac',
+          fontFamily: uiFont,
+          align: 'center',
+          wordWrap: { width: cardW - 24, useAdvancedWrap: true },
+        }).setOrigin(0.5, 0),
+        this.add.text(x, startY + cardH / 2 - 54, `+XP${choice.reward.xp} · 永久精通+${choice.masteryGain}`, {
+          fontSize: this.worldFs(12, 11),
+          color: '#fda4af',
+          fontFamily: uiFont,
+          align: 'center',
+        }).setOrigin(0.5, 0),
+      ];
+      const pickBtn = this.add.rectangle(x, startY + cardH / 2 - 20, cardW - 30, 34, 0x13233a, 0.98)
+        .setStrokeStyle(1, branchColor, 0.95)
+        .setInteractive({ useHandCursor: true });
+      const pickText = this.add.text(x, startY + cardH / 2 - 20, `选择${choice.branchNameCN}`, {
+        fontSize: this.worldFs(15, 13),
+        color: '#e2e8f0',
+        fontFamily: uiFont,
+        fontStyle: 'bold',
+      }).setOrigin(0.5);
+      const pick = () => this.selectDayExplorationChallenge(choice);
+      card.on('pointerdown', pick);
+      pickBtn.on('pointerdown', pick);
+      container.add([card, ...texts, pickBtn, pickText]);
+    });
+  }
+
+  private createOrRefreshDayExplorationChallenge(showAnnouncement: boolean): void {
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    this.dayExplorationChallenge = null;
+    this.dayChallengeBranchSelected = null;
+    this.dayChallengeDayRewardMul = 1;
+    this.dayChallengeDayDangerMul = 1;
+    this.dayChallengeDayXpMul = 1;
+    const choices: DayExplorationChallenge[] = [
+      this.buildDayChallengeForBranch(day, 'stable'),
+      this.buildDayChallengeForBranch(day, 'adventure'),
+      this.buildDayChallengeForBranch(day, 'extreme'),
+    ];
+    if (!showAnnouncement) {
+      this.selectDayExplorationChallenge(choices[0]);
+      return;
+    }
+    this.openDayChallengeSelectionPanel(choices);
+  }
+
+  private applyDayExplorationChallengeProgress(
+    spot: ExplorationSpot,
+    quality: 'poor' | 'good' | 'perfect',
+    risky: boolean
+  ): void {
+    const challenge = this.dayExplorationChallenge;
+    if (!challenge || challenge.completed) return;
+    if (challenge.day !== Math.max(1, gameState.data.currentDay || 1)) return;
+    if (challenge.actionType !== spot.actionType) return;
+
+    const currentRank = this.getDayChallengeQualityRank(quality);
+    const neededRank = this.getDayChallengeQualityRank(challenge.targetQuality);
+    if (currentRank < neededRank) return;
+
+    const gain = quality === 'perfect' && challenge.targetQuality === 'good' ? 2 : 1;
+    challenge.progress = Math.min(challenge.required, challenge.progress + gain);
+    if (this.time.now >= this.dayChallengeHintCooldownUntil) {
+      this.dayChallengeHintCooldownUntil = this.time.now + 1200;
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 118,
+        `${challenge.title} ${challenge.progress}/${challenge.required}`,
+        '#22d3ee',
+        false
+      );
+    }
+    if (challenge.progress < challenge.required) return;
+
+    challenge.completed = true;
+    const reward = challenge.reward;
+    const rewardParts: string[] = [];
+    (Object.keys(reward.resources) as Array<keyof Resources>).forEach((key) => {
+      const amount = Math.max(0, Math.floor(reward.resources[key] || 0));
+      if (amount <= 0) return;
+      gameState.addResource(key, amount);
+      QuestSystem.updateProgress('collect', key, amount);
+      const nameMap: Record<keyof Resources, string> = {
+        wood: '木材',
+        metal: '金属',
+        food: '食物',
+        water: '净水',
+        scrap: '零件',
+        medical: '医疗',
+        ammo: '弹药',
+        bitcoin: '比特币',
+        energyCore: '能量核',
+      };
+      rewardParts.push(`${nameMap[key]}+${amount}`);
+    });
+    if (reward.bitcoin && reward.bitcoin > 0) {
+      const btc = Number((reward.bitcoin * (risky ? 1.15 : 1)).toFixed(3));
+      gameState.addResource('bitcoin', btc);
+      rewardParts.push(`₿+${btc.toFixed(3)}`);
+    }
+    const xpBonusMul = challenge.branch === 'extreme' ? this.dayChallengeMasteryBonuses.extremeXpMul : 1;
+    this.grantExperience(Math.max(8, Math.round((reward.xp + (quality === 'perfect' ? 6 : 0)) * xpBonusMul)));
+    const nextMasteryLevel = gameState.addDayChallengeMastery(challenge.branch, challenge.masteryGain);
+    this.dayChallengeMasteryBonuses = gameState.getDayChallengeMasteryBonuses();
+    events.emit('update-resources', gameState.data.resources);
+    this.showFloatingText(
+      this.cameras.main.width / 2,
+      186,
+      `挑战完成：${challenge.title}`,
+      '#4ade80',
+      true
+    );
+    if (rewardParts.length > 0) {
+      this.showFloatingText(this.cameras.main.width / 2, 214, `奖励 ${rewardParts.join(' · ')}`, '#fbbf24', true);
+    }
+    this.showFloatingText(
+      this.cameras.main.width / 2,
+      242,
+      `永久成长：${challenge.branchNameCN}分支精通 +${challenge.masteryGain} (Lv.${nextMasteryLevel})`,
+      '#67e8f9',
+      true
+    );
+  }
+
+  private getDayMiniGameProfile(actionType: ExplorationActionType): DayMiniGameProfile {
+    if (actionType === 'fish') {
+      return {
+        title: '浮漂追踪',
+        hint: '让光标贴合浮漂蓝区，越准渔获越高',
+        targetColor: 0x0ea5e9,
+        perfectColor: 0x22d3ee,
+        trapColor: 0x7f1d1d,
+        baseWidth: 0.24,
+        baseTargetSpeed: 0.00034,
+        perfectRatio: 0.4,
+        riskyTargetWidthMul: 0.84,
+        riskyTargetSpeedMul: 1.18,
+        hasTrap: false,
+        trapWidth: 0,
+      };
+    }
+    if (actionType === 'swim') {
+      return {
+        title: '呼吸节奏',
+        hint: '观察水流节奏，在稳定窗口锁定动作',
+        targetColor: 0x2563eb,
+        perfectColor: 0x60a5fa,
+        trapColor: 0x7f1d1d,
+        baseWidth: 0.27,
+        baseTargetSpeed: 0.00024,
+        perfectRatio: 0.36,
+        riskyTargetWidthMul: 0.8,
+        riskyTargetSpeedMul: 1.1,
+        hasTrap: false,
+        trapWidth: 0,
+      };
+    }
+    if (actionType === 'hunt') {
+      return {
+        title: '狩猎预判',
+        hint: '猎物窗口移动很快，抓住短暂时机',
+        targetColor: 0x15803d,
+        perfectColor: 0x22c55e,
+        trapColor: 0x7f1d1d,
+        baseWidth: 0.19,
+        baseTargetSpeed: 0.00058,
+        perfectRatio: 0.34,
+        riskyTargetWidthMul: 0.78,
+        riskyTargetSpeedMul: 1.26,
+        hasTrap: false,
+        trapWidth: 0,
+      };
+    }
+    if (actionType === 'scavenge') {
+      return {
+        title: '开锁避陷',
+        hint: '贴住蓝区并避开红色陷阱，失败会触发警报',
+        targetColor: 0xd97706,
+        perfectColor: 0xf59e0b,
+        trapColor: 0xdc2626,
+        baseWidth: 0.2,
+        baseTargetSpeed: 0.00028,
+        perfectRatio: 0.33,
+        riskyTargetWidthMul: 0.76,
+        riskyTargetSpeedMul: 1.22,
+        hasTrap: true,
+        trapWidth: 0.16,
+      };
+    }
+    return {
+      title: '回声判位',
+      hint: '山洞回声会跳点，锁定时机可获高价值掉落',
+      targetColor: 0x7c3aed,
+      perfectColor: 0xa78bfa,
+      trapColor: 0xdc2626,
+      baseWidth: 0.18,
+      baseTargetSpeed: 0.00036,
+      perfectRatio: 0.31,
+      riskyTargetWidthMul: 0.72,
+      riskyTargetSpeedMul: 1.24,
+      hasTrap: true,
+      trapWidth: 0.12,
+    };
+  }
+
+  private getProtocolMiniGameStyle(): {
+    id: LevelUpProtocolId;
+    level: number;
+    totalLevel: number;
+    color: number;
+    label: string;
+    glyph: string;
+  } | null {
+    const levels = EvolutionSystem.getProtocolLevels();
+    let dominant: LevelUpProtocolId = 'barrage_matrix';
+    let hasDominant = false;
+    let dominantLevel = 0;
+    let total = 0;
+    for (const id of Object.keys(levels) as LevelUpProtocolId[]) {
+      const level = Math.max(0, levels[id] || 0);
+      total += level;
+      if (level > dominantLevel) {
+        dominant = id;
+        hasDominant = true;
+        dominantLevel = level;
+      }
+    }
+    if (!hasDominant || dominantLevel <= 0 || total <= 0) return null;
+    const glyphMap: Record<LevelUpProtocolId, string> = {
+      barrage_matrix: '✶',
+      phase_lance: '⟐',
+      overclock_link: '⚡',
+      echo_reactor: '◎',
+      hunter_instinct: '➹',
+      companion_sync: '◍',
+    };
+    const shortNameMap: Record<LevelUpProtocolId, string> = {
+      barrage_matrix: '弹幕矩阵',
+      phase_lance: '相位穿矛',
+      overclock_link: '过载链路',
+      echo_reactor: '回声反应堆',
+      hunter_instinct: '猎手本能',
+      companion_sync: '伙伴协同',
+    };
+    return {
+      id: dominant,
+      level: dominantLevel,
+      totalLevel: total,
+      color: PROTOCOL_VISUAL_PROFILE[dominant].color,
+      label: `${shortNameMap[dominant]} Lv.${dominantLevel}`,
+      glyph: glyphMap[dominant],
+    };
+  }
+
+  private blendColor(base: number, tint: number, ratio: number): number {
+    const t = Phaser.Math.Clamp(ratio, 0, 1);
+    const from = Phaser.Display.Color.IntegerToColor(base);
+    const to = Phaser.Display.Color.IntegerToColor(tint);
+    return Phaser.Display.Color.GetColor(
+      Math.round(from.red + (to.red - from.red) * t),
+      Math.round(from.green + (to.green - from.green) * t),
+      Math.round(from.blue + (to.blue - from.blue) * t)
+    );
+  }
+
+  private getMiniGameSkinKey(
+    theme: DayMiniGameTheme,
+    part: 'tile' | 'panel' | 'safe' | 'risky' | 'button' | 'bar' | 'icon'
+  ): string {
+    return `mg_${part}_${theme.variant}`;
+  }
+
+  private getMiniGameButtonSkinKey(theme: DayMiniGameTheme, state: 'normal' | 'hover' | 'pressed'): string {
+    if (state === 'hover') return `mg_button_hover_${theme.variant}`;
+    if (state === 'pressed') return `mg_button_pressed_${theme.variant}`;
+    return this.getMiniGameSkinKey(theme, 'button');
+  }
+
+  private getMiniGameObjectAtlasKey(theme: DayMiniGameTheme): string {
+    return `mg_obj_${theme.variant}`;
+  }
+
+  private addMiniGameObjectIcon(
+    container: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    theme: DayMiniGameTheme,
+    frame: 'player' | 'loot' | 'trap' | 'enemy' | 'hint' | 'medical' | 'tech' | 'stash',
+    size = 18,
+    alpha = 1
+  ): Phaser.GameObjects.Image | null {
+    const key = this.getMiniGameObjectAtlasKey(theme);
+    if (!this.textures.exists(key)) return null;
+    const texture = this.textures.get(key);
+    const useFrame = texture.has(frame) ? frame : (texture.has('hint') ? 'hint' : '__BASE');
+    const icon = this.add.image(x, y, key, useFrame)
+      .setDisplaySize(size, size)
+      .setAlpha(alpha)
+      .setScrollFactor(0);
+    container.add(icon);
+    return icon;
+  }
+
+  private addMiniGameRectSkin(
+    container: Phaser.GameObjects.Container,
+    rect: Phaser.GameObjects.Rectangle,
+    theme: DayMiniGameTheme,
+    part: 'tile' | 'safe' | 'risky' | 'button' | 'bar',
+    alpha = 0.92
+  ): Phaser.GameObjects.Image | null {
+    const key = this.getMiniGameSkinKey(theme, part);
+    if (!this.textures.exists(key)) return null;
+    const skin = this.add.image(rect.x, rect.y, key)
+      .setDisplaySize(rect.width, rect.height)
+      .setAlpha(alpha)
+      .setScrollFactor(0);
+    const index = container.getIndex(rect);
+    if (index >= 0) container.addAt(skin, index);
+    else container.add(skin);
+    return skin;
+  }
+
+  private bindMiniGameButtonInteraction(
+    rect: Phaser.GameObjects.Rectangle,
+    skin: Phaser.GameObjects.Image | null,
+    theme: DayMiniGameTheme,
+    label?: Phaser.GameObjects.Text | null
+  ): void {
+    const normalKey = this.getMiniGameButtonSkinKey(theme, 'normal');
+    const hoverKey = this.getMiniGameButtonSkinKey(theme, 'hover');
+    const pressedKey = this.getMiniGameButtonSkinKey(theme, 'pressed');
+    const hasNormal = this.textures.exists(normalKey);
+    const hasHover = this.textures.exists(hoverKey);
+    const hasPressed = this.textures.exists(pressedKey);
+    const targets: Phaser.GameObjects.GameObject[] = [rect];
+    if (skin) targets.push(skin);
+    if (label) targets.push(label);
+    const applyVisual = (state: 'normal' | 'hover' | 'pressed') => {
+      if (skin && hasNormal) {
+        if (state === 'pressed' && hasPressed) skin.setTexture(pressedKey);
+        else if (state === 'hover' && hasHover) skin.setTexture(hoverKey);
+        else skin.setTexture(normalKey);
+      } else {
+        rect.setAlpha(state === 'pressed' ? 0.84 : state === 'hover' ? 0.97 : 1);
+      }
+    };
+    const tweenScale = (scale: number, duration: number) => {
+      this.tweens.add({
+        targets,
+        scaleX: scale,
+        scaleY: scale,
+        duration,
+        ease: 'Quad.Out',
+      });
+    };
+    rect.on('pointerover', () => {
+      applyVisual('hover');
+      tweenScale(1.025, 80);
+    });
+    rect.on('pointerout', () => {
+      applyVisual('normal');
+      tweenScale(1, 110);
+    });
+    rect.on('pointerdown', () => {
+      applyVisual('pressed');
+      tweenScale(0.97, 60);
+    });
+    rect.on('pointerup', () => {
+      applyVisual('hover');
+      tweenScale(1.02, 80);
+    });
+    rect.on('pointerupoutside', () => {
+      applyVisual('normal');
+      tweenScale(1, 100);
+    });
+  }
+
+  private addMiniGameThemeIcon(
+    container: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    theme: DayMiniGameTheme,
+    fallbackFontSize = 22
+  ): void {
+    const iconKey = this.getMiniGameSkinKey(theme, 'icon');
+    if (this.textures.exists(iconKey)) {
+      const icon = this.add.image(x, y, iconKey).setDisplaySize(24, 24).setScrollFactor(0);
+      container.add(icon);
+      return;
+    }
+    const icon = this.add.text(x, y, theme.icon, {
+      fontSize: this.worldFs(fallbackFontSize, 18),
+      color: theme.accentText,
+      fontFamily: this.getUIFontFamily(),
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setScrollFactor(0);
+    container.add(icon);
+  }
+
+  private createMiniGamePanelDecor(
+    container: Phaser.GameObjects.Container,
+    centerX: number,
+    centerY: number,
+    panelW: number,
+    panelH: number,
+    theme: DayMiniGameTheme
+  ): void {
+    const left = Math.floor(centerX - panelW * 0.5 + 6);
+    const top = Math.floor(centerY - panelH * 0.5 + 28);
+    const width = Math.max(40, Math.floor(panelW - 12));
+    const height = Math.max(40, Math.floor(panelH - 38));
+    const tileKey = this.getMiniGameSkinKey(theme, 'tile');
+    const panelKey = this.getMiniGameSkinKey(theme, 'panel');
+    if (this.textures.exists(tileKey)) {
+      const tileLayer = this.add.tileSprite(centerX, centerY + 8, width, height, tileKey)
+        .setAlpha(0.34)
+        .setScrollFactor(0);
+      container.add(tileLayer);
+    } else {
+      const tile = theme.variant === 'city' ? 16 : theme.variant === 'cave' ? 18 : 20;
+      const gfx = this.add.graphics().setScrollFactor(0);
+      for (let y = 0; y < height; y += tile) {
+        for (let x = 0; x < width; x += tile) {
+          const even = ((x / tile) + (y / tile)) % 2 === 0;
+          const color = even ? theme.tileA : theme.tileB;
+          gfx.fillStyle(color, even ? 0.16 : 0.1);
+          gfx.fillRect(left + x, top + y, tile - 1, tile - 1);
+        }
+      }
+      gfx.lineStyle(1, theme.accent, 0.3);
+      gfx.strokeRect(left + 2, top + 2, width - 4, height - 4);
+      container.add(gfx);
+    }
+    if (this.textures.exists(panelKey)) {
+      const panelLayer = this.add.image(centerX, centerY, panelKey)
+        .setDisplaySize(panelW, panelH)
+        .setAlpha(0.72)
+        .setScrollFactor(0);
+      container.add(panelLayer);
+    }
+
+    const markCount = this.lowPerfMode ? 2 : 3;
+    for (let i = 0; i < markCount; i += 1) {
+      const wm = this.add.text(
+        centerX - panelW * 0.5 + 54 + i * 82,
+        centerY + panelH * 0.5 - 36,
+        theme.icon,
+        {
+          fontSize: this.worldFs(14, 12),
+          color: this.toHexColor(theme.accent),
+          fontFamily: this.getUIFontFamily(),
+        }
+      ).setAlpha(0.22).setScrollFactor(0).setOrigin(0.5);
+      container.add(wm);
+    }
+
+    if (theme.protocolLevel > 0) {
+      const protocolFrame = this.add.rectangle(centerX, centerY, panelW + 8, panelH + 8, theme.protocolColor, 0)
+        .setStrokeStyle(2, theme.protocolColor, 0.68)
+        .setScrollFactor(0);
+      container.add(protocolFrame);
+      this.tweens.add({
+        targets: protocolFrame,
+        alpha: { from: 0.45, to: 0.9 },
+        scaleX: { from: 1, to: 1.01 },
+        scaleY: { from: 1, to: 1.01 },
+        duration: 780,
+        yoyo: true,
+        repeat: -1,
+      });
+      const protocolChip = this.add.text(centerX + panelW * 0.5 - 18, centerY - panelH * 0.5 + 10, `协议共鸣 ${theme.protocolLabel}`, {
+        fontSize: this.worldFs(11, 10),
+        color: this.toHexColor(theme.protocolColor),
+        fontFamily: this.getUIFontFamily(),
+        fontStyle: 'bold',
+      }).setOrigin(1, 0).setScrollFactor(0);
+      container.add(protocolChip);
+    }
+  }
+
+  private getDayMiniGameTheme(actionType: ExplorationActionType): DayMiniGameTheme {
+    const buildTheme = (
+      variant: DayMiniGameTheme['variant'],
+      accent: number,
+      accentText: string,
+      icon: string,
+      subtitle: string,
+      panelColor: number,
+      overlayColor: number,
+      overlayAlpha: number,
+      arenaColor: number,
+      tileA: number,
+      tileB: number,
+      safeCardColor: number,
+      riskyCardColor: number,
+      buttonColor: number,
+      buttonTextColor: string
+    ): DayMiniGameTheme => ({
+      variant,
+      accent,
+      accentText,
+      icon,
+      subtitle,
+      panelColor,
+      overlayColor,
+      overlayAlpha,
+      arenaColor,
+      tileA,
+      tileB,
+      safeCardColor,
+      riskyCardColor,
+      buttonColor,
+      buttonTextColor,
+      protocolLevel: 0,
+      protocolLabel: '',
+      protocolColor: accent,
+    });
+
+    let baseTheme: DayMiniGameTheme;
+    if (actionType === 'fish' || actionType === 'swim') {
+      baseTheme = buildTheme(
+        'river',
+        actionType === 'swim' ? 0x2563eb : 0x0ea5e9,
+        actionType === 'swim' ? '#60a5fa' : '#38bdf8',
+        actionType === 'swim' ? '◌' : '≋',
+        actionType === 'swim' ? '河流训练' : '河流钓猎',
+        0x0a1a2f,
+        0x020812,
+        0.72,
+        0x0b1a2d,
+        0x0c223c,
+        0x112b47,
+        0x10304b,
+        0x2a1620,
+        0x11304d,
+        '#dbeafe'
+      );
+    } else if (actionType === 'hunt') {
+      baseTheme = buildTheme(
+        'forest',
+        0x16a34a,
+        '#4ade80',
+        '△',
+        '森林狩猎',
+        0x0d2019,
+        0x020b06,
+        0.76,
+        0x0f2018,
+        0x183723,
+        0x112f1d,
+        0x1f3c2e,
+        0x2a1620,
+        0x163826,
+        '#dcfce7'
+      );
+    } else if (actionType === 'scavenge') {
+      baseTheme = buildTheme(
+        'city',
+        0xd97706,
+        '#f59e0b',
+        '▣',
+        '城区搜刮',
+        0x23180d,
+        0x090705,
+        0.78,
+        0x1a1a1f,
+        0x2b2419,
+        0x1f1a12,
+        0x293442,
+        0x2a1620,
+        0x2b2413,
+        '#fef3c7'
+      );
+    } else {
+      baseTheme = buildTheme(
+        'cave',
+        0x7c3aed,
+        '#a78bfa',
+        '◈',
+        '洞穴突袭',
+        0x1a1230,
+        0x05030d,
+        0.78,
+        0x121026,
+        0x261a3b,
+        0x1c1530,
+        0x26314a,
+        0x2a1620,
+        0x221a38,
+        '#ede9fe'
+      );
+    }
+
+    const protocolStyle = this.getProtocolMiniGameStyle();
+    if (!protocolStyle) return baseTheme;
+
+    const blend = Phaser.Math.Clamp(0.14 + protocolStyle.totalLevel * 0.028, 0.16, 0.46);
+    const accent = this.blendColor(baseTheme.accent, protocolStyle.color, blend);
+    return {
+      ...baseTheme,
+      accent,
+      accentText: this.toHexColor(accent),
+      panelColor: this.blendColor(baseTheme.panelColor, protocolStyle.color, blend * 0.52),
+      arenaColor: this.blendColor(baseTheme.arenaColor, protocolStyle.color, blend * 0.38),
+      tileA: this.blendColor(baseTheme.tileA, protocolStyle.color, blend * 0.32),
+      tileB: this.blendColor(baseTheme.tileB, protocolStyle.color, blend * 0.26),
+      safeCardColor: this.blendColor(baseTheme.safeCardColor, protocolStyle.color, blend * 0.36),
+      buttonColor: this.blendColor(baseTheme.buttonColor, protocolStyle.color, blend * 0.44),
+      protocolColor: protocolStyle.color,
+      protocolLevel: protocolStyle.level,
+      protocolLabel: `${protocolStyle.glyph} ${protocolStyle.label}`,
+    };
+  }
+
+  private getDayMiniGameRounds(actionType: ExplorationActionType): number {
+    if (actionType === 'fish' || actionType === 'swim') return 2;
+    if (actionType === 'hunt' || actionType === 'scavenge') return 3;
+    return 4;
+  }
+
+  private refreshDayMiniGameRoundDisplay(): void {
+    if (this.daySpotMiniGameRoundText) {
+      this.daySpotMiniGameRoundText.setText(
+        `回合 ${this.daySpotMiniGameRound}/${this.daySpotMiniGameRoundsTotal} · 积分 ${this.daySpotMiniGameScore}/${this.daySpotMiniGameRoundsTotal * 2}`
+      );
+    }
+    if (this.daySpotMiniGameActionLabel) {
+      this.daySpotMiniGameActionLabel.setText(`锁定 [E] · ${this.daySpotMiniGameRound}/${this.daySpotMiniGameRoundsTotal}`);
+    }
+  }
+
+  private getScavengeDurabilityDamageMultiplier(): number {
+    if (this.scavengeDurabilityStacks <= 0) return 1;
+    if (this.time.now >= this.scavengeDurabilityPenaltyUntil) return 1;
+    return Math.max(0.68, 1 - this.scavengeDurabilityStacks * 0.08);
+  }
+
+  private applyScavengeDurabilityPenalty(stacks: number, fromTrap: boolean): void {
+    const safeStacks = Phaser.Math.Clamp(Math.floor(stacks), 1, 3);
+    this.scavengeDurabilityStacks = Phaser.Math.Clamp(this.scavengeDurabilityStacks + safeStacks, 0, 4);
+    const extraMs = fromTrap ? 34000 : 26000;
+    const nextUntil = this.time.now + extraMs + safeStacks * 2800;
+    this.scavengeDurabilityPenaltyUntil = Math.max(this.scavengeDurabilityPenaltyUntil, nextUntil);
+    this.scavengeDurabilityPenaltyStartAt = this.time.now;
+    this.scavengeDurabilityPenaltyDurationMs = Math.max(1000, this.scavengeDurabilityPenaltyUntil - this.time.now);
+    const reductionPercent = Math.round((1 - this.getScavengeDurabilityDamageMultiplier()) * 100);
+    const remainSec = Math.max(1, Math.ceil((this.scavengeDurabilityPenaltyUntil - this.time.now) / 1000));
+    this.showFloatingText(
+      this.player.x,
+      this.player.y - 108,
+      `装备耐久受损 Lv.${this.scavengeDurabilityStacks} · 伤害-${reductionPercent}%(${remainSec}s)`,
+      '#fb923c',
+      false
+    );
+  }
+
+  private updateScavengeDurabilityState(): void {
+    if (this.scavengeDurabilityStacks <= 0) return;
+    if (this.time.now < this.scavengeDurabilityPenaltyUntil) return;
+    this.scavengeDurabilityStacks = 0;
+    this.scavengeDurabilityPenaltyUntil = 0;
+    this.scavengeDurabilityPenaltyStartAt = 0;
+    this.scavengeDurabilityPenaltyDurationMs = 0;
+    this.showFloatingText(this.player.x, this.player.y - 92, '装备耐久已恢复', '#22c55e', false);
+  }
+
+  private initializeDayMiniGameState(spot: ExplorationSpot): void {
+    this.daySpotMiniGameMode = spot.actionType;
+    this.daySpotMiniGameProfile = this.getDayMiniGameProfile(spot.actionType);
+    this.daySpotMiniGameTargetCenter = Phaser.Math.FloatBetween(0.35, 0.65);
+    this.daySpotMiniGameTargetDir = Math.random() < 0.5 ? -1 : 1;
+    this.daySpotMiniGamePerfectRatio = this.daySpotMiniGameProfile.perfectRatio;
+    this.daySpotMiniGameTrapCenter = this.daySpotMiniGameProfile.hasTrap
+      ? Phaser.Math.FloatBetween(0.2, 0.8)
+      : -1;
+    this.daySpotMiniGameTrapWidth = this.daySpotMiniGameProfile.trapWidth;
+    this.applyDayMiniGameRiskModifiers();
+  }
+
+  private applyDayMiniGameRiskModifiers(): void {
+    const profile = this.daySpotMiniGameProfile;
+    if (!profile) return;
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    const widthMul = risky ? profile.riskyTargetWidthMul : 1;
+    this.daySpotMiniGameTargetWidth = Phaser.Math.Clamp(profile.baseWidth * widthMul, 0.1, 0.42);
+    this.daySpotMiniGameTrapWidth = profile.hasTrap
+      ? Phaser.Math.Clamp(profile.trapWidth * (risky ? 1.2 : 1), 0.08, 0.28)
+      : 0;
+    this.refreshDayMiniGameZoneVisuals();
+  }
+
+  private refreshDayMiniGameZoneVisuals(): void {
+    const cursor = this.daySpotMiniGameCursorVisual;
+    if (!cursor) return;
+    const minX = Number(cursor.getData('barMinX') || 0);
+    const maxX = Number(cursor.getData('barMaxX') || 0);
+    const barW = Math.max(1, maxX - minX);
+    const barH = Number(cursor.getData('barH') || 26);
+    const centerX = minX + barW * this.daySpotMiniGameTargetCenter;
+    const targetW = Math.max(10, barW * this.daySpotMiniGameTargetWidth);
+    const perfectW = Math.max(8, targetW * this.daySpotMiniGamePerfectRatio);
+
+    if (this.daySpotMiniGameTargetVisual) {
+      this.daySpotMiniGameTargetVisual.setSize(targetW, barH - 6);
+      this.daySpotMiniGameTargetVisual.x = centerX;
+    }
+    if (this.daySpotMiniGamePerfectVisual) {
+      this.daySpotMiniGamePerfectVisual.setSize(perfectW, barH - 6);
+      this.daySpotMiniGamePerfectVisual.x = centerX;
+    }
+    if (this.daySpotMiniGameTrapVisual) {
+      const hasTrap = this.daySpotMiniGameTrapCenter >= 0 && this.daySpotMiniGameTrapWidth > 0;
+      this.daySpotMiniGameTrapVisual.setVisible(hasTrap);
+      if (hasTrap) {
+        this.daySpotMiniGameTrapVisual.setSize(Math.max(8, barW * this.daySpotMiniGameTrapWidth), barH - 8);
+        this.daySpotMiniGameTrapVisual.x = minX + barW * this.daySpotMiniGameTrapCenter;
+      }
+      if (this.daySpotMiniGameTrapIcon) {
+        this.daySpotMiniGameTrapIcon.setVisible(hasTrap);
+        if (hasTrap) {
+          this.daySpotMiniGameTrapIcon.x = this.daySpotMiniGameTrapVisual.x;
+          this.daySpotMiniGameTrapIcon.y = this.daySpotMiniGameTrapVisual.y;
+        }
+      }
+    }
+  }
+
+  private playMiniGameOutcomeTone(
+    actionType: ExplorationActionType,
+    quality: 'poor' | 'good' | 'perfect',
+    inTrap: boolean
+  ): void {
+    try {
+      const manager: any = this.sound;
+      const ctx = manager?.context as AudioContext | undefined;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+      const t0 = ctx.currentTime + 0.005;
+      const master = ctx.createGain();
+      master.gain.value = this.mobileViewport ? 0.03 : 0.045;
+      master.connect(ctx.destination);
+      const variant = actionType === 'fish' || actionType === 'swim'
+        ? 'river'
+        : actionType === 'hunt'
+          ? 'forest'
+          : actionType === 'scavenge'
+            ? 'city'
+            : 'cave';
+      const base = variant === 'river' ? 200 : variant === 'forest' ? 172 : variant === 'city' ? 210 : 156;
+      const pulse = (semitone: number, start: number, duration: number, type: OscillatorType) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(base * Math.pow(2, semitone / 12), t0 + start);
+        gain.gain.setValueAtTime(0.0001, t0 + start);
+        gain.gain.exponentialRampToValueAtTime(master.gain.value, t0 + start + 0.012);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + start + duration);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(t0 + start);
+        osc.stop(t0 + start + duration);
+      };
+      if (inTrap || quality === 'poor') {
+        pulse(-2, 0, 0.11, 'sawtooth');
+        pulse(-7, 0.07, 0.14, 'square');
+      } else if (quality === 'perfect') {
+        pulse(0, 0, 0.1, 'triangle');
+        pulse(4, 0.07, 0.12, 'sine');
+        pulse(9, 0.14, 0.14, 'triangle');
+      } else {
+        pulse(0, 0, 0.1, 'triangle');
+        pulse(3, 0.08, 0.11, 'sine');
+      }
+      this.time.delayedCall(440, () => master.disconnect());
+    } catch {
+      // Ignore audio failures (autoplay policy / unsupported context)
+    }
+  }
+
+  private playMiniGameOutcomeVfx(
+    actionType: ExplorationActionType,
+    quality: 'poor' | 'good' | 'perfect',
+    inTrap: boolean,
+    x?: number,
+    y?: number,
+    subtle = false
+  ): void {
+    const variant = actionType === 'fish' || actionType === 'swim'
+      ? 'river'
+      : actionType === 'hunt'
+        ? 'forest'
+        : actionType === 'scavenge'
+          ? 'city'
+          : 'cave';
+    const cx = x ?? this.player.x;
+    const cy = y ?? (this.player.y - 8);
+    const poor = inTrap || quality === 'poor';
+    const multiplier = subtle ? 0.7 : 1;
+    const count = Math.max(
+      2,
+      Math.round((this.ultraLowPerfMode ? 3 : this.lowPerfMode ? 6 : 10) * multiplier)
+    );
+
+    if (variant === 'river') {
+      const color = poor ? 0x60a5fa : quality === 'perfect' ? 0x67e8f9 : 0x38bdf8;
+      for (let i = 0; i < count; i += 1) {
+        const ripple = this.add.circle(cx, cy, 8 + i * 1.4, color, poor ? 0.2 : 0.26).setDepth(1084);
+        this.tweens.add({
+          targets: ripple,
+          scale: poor ? 1.34 : 1.7,
+          alpha: 0,
+          duration: 260 + i * 24,
+          onComplete: () => ripple.destroy(),
+        });
+      }
+    } else if (variant === 'forest') {
+      const color = poor ? 0xef4444 : quality === 'perfect' ? 0x4ade80 : 0x22c55e;
+      for (let i = 0; i < count; i += 1) {
+        const leaf = this.add.rectangle(cx, cy, Phaser.Math.Between(3, 6), Phaser.Math.Between(8, 14), color, 0.88).setDepth(1084);
+        leaf.angle = Phaser.Math.Between(-70, 70);
+        this.tweens.add({
+          targets: leaf,
+          x: cx + Phaser.Math.Between(-48, 48),
+          y: cy + Phaser.Math.Between(-56, 16),
+          alpha: 0,
+          duration: Phaser.Math.Between(220, 420),
+          onComplete: () => leaf.destroy(),
+        });
+      }
+    } else if (variant === 'city') {
+      const color = poor ? 0xfb7185 : quality === 'perfect' ? 0xfbbf24 : 0xf59e0b;
+      for (let i = 0; i < count; i += 1) {
+        const shard = this.add.rectangle(cx, cy, Phaser.Math.Between(4, 9), Phaser.Math.Between(2, 4), color, 0.9).setDepth(1084);
+        shard.angle = Phaser.Math.Between(-20, 20);
+        this.tweens.add({
+          targets: shard,
+          x: cx + Phaser.Math.Between(-56, 56),
+          y: cy + Phaser.Math.Between(-42, 34),
+          alpha: 0,
+          duration: Phaser.Math.Between(200, 360),
+          onComplete: () => shard.destroy(),
+        });
+      }
+    } else {
+      const color = poor ? 0xf43f5e : quality === 'perfect' ? 0xc4b5fd : 0xa78bfa;
+      const ring = this.add.circle(cx, cy, poor ? 14 : 18, color, 0).setDepth(1084).setStrokeStyle(2, color, 0.82);
+      ring.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: ring,
+        scale: poor ? 1.2 : 1.6,
+        alpha: 0,
+        duration: poor ? 200 : 320,
+        onComplete: () => ring.destroy(),
+      });
+      for (let i = 0; i < Math.max(2, Math.floor(count * 0.7)); i += 1) {
+        const shard = this.add.rectangle(cx, cy, 3, Phaser.Math.Between(8, 14), color, 0.88).setDepth(1085);
+        shard.angle = Phaser.Math.Between(0, 360);
+        this.tweens.add({
+          targets: shard,
+          x: cx + Phaser.Math.Between(-64, 64),
+          y: cy + Phaser.Math.Between(-42, 42),
+          alpha: 0,
+          duration: Phaser.Math.Between(220, 460),
+          onComplete: () => shard.destroy(),
+        });
+      }
+    }
+
+    if (!subtle && quality === 'perfect' && !poor) {
+      this.cameras.main.flash(this.lowPerfMode ? 80 : 120, 76, 214, 198);
+    } else if (!subtle && poor) {
+      this.cameras.main.shake(this.lowPerfMode ? 80 : 120, this.lowPerfMode ? 0.0038 : 0.006);
+    }
+    this.playMiniGameOutcomeTone(actionType, quality, inTrap);
+  }
+
+  private playDayMiniGameResultFeedback(
+    spot: ExplorationSpot,
+    quality: 'poor' | 'good' | 'perfect',
+    risky: boolean,
+    inTrap: boolean
+  ): void {
+    const theme = this.getDayMiniGameTheme(spot.actionType);
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const uiFont = this.getUIFontFamily();
+    const container = this.add.container(w * 0.5, h * 0.24).setDepth(3560).setScrollFactor(0);
+    const bg = this.add.rectangle(0, 0, 360, 74, theme.panelColor, 0.92).setStrokeStyle(2, theme.accent, 0.95);
+    const chip = this.add.rectangle(-140, 0, 58, 38, theme.accent, 0.28).setStrokeStyle(1, theme.accent, 1);
+    const icon = this.add.text(-140, 0, theme.icon, {
+      fontSize: '22px',
+      color: theme.accentText,
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    const qualityText = inTrap
+      ? '陷阱触发'
+      : quality === 'perfect' ? '完美锁定' : quality === 'good' ? '稳定锁定' : '锁定失误';
+    const riskText = risky ? '冒险' : '稳妥';
+    const title = this.add.text(-98, -11, `${spot.name} · ${qualityText}`, {
+      fontSize: '19px',
+      color: inTrap ? '#f87171' : quality === 'perfect' ? '#22c55e' : quality === 'good' ? '#38bdf8' : '#f59e0b',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0, 0.5);
+    const subtitle = this.add.text(-98, 14, `${theme.subtitle} · ${riskText}路线`, {
+      fontSize: '13px',
+      color: '#94a3b8',
+      fontFamily: uiFont,
+    }).setOrigin(0, 0.5);
+    container.add([bg, chip, icon, title, subtitle]);
+    container.setScale(0.86).setAlpha(0);
+    this.tweens.add({
+      targets: container,
+      alpha: 1,
+      scale: 1,
+      y: container.y - 8,
+      duration: 220,
+      ease: 'Back.easeOut',
+    });
+    this.tweens.add({
+      targets: container,
+      alpha: 0,
+      y: container.y - 34,
+      delay: 820,
+      duration: 280,
+      onComplete: () => container.destroy(),
+    });
+    this.playMiniGameOutcomeVfx(spot.actionType, quality, inTrap, this.player.x, this.player.y - 6, false);
+  }
+
+  private playExplorationPenaltyTone(actionType: ExplorationActionType): void {
+    try {
+      const manager: any = this.sound;
+      const ctx = manager?.context as AudioContext | undefined;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+      const t0 = ctx.currentTime + 0.005;
+      const master = ctx.createGain();
+      master.gain.value = this.mobileViewport ? 0.032 : 0.05;
+      master.connect(ctx.destination);
+
+      const pulse = (freq: number, start: number, duration: number, type: OscillatorType = 'square') => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t0 + start);
+        gain.gain.setValueAtTime(0.0001, t0 + start);
+        gain.gain.exponentialRampToValueAtTime(master.gain.value, t0 + start + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + start + duration);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(t0 + start);
+        osc.stop(t0 + start + duration);
+      };
+
+      if (actionType === 'fish' || actionType === 'swim') {
+        pulse(320, 0, 0.12, 'sine');
+        pulse(260, 0.08, 0.12, 'triangle');
+      } else if (actionType === 'hunt') {
+        pulse(190, 0, 0.1, 'sawtooth');
+        pulse(145, 0.09, 0.12, 'square');
+      } else if (actionType === 'scavenge') {
+        pulse(420, 0, 0.06, 'square');
+        pulse(240, 0.07, 0.11, 'triangle');
+      } else {
+        pulse(130, 0, 0.12, 'sawtooth');
+        pulse(98, 0.08, 0.16, 'triangle');
+      }
+
+      this.time.delayedCall(460, () => master.disconnect());
+    } catch {
+      // Ignore audio failures (autoplay policy / unsupported context)
+    }
+  }
+
+  private playExplorationFailureFeedback(
+    actionType: ExplorationActionType,
+    options?: { trapHit?: boolean; threatCount?: number; damageTaken?: number }
+  ): void {
+    const cx = this.player.x;
+    const cy = this.player.y - 6;
+    const maxParticles = this.ultraLowPerfMode ? 5 : this.lowPerfMode ? 8 : 12;
+    if (actionType === 'fish' || actionType === 'swim') {
+      for (let i = 0; i < maxParticles; i += 1) {
+        const ripple = this.add.circle(cx, cy, 8 + i * 1.1, 0x38bdf8, 0.26).setDepth(1082);
+        this.tweens.add({
+          targets: ripple,
+          scale: 1.8 + i * 0.05,
+          alpha: 0,
+          duration: 340 + i * 18,
+          onComplete: () => ripple.destroy(),
+        });
+      }
+      this.showFloatingText(cx, cy - 42, '河流失手：仅低收益', '#60a5fa', false);
+    } else if (actionType === 'hunt') {
+      const dmg = Math.max(0, Math.floor(options?.damageTaken || 0));
+      const slashCount = Math.max(3, maxParticles - 2);
+      for (let i = 0; i < slashCount; i += 1) {
+        const slash = this.add.rectangle(
+          cx + Phaser.Math.Between(-16, 16),
+          cy + Phaser.Math.Between(-10, 10),
+          Phaser.Math.Between(3, 6),
+          Phaser.Math.Between(14, 24),
+          0xef4444,
+          0.88
+        ).setDepth(1083);
+        slash.angle = Phaser.Math.Between(-40, 40);
+        this.tweens.add({
+          targets: slash,
+          y: slash.y - Phaser.Math.Between(10, 24),
+          alpha: 0,
+          duration: Phaser.Math.Between(220, 420),
+          onComplete: () => slash.destroy(),
+        });
+      }
+      this.showFloatingText(cx, cy - 48, `森林反噬：受伤-${dmg}`, '#ef4444', false);
+      this.cameras.main.shake(this.lowPerfMode ? 90 : 140, this.lowPerfMode ? 0.0042 : 0.0068);
+    } else if (actionType === 'scavenge') {
+      const trapHit = !!options?.trapHit;
+      const sparkColor = trapHit ? 0xef4444 : 0xf59e0b;
+      for (let i = 0; i < maxParticles; i += 1) {
+        const spark = this.add.rectangle(
+          cx + Phaser.Math.Between(-14, 14),
+          cy + Phaser.Math.Between(-14, 8),
+          Phaser.Math.Between(3, 6),
+          Phaser.Math.Between(3, 8),
+          sparkColor,
+          0.95
+        ).setDepth(1083);
+        this.tweens.add({
+          targets: spark,
+          x: spark.x + Phaser.Math.Between(-48, 48),
+          y: spark.y - Phaser.Math.Between(16, 54),
+          alpha: 0,
+          angle: Phaser.Math.Between(-140, 140),
+          duration: Phaser.Math.Between(220, 460),
+          onComplete: () => spark.destroy(),
+        });
+      }
+      this.cameras.main.flash(this.lowPerfMode ? 80 : 120, 245, 158, 11);
+      this.showFloatingText(cx, cy - 48, trapHit ? '城区陷阱：重度耐久磨损' : '城区事故：耐久磨损', '#f59e0b', false);
+    } else {
+      const threatCount = Math.max(1, Math.floor(options?.threatCount || 1));
+      const wave = this.add.circle(cx, cy, 22, 0xa78bfa, 0.24).setDepth(1082);
+      this.tweens.add({
+        targets: wave,
+        scale: 2.3,
+        alpha: 0,
+        duration: 420,
+        onComplete: () => wave.destroy(),
+      });
+      for (let i = 0; i < maxParticles; i += 1) {
+        const shard = this.add.rectangle(
+          cx + Phaser.Math.Between(-18, 18),
+          cy + Phaser.Math.Between(-12, 12),
+          Phaser.Math.Between(3, 5),
+          Phaser.Math.Between(6, 12),
+          0x8b5cf6,
+          0.88
+        ).setDepth(1083);
+        shard.angle = Phaser.Math.Between(0, 360);
+        this.tweens.add({
+          targets: shard,
+          x: shard.x + Phaser.Math.Between(-64, 64),
+          y: shard.y + Phaser.Math.Between(-36, 32),
+          alpha: 0,
+          duration: Phaser.Math.Between(260, 520),
+          onComplete: () => shard.destroy(),
+        });
+      }
+      this.showFloatingText(cx, cy - 50, `洞穴警报：围攻 +${threatCount}敌`, '#a78bfa', false);
+      this.cameras.main.shake(this.lowPerfMode ? 110 : 160, this.lowPerfMode ? 0.0045 : 0.007);
+    }
+    this.playExplorationPenaltyTone(actionType);
+  }
+
+  private openDayExplorationMiniGame(spot: ExplorationSpot): void {
+    if (this.daySpotMiniGameOpen || this.runEventOpen || this.dayChallengeSelectionOpen || this.isGameOver) return;
+    this.daySpotMiniGameOpen = true;
+    this.daySpotMiniGameSpot = spot;
+    this.daySpotMiniGameRisk = 'safe';
+    this.daySpotMiniGameCursor = 0.5;
+    this.daySpotMiniGameCursorDir = Math.random() < 0.5 ? -1 : 1;
+    if (spot.actionType === 'hunt') {
+      this.daySpotMiniGameRound = 1;
+      this.daySpotMiniGameRoundsTotal = this.getDayMiniGameRounds(spot.actionType);
+      this.daySpotMiniGameScore = 0;
+      this.daySpotMiniGameTrapHits = 0;
+      this.daySpotMiniGameMode = 'hunt';
+      this.daySpotMiniGameProfile = this.getDayMiniGameProfile(spot.actionType);
+      this.daySpotMiniGameContainer?.destroy();
+      this.daySpotMiniGameContainer = null;
+      this.setUISceneInputEnabled(false);
+      this.playerSystem?.setMovementEnabled(false);
+      this.openForestHuntMiniGame(spot);
+      return;
+    }
+    if (spot.actionType === 'scavenge') {
+      this.daySpotMiniGameRound = 1;
+      this.daySpotMiniGameRoundsTotal = 1;
+      this.daySpotMiniGameScore = 0;
+      this.daySpotMiniGameTrapHits = 0;
+      this.daySpotMiniGameMode = 'scavenge';
+      this.daySpotMiniGameProfile = this.getDayMiniGameProfile(spot.actionType);
+      this.daySpotMiniGameContainer?.destroy();
+      this.daySpotMiniGameContainer = null;
+      this.setUISceneInputEnabled(false);
+      this.playerSystem?.setMovementEnabled(false);
+      this.openCityScavengeMiniGame(spot);
+      return;
+    }
+    if (spot.actionType === 'cave_explore') {
+      this.daySpotMiniGameRound = 1;
+      this.daySpotMiniGameRoundsTotal = 1;
+      this.daySpotMiniGameScore = 0;
+      this.daySpotMiniGameTrapHits = 0;
+      this.daySpotMiniGameMode = 'cave_explore';
+      this.daySpotMiniGameProfile = this.getDayMiniGameProfile(spot.actionType);
+      this.daySpotMiniGameContainer?.destroy();
+      this.daySpotMiniGameContainer = null;
+      this.setUISceneInputEnabled(false);
+      this.playerSystem?.setMovementEnabled(false);
+      this.openCaveRaidMiniGame(spot);
+      return;
+    }
+    this.daySpotMiniGameRound = 1;
+    this.daySpotMiniGameRoundsTotal = this.getDayMiniGameRounds(spot.actionType);
+    this.daySpotMiniGameScore = 0;
+    this.daySpotMiniGameTrapHits = 0;
+    this.daySpotMiniGameRoundText = null;
+    this.daySpotMiniGameStageText = null;
+    this.daySpotMiniGameActionLabel = null;
+    this.initializeDayMiniGameState(spot);
+    this.setUISceneInputEnabled(false);
+    this.playerSystem?.setMovementEnabled(false);
+
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const uiFont = this.getUIFontFamily();
+    const theme = this.getDayMiniGameTheme(spot.actionType);
+    const container = this.add.container(0, 0).setDepth(3450).setScrollFactor(0);
+    this.daySpotMiniGameContainer?.destroy();
+    this.daySpotMiniGameContainer = container;
+
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, theme.overlayColor, theme.overlayAlpha).setScrollFactor(0);
+    container.add(overlay);
+    const panelW = Math.min(700, w - 64);
+    const panelH = Math.min(370, h - 96);
+    const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, theme.panelColor, 0.96)
+      .setScrollFactor(0)
+      .setStrokeStyle(2, theme.accent, 0.9);
+    container.add(panel);
+    this.createMiniGamePanelDecor(container, w / 2, h / 2, panelW, panelH, theme);
+    this.addMiniGameThemeIcon(container, w / 2 - panelW / 2 + 28, h / 2 - panelH / 2 + 26, theme, 20);
+    const topBand = this.add.rectangle(w / 2, h / 2 - panelH / 2 + 12, panelW - 12, 16, theme.accent, 0.15).setScrollFactor(0);
+    const topBandEdge = this.add.rectangle(w / 2, h / 2 - panelH / 2 + 21, panelW - 20, 1, theme.accent, 0.5).setScrollFactor(0);
+    container.add([topBand, topBandEdge]);
+
+    const usage = this.getActivityUsage(spot.actionType);
+    const limit = this.getActivityUsageLimit(spot.actionType);
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 20, `${theme.icon} 白天探索小游戏 · ${spot.name}`, {
+      fontSize: this.worldFs(23, 20),
+      color: '#e2e8f0',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0));
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 54, `按 [E] 或点“锁定”完成本回合 · 今日 ${usage}/${limit}`, {
+      fontSize: this.worldFs(14, 13),
+      color: '#94a3b8',
+      fontFamily: uiFont,
+    }).setOrigin(0.5, 0));
+    if (theme.protocolLevel > 0) {
+      container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 70, `协议联动：${theme.protocolLabel}`, {
+        fontSize: this.worldFs(12, 11),
+        color: this.toHexColor(theme.protocolColor),
+        fontFamily: uiFont,
+      }).setOrigin(0.5, 0));
+    }
+    const profile = this.daySpotMiniGameProfile || this.getDayMiniGameProfile(spot.actionType);
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + (theme.protocolLevel > 0 ? 92 : 78), `${profile.title}：${profile.hint}`, {
+      fontSize: this.worldFs(14, 13),
+      color: theme.accentText,
+      fontFamily: uiFont,
+    }).setOrigin(0.5, 0));
+    const bonus = this.getActiveDaySpotBonus(spot.id);
+    if (bonus) {
+      container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 102, `生活热点：${bonus.label} · ${bonus.summary}`, {
+        fontSize: this.worldFs(14, 13),
+        color: bonus.color,
+        fontFamily: uiFont,
+      }).setOrigin(0.5, 0));
+    }
+    this.daySpotMiniGameRoundText = this.add.text(w / 2, h / 2 - panelH / 2 + 124, '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#fbbf24',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0);
+    this.daySpotMiniGameStageText = this.add.text(w / 2, h / 2 + 88, '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#93c5fd',
+      fontFamily: uiFont,
+      align: 'center',
+    }).setOrigin(0.5, 0.5);
+    container.add([this.daySpotMiniGameRoundText, this.daySpotMiniGameStageText]);
+
+    const safeCard = this.add.rectangle(w / 2 - 128, h / 2 - 24, 220, 84, theme.safeCardColor, 0.92)
+      .setStrokeStyle(2, 0x38bdf8, 0.95)
+      .setInteractive({ useHandCursor: true });
+    const riskyCard = this.add.rectangle(w / 2 + 128, h / 2 - 24, 220, 84, theme.riskyCardColor, 0.88)
+      .setStrokeStyle(2, 0xfb7185, 0.7)
+      .setInteractive({ useHandCursor: true });
+    const safeText = this.add.text(w / 2 - 128, h / 2 - 24, '稳妥模式\n收益中等 · 风险低', {
+      fontSize: this.worldFs(14, 12),
+      color: '#bae6fd',
+      fontFamily: uiFont,
+      align: 'center',
+      lineSpacing: 3,
+    }).setOrigin(0.5);
+    const riskyText = this.add.text(w / 2 + 128, h / 2 - 24, '冒险模式\n收益更高 · 风险更高', {
+      fontSize: this.worldFs(14, 12),
+      color: '#fecdd3',
+      fontFamily: uiFont,
+      align: 'center',
+      lineSpacing: 3,
+    }).setOrigin(0.5);
+    container.add([safeCard, riskyCard, safeText, riskyText]);
+    this.addMiniGameRectSkin(container, safeCard, theme, 'safe', 0.9);
+    this.addMiniGameRectSkin(container, riskyCard, theme, 'risky', 0.9);
+
+    const refreshRiskVisual = () => {
+      const safeSelected = this.daySpotMiniGameRisk === 'safe';
+      safeCard.setStrokeStyle(2, theme.accent, safeSelected ? 1 : 0.6);
+      riskyCard.setStrokeStyle(2, 0xfb7185, safeSelected ? 0.7 : 1);
+      safeCard.setFillStyle(theme.safeCardColor, safeSelected ? 0.96 : 0.84);
+      riskyCard.setFillStyle(theme.riskyCardColor, safeSelected ? 0.82 : 0.96);
+    };
+    safeCard.on('pointerdown', () => {
+      if (!this.daySpotMiniGameOpen) return;
+      this.daySpotMiniGameRisk = 'safe';
+      refreshRiskVisual();
+      this.applyDayMiniGameRiskModifiers();
+    });
+    riskyCard.on('pointerdown', () => {
+      if (!this.daySpotMiniGameOpen) return;
+      this.daySpotMiniGameRisk = 'risky';
+      refreshRiskVisual();
+      this.applyDayMiniGameRiskModifiers();
+    });
+    refreshRiskVisual();
+
+    const barW = Math.min(520, panelW - 80);
+    const barH = 26;
+    const barX = w / 2 - barW / 2;
+    const barY = h / 2 + 54;
+    const barBg = this.add.rectangle(w / 2, barY, barW, barH, theme.arenaColor, 0.92).setStrokeStyle(2, theme.accent, 0.44);
+    const targetZone = this.add.rectangle(w / 2, barY, barW * this.daySpotMiniGameTargetWidth, barH - 6, profile.targetColor, 0.72);
+    const perfectZone = this.add.rectangle(w / 2, barY, barW * this.daySpotMiniGameTargetWidth * this.daySpotMiniGamePerfectRatio, barH - 6, profile.perfectColor, 0.95);
+    const trapZone = this.add.rectangle(w / 2, barY, barW * this.daySpotMiniGameTrapWidth, barH - 8, profile.trapColor, 0.74);
+    trapZone.setVisible(!!profile.hasTrap);
+    const cursor = this.add.rectangle(barX + barW * this.daySpotMiniGameCursor, barY, 8, barH + 8, 0xf8fafc, 1);
+    cursor.setStrokeStyle(1, theme.accent, 0.95);
+    cursor.setData('barMinX', barX);
+    cursor.setData('barMaxX', barX + barW);
+    cursor.setData('barH', barH);
+    this.daySpotMiniGameCursorVisual = cursor;
+    this.daySpotMiniGameTargetVisual = targetZone;
+    this.daySpotMiniGamePerfectVisual = perfectZone;
+    this.daySpotMiniGameTrapVisual = trapZone;
+    container.add([barBg, targetZone, perfectZone, trapZone, cursor]);
+    this.addMiniGameRectSkin(container, barBg, theme, 'bar', 0.86);
+    this.daySpotMiniGameTrapIcon = this.addMiniGameObjectIcon(container, trapZone.x, trapZone.y, theme, 'trap', 15, 0.9);
+    this.refreshDayMiniGameZoneVisuals();
+
+    const actionBtn = this.add.rectangle(w / 2, h / 2 + 122, 220, 52, theme.buttonColor, 0.95)
+      .setStrokeStyle(2, theme.accent, 0.92)
+      .setInteractive({ useHandCursor: true });
+    const actionLabel = this.add.text(w / 2, h / 2 + 122, '锁定 [E]', {
+      fontSize: this.worldFs(18, 16),
+      color: theme.buttonTextColor,
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.daySpotMiniGameActionLabel = actionLabel;
+    actionBtn.on('pointerdown', () => this.resolveDayExplorationMiniGame());
+    container.add([actionBtn, actionLabel]);
+    const actionBtnSkin = this.addMiniGameRectSkin(container, actionBtn, theme, 'button', 0.92);
+    this.bindMiniGameButtonInteraction(actionBtn, actionBtnSkin, theme, actionLabel);
+
+    const closeBtn = this.add.text(w / 2 + panelW / 2 - 20, h / 2 - panelH / 2 + 14, '✕', {
+      fontSize: this.worldFs(20, 18),
+      color: '#f87171',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerdown', () => this.closeDayExplorationMiniGame());
+    container.add(closeBtn);
+    this.refreshDayMiniGameRoundDisplay();
+  }
+
+  private openForestHuntMiniGame(spot: ExplorationSpot): void {
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const uiFont = this.getUIFontFamily();
+    const theme = this.getDayMiniGameTheme('hunt');
+    const container = this.add.container(0, 0).setDepth(3450).setScrollFactor(0);
+    this.daySpotMiniGameContainer?.destroy();
+    this.daySpotMiniGameContainer = container;
+
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, theme.overlayColor, theme.overlayAlpha).setScrollFactor(0);
+    container.add(overlay);
+    const panelW = Math.min(760, w - 50);
+    const panelH = Math.min(452, h - 56);
+    const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, theme.panelColor, 0.97)
+      .setScrollFactor(0)
+      .setStrokeStyle(2, theme.accent, 0.92);
+    container.add(panel);
+    this.createMiniGamePanelDecor(container, w / 2, h / 2, panelW, panelH, theme);
+    this.addMiniGameThemeIcon(container, w / 2 - panelW / 2 + 28, h / 2 - panelH / 2 + 28, theme, 20);
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 16, `${theme.icon} 森林追踪狩猎 · ${spot.name}`, {
+      fontSize: this.worldFs(24, 20),
+      color: '#e2e8f0',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0));
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 48, '潜行追踪猎迹，抓住爆发窗口完成致命一击', {
+      fontSize: this.worldFs(14, 13),
+      color: '#94a3b8',
+      fontFamily: uiFont,
+    }).setOrigin(0.5, 0));
+    if (theme.protocolLevel > 0) {
+      container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 66, `协议联动：${theme.protocolLabel}`, {
+        fontSize: this.worldFs(12, 11),
+        color: this.toHexColor(theme.protocolColor),
+        fontFamily: uiFont,
+      }).setOrigin(0.5, 0));
+    }
+
+    this.daySpotMiniGameRoundText = this.add.text(w / 2, h / 2 - panelH / 2 + (theme.protocolLevel > 0 ? 88 : 72), '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#fbbf24',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0);
+    container.add(this.daySpotMiniGameRoundText);
+
+    const safeCard = this.add.rectangle(w / 2 - 142, h / 2 - panelH / 2 + 116, 230, 64, theme.safeCardColor, 0.94)
+      .setStrokeStyle(2, 0x4ade80, 0.92)
+      .setInteractive({ useHandCursor: true });
+    const riskyCard = this.add.rectangle(w / 2 + 142, h / 2 - panelH / 2 + 116, 230, 64, theme.riskyCardColor, 0.9)
+      .setStrokeStyle(2, 0xfb7185, 0.76)
+      .setInteractive({ useHandCursor: true });
+    const safeText = this.add.text(w / 2 - 142, h / 2 - panelH / 2 + 116, '稳妥潜行\n视野更松 · 爆发窗口更长', {
+      fontSize: this.worldFs(13, 12),
+      color: '#bbf7d0',
+      fontFamily: uiFont,
+      align: 'center',
+      lineSpacing: 2,
+    }).setOrigin(0.5);
+    const riskyText = this.add.text(w / 2 + 142, h / 2 - panelH / 2 + 116, '冒险猎杀\n视野更严 · 收益更高', {
+      fontSize: this.worldFs(13, 12),
+      color: '#fecdd3',
+      fontFamily: uiFont,
+      align: 'center',
+      lineSpacing: 2,
+    }).setOrigin(0.5);
+    container.add([safeCard, riskyCard, safeText, riskyText]);
+    this.addMiniGameRectSkin(container, safeCard, theme, 'safe', 0.9);
+    this.addMiniGameRectSkin(container, riskyCard, theme, 'risky', 0.9);
+
+    const arenaW = Math.min(panelW - 60, 700);
+    const arenaH = Math.min(198, panelH - 220);
+    const arenaX = w / 2 - arenaW / 2;
+    const arenaY = h / 2 - 24;
+    const arenaBg = this.add.rectangle(w / 2, arenaY + arenaH / 2, arenaW, arenaH, theme.arenaColor, 0.98)
+      .setStrokeStyle(2, theme.accent, 0.42);
+    const groundY = arenaY + arenaH - 14;
+    const ground = this.add.rectangle(w / 2, groundY, arenaW - 12, 6, 0x475569, 1);
+    const bushL = this.add.rectangle(arenaX + 70, groundY - 10, 32, 12, 0x14532d, 0.8).setStrokeStyle(1, 0x22c55e, 0.6);
+    const bushR = this.add.rectangle(arenaX + arenaW - 76, groundY - 10, 38, 12, 0x14532d, 0.8).setStrokeStyle(1, 0x22c55e, 0.6);
+    container.add([arenaBg, ground, bushL, bushR]);
+    this.addMiniGameRectSkin(container, arenaBg, theme, 'tile', 0.26);
+
+    this.forestHuntArena = new Phaser.Geom.Rectangle(arenaX + 8, arenaY + 10, arenaW - 16, arenaH - 20);
+    this.forestHuntGroundY = groundY;
+    this.forestHuntPlayerSprite = this.add.rectangle(
+      this.forestHuntArena.x + 24,
+      this.forestHuntGroundY - 13,
+      16,
+      26,
+      0x93c5fd,
+      0.04
+    ).setStrokeStyle(1, 0xe2e8f0, 0.95);
+    this.forestHuntPreySprite = this.add.rectangle(
+      this.forestHuntArena.right - 36,
+      this.forestHuntGroundY - 12,
+      18,
+      24,
+      0x7f1d1d,
+      0.04
+    ).setStrokeStyle(1, 0xfca5a5, 0.9);
+    this.forestHuntSightVisual = this.add.rectangle(
+      this.forestHuntPreySprite.x - 42,
+      this.forestHuntGroundY - 17,
+      148,
+      46,
+      0xf97316,
+      0.08
+    ).setStrokeStyle(1, 0xfb7185, 0.65);
+    container.add([this.forestHuntSightVisual, this.forestHuntPreySprite, this.forestHuntPlayerSprite]);
+    this.forestHuntPlayerIcon = this.addMiniGameObjectIcon(
+      container,
+      this.forestHuntPlayerSprite.x,
+      this.forestHuntPlayerSprite.y,
+      theme,
+      'player',
+      22,
+      0.95
+    );
+    this.forestHuntPreyIcon = this.addMiniGameObjectIcon(
+      container,
+      this.forestHuntPreySprite.x,
+      this.forestHuntPreySprite.y,
+      theme,
+      'enemy',
+      23,
+      0.95
+    );
+    this.forestHuntHintIcon = this.addMiniGameObjectIcon(
+      container,
+      this.forestHuntSightVisual.x,
+      this.forestHuntSightVisual.y - 18,
+      theme,
+      'hint',
+      18,
+      0.85
+    );
+
+    const barW = Math.min(arenaW - 44, 560);
+    const barH = 20;
+    const barX = w / 2 - barW / 2;
+    const barY = arenaY + arenaH + 12;
+    const barBg = this.add.rectangle(w / 2, barY, barW, barH, theme.arenaColor, 0.92).setStrokeStyle(2, theme.accent, 0.45);
+    const targetZone = this.add.rectangle(w / 2, barY, barW * 0.22, barH - 4, 0x16a34a, 0.72);
+    const perfectZone = this.add.rectangle(w / 2, barY, barW * 0.22 * 0.42, barH - 4, 0x22c55e, 0.95);
+    const cursor = this.add.rectangle(barX + barW * 0.5, barY, 8, barH + 6, 0xf8fafc, 1);
+    cursor.setStrokeStyle(1, 0x4ade80, 0.95);
+    cursor.setData('barMinX', barX);
+    cursor.setData('barMaxX', barX + barW);
+    cursor.setData('barH', barH);
+    this.daySpotMiniGameCursorVisual = cursor;
+    this.daySpotMiniGameTargetVisual = targetZone;
+    this.daySpotMiniGamePerfectVisual = perfectZone;
+    this.daySpotMiniGameTrapVisual = null;
+    container.add([barBg, targetZone, perfectZone, cursor]);
+    this.addMiniGameRectSkin(container, barBg, theme, 'bar', 0.86);
+
+    this.forestHuntStatusText = this.add.text(arenaX + 8, barY + 18, '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#cbd5e1',
+      fontFamily: uiFont,
+    });
+    this.forestHuntPhaseText = this.add.text(arenaX + 8, arenaY - 18, '', {
+      fontSize: this.worldFs(14, 12),
+      color: '#bbf7d0',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    });
+    this.forestHuntAlertText = this.add.text(arenaX + arenaW - 8, arenaY - 18, '', {
+      fontSize: this.worldFs(14, 12),
+      color: '#fbbf24',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(1, 0);
+    this.forestHuntActionHintText = this.add.text(w / 2, barY + 62, '', {
+      fontSize: this.worldFs(12, 11),
+      color: '#67e8f9',
+      fontFamily: uiFont,
+      align: 'center',
+    }).setOrigin(0.5);
+    this.daySpotMiniGameStageText = this.add.text(w / 2, barY + 42, '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#93c5fd',
+      fontFamily: uiFont,
+      align: 'center',
+    }).setOrigin(0.5);
+    container.add([
+      this.forestHuntStatusText,
+      this.forestHuntPhaseText,
+      this.forestHuntAlertText,
+      this.daySpotMiniGameStageText,
+      this.forestHuntActionHintText,
+    ]);
+
+    const actionBtn = this.add.rectangle(w / 2, h / 2 + panelH / 2 - 30, 278, 44, theme.buttonColor, 0.98)
+      .setStrokeStyle(2, theme.accent, 0.95)
+      .setInteractive({ useHandCursor: true });
+    this.daySpotMiniGameActionLabel = this.add.text(w / 2, h / 2 + panelH / 2 - 30, '屏息 [E]', {
+      fontSize: this.worldFs(17, 15),
+      color: theme.buttonTextColor,
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    actionBtn.on('pointerdown', () => this.triggerForestHuntAction());
+    container.add([actionBtn, this.daySpotMiniGameActionLabel]);
+    const actionBtnSkin = this.addMiniGameRectSkin(container, actionBtn, theme, 'button', 0.92);
+    this.bindMiniGameButtonInteraction(actionBtn, actionBtnSkin, theme, this.daySpotMiniGameActionLabel);
+
+    const closeBtn = this.add.text(w / 2 + panelW / 2 - 18, h / 2 - panelH / 2 + 12, '✕', {
+      fontSize: this.worldFs(20, 18),
+      color: '#f87171',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerdown', () => this.resolveForestHuntMiniGame('poor', true));
+    container.add(closeBtn);
+
+    const refreshRiskVisual = () => {
+      const safeSelected = this.daySpotMiniGameRisk === 'safe';
+      safeCard.setStrokeStyle(2, 0x4ade80, safeSelected ? 1 : 0.62);
+      riskyCard.setStrokeStyle(2, 0xfb7185, safeSelected ? 0.68 : 1);
+      safeCard.setFillStyle(theme.safeCardColor, safeSelected ? 0.97 : 0.84);
+      riskyCard.setFillStyle(theme.riskyCardColor, safeSelected ? 0.82 : 0.96);
+    };
+    safeCard.on('pointerdown', () => {
+      if (!this.forestHuntMiniGameActive) return;
+      this.daySpotMiniGameRisk = 'safe';
+      this.applyForestHuntRiskPreset();
+      refreshRiskVisual();
+    });
+    riskyCard.on('pointerdown', () => {
+      if (!this.forestHuntMiniGameActive) return;
+      this.daySpotMiniGameRisk = 'risky';
+      this.applyForestHuntRiskPreset();
+      refreshRiskVisual();
+    });
+
+    this.forestHuntMiniGameActive = true;
+    this.forestHuntResultResolved = false;
+    this.forestHuntPhase = 'stealth';
+    this.forestHuntPhaseElapsedMs = 0;
+    this.forestHuntRoundStealthSuccess = false;
+    this.forestHuntAlertMeter = 0;
+    this.forestHuntDetections = 0;
+    this.forestHuntBreathCooldownUntil = 0;
+    this.forestHuntMobileMoveX = 0;
+    this.forestHuntBurstCursor = 0.5;
+    this.forestHuntBurstCursorDir = Math.random() < 0.5 ? -1 : 1;
+    this.forestHuntBurstTargetCenter = 0.5;
+    this.forestHuntBurstTargetDir = Math.random() < 0.5 ? -1 : 1;
+    this.applyForestHuntRiskPreset();
+    refreshRiskVisual();
+    this.startForestHuntRound();
+  }
+
+  private applyForestHuntRiskPreset(): void {
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    if (risky) {
+      this.forestHuntStealthDurationMs = 4300;
+      this.forestHuntBurstDurationMs = 1900;
+      this.forestHuntPlayerSpeed = 0.286;
+      this.forestHuntPreyVx = 0.094;
+      this.forestHuntBurstCursorSpeed = 0.00128;
+      this.forestHuntBurstTargetSpeed = 0.00066;
+      this.forestHuntBurstTargetWidth = 0.18;
+      this.forestHuntBurstPerfectRatio = 0.34;
+    } else {
+      this.forestHuntStealthDurationMs = 5200;
+      this.forestHuntBurstDurationMs = 2400;
+      this.forestHuntPlayerSpeed = 0.25;
+      this.forestHuntPreyVx = 0.082;
+      this.forestHuntBurstCursorSpeed = 0.00106;
+      this.forestHuntBurstTargetSpeed = 0.00052;
+      this.forestHuntBurstTargetWidth = 0.22;
+      this.forestHuntBurstPerfectRatio = 0.42;
+    }
+    this.refreshForestHuntBurstVisuals();
+  }
+
+  private refreshForestHuntBurstVisuals(): void {
+    const cursor = this.daySpotMiniGameCursorVisual;
+    const target = this.daySpotMiniGameTargetVisual;
+    const perfect = this.daySpotMiniGamePerfectVisual;
+    if (!cursor || !target || !perfect) return;
+    const barMinX = Number(cursor.getData('barMinX') || 0);
+    const barMaxX = Number(cursor.getData('barMaxX') || 0);
+    const barW = Math.max(1, barMaxX - barMinX);
+    const burstMode = this.forestHuntPhase === 'burst';
+
+    target.width = barW * this.forestHuntBurstTargetWidth;
+    target.x = barMinX + barW * this.forestHuntBurstTargetCenter;
+    perfect.width = target.width * this.forestHuntBurstPerfectRatio;
+    perfect.x = target.x;
+    cursor.x = barMinX + barW * this.forestHuntBurstCursor;
+
+    cursor.setVisible(burstMode);
+    target.setVisible(burstMode);
+    perfect.setVisible(burstMode);
+  }
+
+  private startForestHuntRound(): void {
+    if (!this.forestHuntMiniGameActive || !this.forestHuntArena) return;
+    this.forestHuntPhase = 'stealth';
+    this.forestHuntPhaseElapsedMs = 0;
+    this.forestHuntRoundStealthSuccess = false;
+    this.forestHuntAlertMeter = Math.max(0, this.forestHuntAlertMeter - 28);
+    this.forestHuntBurstCursor = Phaser.Math.FloatBetween(0.08, 0.92);
+    this.forestHuntBurstCursorDir = Math.random() < 0.5 ? -1 : 1;
+    this.forestHuntBurstTargetCenter = Phaser.Math.FloatBetween(0.3, 0.7);
+    this.forestHuntBurstTargetDir = Math.random() < 0.5 ? -1 : 1;
+    this.spawnForestHuntClue();
+    this.refreshDayMiniGameRoundDisplay();
+    if (this.daySpotMiniGameStageText) {
+      this.daySpotMiniGameStageText.setText('潜行阶段：靠近猎迹，避免在视野锥内移动').setColor('#86efac');
+    }
+    if (this.forestHuntActionHintText) {
+      this.forestHuntActionHintText.setText('左右移动追踪 · [E] 屏息可压低警觉').setColor('#67e8f9');
+    }
+    if (this.forestHuntStatusText) {
+      this.forestHuntStatusText.setText('追踪猎迹中…').setColor('#cbd5e1');
+    }
+    this.refreshForestHuntBurstVisuals();
+  }
+
+  private spawnForestHuntClue(): void {
+    if (!this.daySpotMiniGameContainer || !this.forestHuntArena) return;
+    if (this.forestHuntClue) {
+      this.forestHuntClue.sprite.destroy();
+      this.forestHuntClue.pulse.destroy();
+      this.forestHuntClue = null;
+    }
+    const x = Phaser.Math.Between(
+      Math.floor(this.forestHuntArena.x + 24),
+      Math.floor(this.forestHuntArena.right - 24)
+    );
+    const y = this.forestHuntGroundY - Phaser.Math.Between(18, 44);
+    const theme = this.getDayMiniGameTheme('hunt');
+    const sprite = this.add.image(x, y, this.getMiniGameObjectAtlasKey(theme), 'loot').setDisplaySize(16, 16).setAlpha(0.95);
+    const pulse = this.add.ellipse(x, y, 24, 16, 0x22c55e, 0.22).setStrokeStyle(1, 0x4ade80, 0.5);
+    this.daySpotMiniGameContainer.add([pulse, sprite]);
+    this.forestHuntClue = { sprite, pulse };
+  }
+
+  private enterForestHuntBurst(stealthSuccess: boolean, reason: string): void {
+    if (!this.forestHuntMiniGameActive) return;
+    this.forestHuntPhase = 'burst';
+    this.forestHuntPhaseElapsedMs = 0;
+    this.forestHuntRoundStealthSuccess = stealthSuccess;
+    if (this.forestHuntClue) {
+      this.forestHuntClue.sprite.destroy();
+      this.forestHuntClue.pulse.destroy();
+      this.forestHuntClue = null;
+    }
+    if (this.forestHuntStatusText) {
+      this.forestHuntStatusText.setText(reason).setColor(stealthSuccess ? '#4ade80' : '#f59e0b');
+    }
+    if (this.daySpotMiniGameStageText) {
+      this.daySpotMiniGameStageText.setText('爆发阶段：在绿色窗口按 [E/Space] 开火').setColor('#a7f3d0');
+    }
+    if (this.forestHuntActionHintText) {
+      this.forestHuntActionHintText.setText('锁定目标后立刻开火，拖延会自动失手').setColor('#fbbf24');
+    }
+    this.refreshForestHuntBurstVisuals();
+  }
+
+  private triggerForestHuntAction(): void {
+    if (!this.forestHuntMiniGameActive) return;
+    if (this.forestHuntPhase === 'burst') {
+      this.resolveForestHuntBurstShot(false);
+      return;
+    }
+    const now = this.time.now;
+    if (now < this.forestHuntBreathCooldownUntil) return;
+    this.forestHuntBreathCooldownUntil = now + 900;
+    this.forestHuntAlertMeter = Math.max(0, this.forestHuntAlertMeter - 20);
+    if (this.daySpotMiniGameStageText) {
+      this.daySpotMiniGameStageText.setText('屏息成功：警觉下降').setColor('#67e8f9');
+    }
+  }
+
+  private resolveForestHuntBurstShot(autoMiss: boolean): void {
+    if (!this.forestHuntMiniGameActive || this.forestHuntPhase !== 'burst') return;
+    const targetDist = Math.abs(this.forestHuntBurstCursor - this.forestHuntBurstTargetCenter);
+    const targetHalf = this.forestHuntBurstTargetWidth * 0.5;
+    const perfectHalf = targetHalf * this.forestHuntBurstPerfectRatio;
+    let shotQuality: 'poor' | 'good' | 'perfect' = autoMiss
+      ? 'poor'
+      : targetDist <= perfectHalf
+        ? 'perfect'
+        : targetDist <= targetHalf
+          ? 'good'
+          : 'poor';
+    if (!this.forestHuntRoundStealthSuccess) {
+      shotQuality = shotQuality === 'perfect' ? 'good' : 'poor';
+    }
+    const roundPoints = shotQuality === 'perfect' ? 2 : shotQuality === 'good' ? 1 : 0;
+    this.daySpotMiniGameScore += roundPoints;
+    if (shotQuality === 'poor' || !this.forestHuntRoundStealthSuccess) {
+      this.daySpotMiniGameTrapHits += 1;
+    }
+    if (this.daySpotMiniGameStageText) {
+      const shotText = shotQuality === 'perfect' ? '爆发命中：完美 +2' : shotQuality === 'good' ? '爆发命中：良好 +1' : '爆发失手 +0';
+      this.daySpotMiniGameStageText.setText(shotText).setColor(
+        shotQuality === 'perfect' ? '#4ade80' : shotQuality === 'good' ? '#38bdf8' : '#f87171'
+      );
+    }
+    this.playMiniGameOutcomeVfx(
+      'hunt',
+      shotQuality,
+      shotQuality === 'poor',
+      this.forestHuntPreySprite?.x ?? this.player.x,
+      this.forestHuntPreySprite?.y ?? (this.player.y - 16),
+      true
+    );
+    const flashColor = shotQuality === 'perfect' ? 0x67e8f9 : shotQuality === 'good' ? 0x93c5fd : 0xf87171;
+    const flashAlpha = shotQuality === 'poor' ? 0.3 : 0.45;
+    const flashRadius = shotQuality === 'perfect' ? 34 : shotQuality === 'good' ? 26 : 20;
+    if (this.forestHuntPreySprite) {
+      const flash = this.add.circle(this.forestHuntPreySprite.x, this.forestHuntPreySprite.y, flashRadius, flashColor, flashAlpha).setDepth(3475);
+      this.daySpotMiniGameContainer?.add(flash);
+      this.tweens.add({
+        targets: flash,
+        scale: 1.6,
+        alpha: 0,
+        duration: shotQuality === 'perfect' ? 260 : 180,
+        onComplete: () => flash.destroy(),
+      });
+    }
+    if (this.daySpotMiniGameRound < this.daySpotMiniGameRoundsTotal) {
+      this.daySpotMiniGameRound += 1;
+      this.startForestHuntRound();
+      return;
+    }
+
+    const maxPoints = Math.max(1, this.daySpotMiniGameRoundsTotal * 2);
+    const netScore = this.daySpotMiniGameScore - this.forestHuntDetections * 0.9 - this.daySpotMiniGameTrapHits * 0.45;
+    const scoreRatio = Phaser.Math.Clamp(netScore / maxPoints, 0, 1);
+    let finalQuality: 'poor' | 'good' | 'perfect' = scoreRatio >= 0.78
+      ? 'perfect'
+      : scoreRatio >= 0.46
+        ? 'good'
+        : 'poor';
+    if (this.forestHuntDetections >= 2 || this.daySpotMiniGameTrapHits >= Math.ceil(this.daySpotMiniGameRoundsTotal * 0.7)) {
+      finalQuality = 'poor';
+    }
+    this.resolveForestHuntMiniGame(finalQuality, false);
+  }
+
+  private playForestHuntDetectionFeedback(): void {
+    const prey = this.forestHuntPreySprite;
+    if (!prey || !this.daySpotMiniGameContainer) return;
+    const pulse = this.add.circle(prey.x, prey.y, 30, 0xef4444, 0.34).setDepth(3475);
+    this.daySpotMiniGameContainer.add(pulse);
+    this.tweens.add({
+      targets: pulse,
+      scale: 1.9,
+      alpha: 0,
+      duration: 240,
+      onComplete: () => pulse.destroy(),
+    });
+    this.playMiniGameOutcomeVfx('hunt', 'poor', true, prey.x, prey.y - 6, true);
+    this.cameras.main.shake(this.lowPerfMode ? 70 : 110, this.lowPerfMode ? 0.0028 : 0.0048);
+    this.showFloatingText(prey.x, prey.y - 26, '暴露! 猎物警觉', '#f87171', true);
+  }
+
+  private updateForestHuntMiniGame(delta: number): void {
+    if (!this.forestHuntMiniGameActive || !this.forestHuntArena || !this.forestHuntPlayerSprite || !this.forestHuntPreySprite || !this.forestHuntSightVisual) return;
+    this.forestHuntPhaseElapsedMs += delta;
+    let moveX = 0;
+    if (this.cursors?.left?.isDown || this.moveLeftKey?.isDown) moveX -= 1;
+    if (this.cursors?.right?.isDown || this.moveRightKey?.isDown) moveX += 1;
+    if (Math.abs(moveX) < 0.01 && Math.abs(this.forestHuntMobileMoveX) > 0.12) {
+      moveX = Phaser.Math.Clamp(this.forestHuntMobileMoveX, -1, 1);
+    }
+    this.forestHuntPlayerSprite.x = Phaser.Math.Clamp(
+      this.forestHuntPlayerSprite.x + moveX * this.forestHuntPlayerSpeed * delta,
+      this.forestHuntArena.x + 10,
+      this.forestHuntArena.right - 10
+    );
+
+    this.forestHuntPreySprite.x += this.forestHuntPreyVx * delta;
+    if (this.forestHuntPreySprite.x <= this.forestHuntArena.x + 24) {
+      this.forestHuntPreySprite.x = this.forestHuntArena.x + 24;
+      this.forestHuntPreyVx = Math.abs(this.forestHuntPreyVx);
+    } else if (this.forestHuntPreySprite.x >= this.forestHuntArena.right - 24) {
+      this.forestHuntPreySprite.x = this.forestHuntArena.right - 24;
+      this.forestHuntPreyVx = -Math.abs(this.forestHuntPreyVx);
+    }
+    this.forestHuntPreyFacing = this.forestHuntPreyVx >= 0 ? 1 : -1;
+    this.forestHuntPreySprite.y = this.forestHuntGroundY - 12 + Math.sin(this.time.now * 0.006) * 3;
+    if (this.forestHuntPlayerIcon?.active) {
+      this.forestHuntPlayerIcon.setPosition(this.forestHuntPlayerSprite.x, this.forestHuntPlayerSprite.y);
+    }
+    if (this.forestHuntPreyIcon?.active) {
+      this.forestHuntPreyIcon.setPosition(this.forestHuntPreySprite.x, this.forestHuntPreySprite.y);
+      this.forestHuntPreyIcon.setFlipX(this.forestHuntPreyFacing < 0);
+    }
+    const coneW = this.daySpotMiniGameRisk === 'risky' ? 164 : 146;
+    const coneH = this.daySpotMiniGameRisk === 'risky' ? 48 : 52;
+    this.forestHuntSightVisual.width = coneW;
+    this.forestHuntSightVisual.height = coneH;
+    this.forestHuntSightVisual.x = this.forestHuntPreySprite.x + this.forestHuntPreyFacing * (coneW * 0.46);
+    this.forestHuntSightVisual.y = this.forestHuntGroundY - 17;
+    if (this.forestHuntHintIcon?.active) {
+      this.forestHuntHintIcon.setPosition(this.forestHuntSightVisual.x, this.forestHuntSightVisual.y - coneH * 0.45);
+    }
+
+    if (this.forestHuntClue) {
+      this.forestHuntClue.pulse.setAlpha(0.18 + 0.12 * Math.abs(Math.sin(this.time.now * 0.01)));
+      this.forestHuntClue.pulse.setScale(1 + 0.12 * Math.abs(Math.sin(this.time.now * 0.012)));
+    }
+
+    if (this.forestHuntPhase === 'stealth') {
+      const remainMs = Math.max(0, this.forestHuntStealthDurationMs - this.forestHuntPhaseElapsedMs);
+      if (this.forestHuntPhaseText) {
+        this.forestHuntPhaseText.setText(`潜行追踪 · ${Math.ceil(remainMs / 1000)}s`).setColor('#4ade80');
+      }
+      if (this.daySpotMiniGameActionLabel) {
+        if (this.time.now < this.forestHuntBreathCooldownUntil) {
+          const cd = Math.max(0, (this.forestHuntBreathCooldownUntil - this.time.now) / 1000);
+          this.daySpotMiniGameActionLabel.setText(`屏息冷却 ${cd.toFixed(1)}s`);
+        } else {
+          this.daySpotMiniGameActionLabel.setText('屏息 [E] · 潜行阶段');
+        }
+      }
+      const inSight = Math.abs(this.forestHuntPlayerSprite.x - this.forestHuntSightVisual.x) <= this.forestHuntSightVisual.width * 0.5
+        && Math.abs(this.forestHuntPlayerSprite.y - this.forestHuntSightVisual.y) <= this.forestHuntSightVisual.height * 0.5;
+      if (inSight && Math.abs(moveX) > 0.2) {
+        this.forestHuntAlertMeter = Math.min(100, this.forestHuntAlertMeter + (this.daySpotMiniGameRisk === 'risky' ? 0.076 : 0.058) * delta);
+      } else {
+        this.forestHuntAlertMeter = Math.max(0, this.forestHuntAlertMeter - 0.032 * delta);
+      }
+      if (this.forestHuntAlertText) {
+        this.forestHuntAlertText.setText(`警觉 ${Math.round(this.forestHuntAlertMeter)} · 暴露${this.forestHuntDetections}`);
+      }
+
+      if (this.forestHuntClue) {
+        const dx = this.forestHuntPlayerSprite.x - this.forestHuntClue.sprite.x;
+        const dy = this.forestHuntPlayerSprite.y - this.forestHuntClue.sprite.y;
+        if (dx * dx + dy * dy <= 20 * 20) {
+          this.enterForestHuntBurst(true, '追踪成功：爆发窗口开启');
+          return;
+        }
+      }
+      if (this.forestHuntAlertMeter >= 100) {
+        this.forestHuntDetections += 1;
+        this.daySpotMiniGameTrapHits += 1;
+        this.forestHuntAlertMeter = 52;
+        this.playForestHuntDetectionFeedback();
+        this.enterForestHuntBurst(false, '被猎物察觉：仓促爆发');
+        return;
+      }
+      if (this.forestHuntPhaseElapsedMs >= this.forestHuntStealthDurationMs) {
+        this.daySpotMiniGameTrapHits += 1;
+        this.enterForestHuntBurst(false, '追踪超时：爆发质量下降');
+        return;
+      }
+      this.refreshForestHuntBurstVisuals();
+      return;
+    }
+
+    const remainBurstMs = Math.max(0, this.forestHuntBurstDurationMs - this.forestHuntPhaseElapsedMs);
+    if (this.forestHuntPhaseText) {
+      this.forestHuntPhaseText.setText(`爆发射击 · ${Math.ceil(remainBurstMs / 1000)}s`).setColor('#fbbf24');
+    }
+    if (this.daySpotMiniGameActionLabel) {
+      this.daySpotMiniGameActionLabel.setText('开火 [E / Space] · 爆发阶段');
+    }
+    if (this.forestHuntAlertText) {
+      this.forestHuntAlertText.setText(`警觉 ${Math.round(this.forestHuntAlertMeter)} · 暴露${this.forestHuntDetections}`);
+    }
+    this.forestHuntBurstCursor += this.forestHuntBurstCursorDir * this.forestHuntBurstCursorSpeed * delta;
+    if (this.forestHuntBurstCursor <= 0) {
+      this.forestHuntBurstCursor = 0;
+      this.forestHuntBurstCursorDir = 1;
+    } else if (this.forestHuntBurstCursor >= 1) {
+      this.forestHuntBurstCursor = 1;
+      this.forestHuntBurstCursorDir = -1;
+    }
+    this.forestHuntBurstTargetCenter += this.forestHuntBurstTargetDir * this.forestHuntBurstTargetSpeed * delta;
+    if (this.forestHuntBurstTargetCenter <= 0.18) {
+      this.forestHuntBurstTargetCenter = 0.18;
+      this.forestHuntBurstTargetDir = 1;
+    } else if (this.forestHuntBurstTargetCenter >= 0.82) {
+      this.forestHuntBurstTargetCenter = 0.82;
+      this.forestHuntBurstTargetDir = -1;
+    }
+    this.refreshForestHuntBurstVisuals();
+    if (this.forestHuntPhaseElapsedMs >= this.forestHuntBurstDurationMs) {
+      this.resolveForestHuntBurstShot(true);
+    }
+  }
+
+  private resolveForestHuntMiniGame(
+    finalQuality: 'poor' | 'good' | 'perfect',
+    forcedRetreat: boolean
+  ): void {
+    if (!this.forestHuntMiniGameActive || this.forestHuntResultResolved || !this.daySpotMiniGameSpot) return;
+    this.forestHuntResultResolved = true;
+    const spot = this.daySpotMiniGameSpot;
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    const trapHit = this.daySpotMiniGameTrapHits > 0 || this.forestHuntDetections > 0 || forcedRetreat;
     const stationed = gameState.data.companions.filter((c) => c.status === 'base').length;
     const active = this.getExplorationSpotResidentCount(spot.id);
     const usageLimit = this.getActivityUsageLimit(spot.actionType);
     const used = this.getActivityUsage(spot.actionType);
-    if (stationed <= 0) {
-      this.showFloatingText(this.player.x, this.player.y - 24, '没有驻守伙伴，无法自动探索', '#f59e0b', false);
+    this.closeDayExplorationMiniGame();
+    if (used >= usageLimit || gameState.data.isNight) return;
+    this.playDayMiniGameResultFeedback(spot, forcedRetreat ? 'poor' : finalQuality, risky, trapHit);
+    this.executeActiveExploration(spot, stationed, active, used, usageLimit, {
+      quality: forcedRetreat ? 'poor' : finalQuality,
+      risky,
+      trapHit,
+    });
+  }
+
+  private openCityScavengeMiniGame(spot: ExplorationSpot): void {
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const uiFont = this.getUIFontFamily();
+    const theme = this.getDayMiniGameTheme('scavenge');
+    const container = this.add.container(0, 0).setDepth(3450).setScrollFactor(0);
+    this.daySpotMiniGameContainer?.destroy();
+    this.daySpotMiniGameContainer = container;
+
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, theme.overlayColor, theme.overlayAlpha).setScrollFactor(0);
+    container.add(overlay);
+    const panelW = Math.min(820, w - 40);
+    const panelH = Math.min(500, h - 40);
+    const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, theme.panelColor, 0.97)
+      .setScrollFactor(0)
+      .setStrokeStyle(2, theme.accent, 0.92);
+    container.add(panel);
+    this.createMiniGamePanelDecor(container, w / 2, h / 2, panelW, panelH, theme);
+    this.addMiniGameThemeIcon(container, w / 2 - panelW / 2 + 28, h / 2 - panelH / 2 + 26, theme, 20);
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 14, `${theme.icon} 限时搜刮战 · ${spot.name}`, {
+      fontSize: this.worldFs(24, 20),
+      color: '#e2e8f0',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0));
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 46, '选择路线，潜入搜刮后带着负重撤离到左侧撤离点', {
+      fontSize: this.worldFs(14, 13),
+      color: '#94a3b8',
+      fontFamily: uiFont,
+    }).setOrigin(0.5, 0));
+    if (theme.protocolLevel > 0) {
+      container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 64, `协议联动：${theme.protocolLabel}`, {
+        fontSize: this.worldFs(12, 11),
+        color: this.toHexColor(theme.protocolColor),
+        fontFamily: uiFont,
+      }).setOrigin(0.5, 0));
+    }
+
+    const safeCard = this.add.rectangle(w / 2 - 144, h / 2 - panelH / 2 + 94, 232, 58, theme.safeCardColor, 0.94)
+      .setStrokeStyle(2, 0x4ade80, 0.9)
+      .setInteractive({ useHandCursor: true });
+    const riskyCard = this.add.rectangle(w / 2 + 144, h / 2 - panelH / 2 + 94, 232, 58, theme.riskyCardColor, 0.92)
+      .setStrokeStyle(2, 0xfb7185, 0.72)
+      .setInteractive({ useHandCursor: true });
+    const safeText = this.add.text(w / 2 - 144, h / 2 - panelH / 2 + 94, '稳妥搜刮\n时间更长 · 风险更低', {
+      fontSize: this.worldFs(13, 12),
+      color: '#bbf7d0',
+      fontFamily: uiFont,
+      align: 'center',
+      lineSpacing: 2,
+    }).setOrigin(0.5);
+    const riskyText = this.add.text(w / 2 + 144, h / 2 - panelH / 2 + 94, '冒险搜刮\n收益更高 · 负重惩罚更重', {
+      fontSize: this.worldFs(13, 12),
+      color: '#fecdd3',
+      fontFamily: uiFont,
+      align: 'center',
+      lineSpacing: 2,
+    }).setOrigin(0.5);
+    container.add([safeCard, riskyCard, safeText, riskyText]);
+    this.addMiniGameRectSkin(container, safeCard, theme, 'safe', 0.9);
+    this.addMiniGameRectSkin(container, riskyCard, theme, 'risky', 0.9);
+
+    const routeY = h / 2 - panelH / 2 + 144;
+    const routeCards = [
+      {
+        key: 'alley' as const,
+        title: '背街小巷',
+        desc: '短线低警报 · 基础收益',
+        x: w / 2 - 220,
+        color: 0x38bdf8,
+      },
+      {
+        key: 'market' as const,
+        title: '废墟商街',
+        desc: '中线均衡 · 节奏稳定',
+        x: w / 2,
+        color: 0xfbbf24,
+      },
+      {
+        key: 'rooftop' as const,
+        title: '高架屋顶',
+        desc: '高压高回报 · 警报频繁',
+        x: w / 2 + 220,
+        color: 0xfb7185,
+      },
+    ];
+    const routeVisuals = routeCards.map((route) => {
+      const rect = this.add.rectangle(route.x, routeY, 198, 54, 0x0f172a, 0.94)
+        .setStrokeStyle(2, route.color, 0.62)
+        .setInteractive({ useHandCursor: true });
+      const text = this.add.text(route.x, routeY, `${route.title}\n${route.desc}`, {
+        fontSize: this.worldFs(12, 11),
+        color: '#cbd5e1',
+        fontFamily: uiFont,
+        align: 'center',
+        lineSpacing: 2,
+      }).setOrigin(0.5);
+      container.add([rect, text]);
+      const skin = this.addMiniGameRectSkin(container, rect, theme, 'button', 0.7);
+      this.bindMiniGameButtonInteraction(rect, skin, theme, text);
+      return { route: route.key, rect, text, skin };
+    });
+
+    const arenaW = Math.min(panelW - 52, 760);
+    const arenaH = Math.min(214, panelH - 264);
+    const arenaX = w / 2 - arenaW / 2;
+    const arenaY = h / 2 - 8;
+    const arena = this.add.rectangle(w / 2, arenaY + arenaH / 2, arenaW, arenaH, theme.arenaColor, 0.98)
+      .setStrokeStyle(2, theme.accent, 0.42);
+    container.add(arena);
+    this.addMiniGameRectSkin(container, arena, theme, 'tile', 0.28);
+    this.cityScavengeArena = new Phaser.Geom.Rectangle(arenaX + 8, arenaY + 8, arenaW - 16, arenaH - 16);
+    this.cityScavengeLanes = [
+      arenaY + 48,
+      arenaY + 98,
+      arenaY + 148,
+      arenaY + 188,
+    ];
+
+    this.cityScavengeExtractZone = this.add.rectangle(arenaX + 30, arenaY + arenaH / 2, 44, arenaH - 18, 0x22c55e, 0.16)
+      .setStrokeStyle(1, 0x4ade80, 0.65);
+    this.cityScavengePlayerSprite = this.add.rectangle(
+      arenaX + 28,
+      this.cityScavengeLanes[1] || (arenaY + 90),
+      14,
+      20,
+      0x93c5fd,
+      1
+    ).setStrokeStyle(1, 0xe2e8f0, 0.95);
+    container.add([this.cityScavengeExtractZone, this.cityScavengePlayerSprite]);
+
+    this.cityScavengeStatusText = this.add.text(arenaX + 8, arenaY + arenaH + 12, '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#cbd5e1',
+      fontFamily: uiFont,
+    });
+    this.cityScavengeTimerText = this.add.text(arenaX + arenaW - 8, arenaY + arenaH + 12, '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#fbbf24',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(1, 0);
+    this.cityScavengeCarryText = this.add.text(arenaX + 8, arenaY + arenaH + 34, '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#67e8f9',
+      fontFamily: uiFont,
+    });
+    this.cityScavengeActionHintText = this.add.text(arenaX + arenaW - 8, arenaY + arenaH + 34, '', {
+      fontSize: this.worldFs(13, 12),
+      color: '#93c5fd',
+      fontFamily: uiFont,
+    }).setOrigin(1, 0);
+    this.cityScavengeRouteText = this.add.text(w / 2, routeY + 38, '', {
+      fontSize: this.worldFs(12, 11),
+      color: '#fbbf24',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    container.add([
+      this.cityScavengeStatusText,
+      this.cityScavengeTimerText,
+      this.cityScavengeCarryText,
+      this.cityScavengeActionHintText,
+      this.cityScavengeRouteText,
+    ]);
+
+    const actionBtn = this.add.rectangle(w / 2, h / 2 + panelH / 2 - 28, 300, 46, theme.buttonColor, 0.98)
+      .setStrokeStyle(2, theme.accent, 0.95)
+      .setInteractive({ useHandCursor: true });
+    this.daySpotMiniGameActionLabel = this.add.text(w / 2, h / 2 + panelH / 2 - 28, '搜刮/撤离 [E]', {
+      fontSize: this.worldFs(17, 15),
+      color: theme.buttonTextColor,
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    actionBtn.on('pointerdown', () => this.triggerCityScavengeAction());
+    container.add([actionBtn, this.daySpotMiniGameActionLabel]);
+    const actionBtnSkin = this.addMiniGameRectSkin(container, actionBtn, theme, 'button', 0.92);
+    this.bindMiniGameButtonInteraction(actionBtn, actionBtnSkin, theme, this.daySpotMiniGameActionLabel);
+
+    const closeBtn = this.add.text(w / 2 + panelW / 2 - 18, h / 2 - panelH / 2 + 12, '✕', {
+      fontSize: this.worldFs(20, 18),
+      color: '#f87171',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerdown', () => this.resolveCityScavengeMiniGame(false, 'retreat'));
+    container.add(closeBtn);
+
+    const refreshRiskVisual = () => {
+      const safeSelected = this.daySpotMiniGameRisk === 'safe';
+      safeCard.setStrokeStyle(2, 0x4ade80, safeSelected ? 1 : 0.62);
+      riskyCard.setStrokeStyle(2, 0xfb7185, safeSelected ? 0.68 : 1);
+      safeCard.setFillStyle(theme.safeCardColor, safeSelected ? 0.97 : 0.84);
+      riskyCard.setFillStyle(theme.riskyCardColor, safeSelected ? 0.82 : 0.96);
+    };
+    safeCard.on('pointerdown', () => {
+      if (!this.cityScavengeMiniGameActive) return;
+      this.daySpotMiniGameRisk = 'safe';
+      this.applyCityScavengeRiskPreset();
+      this.selectCityScavengeRoute(this.cityScavengeRoute, false);
+      refreshRiskVisual();
+    });
+    riskyCard.on('pointerdown', () => {
+      if (!this.cityScavengeMiniGameActive) return;
+      this.daySpotMiniGameRisk = 'risky';
+      this.applyCityScavengeRiskPreset();
+      this.selectCityScavengeRoute(this.cityScavengeRoute, false);
+      refreshRiskVisual();
+    });
+
+    const refreshRouteVisual = () => {
+      routeVisuals.forEach((visual) => {
+        const picked = visual.route === this.cityScavengeRoute;
+        visual.rect.setStrokeStyle(2, picked ? 0xfbbf24 : 0x475569, picked ? 1 : 0.56);
+        visual.rect.setFillStyle(0x0f172a, picked ? 0.99 : 0.88);
+        visual.skin?.setAlpha(picked ? 0.9 : 0.7);
+        visual.text.setColor(picked ? '#fef08a' : '#cbd5e1');
+      });
+    };
+    routeVisuals.forEach((visual) => {
+      visual.rect.on('pointerdown', () => {
+        if (!this.cityScavengeMiniGameActive) return;
+        this.selectCityScavengeRoute(visual.route, false);
+        refreshRouteVisual();
+      });
+    });
+
+    this.cityScavengeMiniGameActive = true;
+    this.cityScavengeResultResolved = false;
+    this.cityScavengeRoute = 'alley';
+    this.cityScavengeRouteSelected = false;
+    this.cityScavengeElapsedMs = 0;
+    this.cityScavengeCarryWeight = 0;
+    this.cityScavengeLootScore = 0;
+    this.cityScavengeTrapCooldownUntil = 0;
+    this.cityScavengeMoveX = 0;
+    this.cityScavengeMoveY = 0;
+    this.cityScavengeExtracted = false;
+    this.applyCityScavengeRiskPreset();
+    this.selectCityScavengeRoute('alley', true);
+    refreshRiskVisual();
+    refreshRouteVisual();
+  }
+
+  private applyCityScavengeRiskPreset(): void {
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    if (risky) {
+      this.cityScavengeTimeLimitMs = 11500;
+      this.cityScavengeCarryCap = 17;
+      this.cityScavengePlayerBaseSpeed = 0.292;
+    } else {
+      this.cityScavengeTimeLimitMs = 14600;
+      this.cityScavengeCarryCap = 20;
+      this.cityScavengePlayerBaseSpeed = 0.272;
+    }
+  }
+
+  private selectCityScavengeRoute(
+    route: 'alley' | 'market' | 'rooftop',
+    resetPosition: boolean
+  ): void {
+    this.cityScavengeRoute = route;
+    this.cityScavengeRouteSelected = true;
+    this.cityScavengeLootNodes.forEach((node) => {
+      node.sprite.destroy();
+      node.pulse.destroy();
+      node.label.destroy();
+    });
+    this.cityScavengeLootNodes = [];
+    this.cityScavengePatrols.forEach((patrol) => patrol.sprite.destroy());
+    this.cityScavengePatrols = [];
+    this.daySpotMiniGameTrapHits = 0;
+    this.cityScavengeCarryWeight = 0;
+    this.cityScavengeLootScore = 0;
+    this.cityScavengeElapsedMs = 0;
+    this.cityScavengeExtracted = false;
+
+    if (!this.daySpotMiniGameContainer || !this.cityScavengeArena || !this.cityScavengePlayerSprite) return;
+    const theme = this.getDayMiniGameTheme('scavenge');
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    const laneTop = this.cityScavengeLanes[0] || this.cityScavengeArena.y + 16;
+    const laneMid = this.cityScavengeLanes[1] || (this.cityScavengeArena.y + this.cityScavengeArena.height * 0.5);
+    const laneLow = this.cityScavengeLanes[2] || (this.cityScavengeArena.bottom - 24);
+    const createNode = (
+      x: number,
+      y: number,
+      weight: number,
+      value: number,
+      kind: CityScavengeLootNode['kind']
+    ) => {
+      const color = kind === 'medical' ? 0x22d3ee : kind === 'tech' ? 0xfbbf24 : kind === 'stash' ? 0xfb7185 : 0x94a3b8;
+      const frame: 'loot' | 'medical' | 'tech' | 'stash' = kind === 'medical'
+        ? 'medical'
+        : kind === 'tech'
+          ? 'tech'
+          : kind === 'stash'
+            ? 'stash'
+            : 'loot';
+      const pulse = this.add.rectangle(x, y, 24, 24, color, 0.16).setStrokeStyle(1, color, 0.42);
+      const sprite = this.add.image(x, y, this.getMiniGameObjectAtlasKey(theme), frame).setDisplaySize(16, 16).setAlpha(0.95);
+      const label = this.add.text(x, y - 14, `+${value}`, {
+        fontSize: this.worldFs(10, 9),
+        color: '#e2e8f0',
+        fontFamily: this.getUIFontFamily(),
+      }).setOrigin(0.5);
+      this.daySpotMiniGameContainer?.add([pulse, sprite, label]);
+      this.cityScavengeLootNodes.push({ sprite, pulse, label, x, y, weight, value, kind, collected: false });
+    };
+    const createPatrol = (y: number, speed: number, width: number) => {
+      const sprite = this.add.image(
+        this.cityScavengeArena!.x + Phaser.Math.Between(120, Math.max(130, this.cityScavengeArena!.width - 40)),
+        y,
+        this.getMiniGameObjectAtlasKey(theme),
+        'enemy'
+      ).setDisplaySize(width, 16).setAlpha(0.85);
+      sprite.setTint(0xf87171);
+      this.daySpotMiniGameContainer?.add(sprite);
+      this.cityScavengePatrols.push({ sprite, laneY: y, vx: speed, width, height: 10 });
+    };
+
+    if (route === 'alley') {
+      this.cityScavengeRouteRewardMul = risky ? 1.02 : 0.96;
+      this.cityScavengeRouteDangerMul = risky ? 1.08 : 0.84;
+      this.cityScavengeScoreTarget = risky ? 23 : 20;
+      createNode(this.cityScavengeArena.x + 178, laneMid, 3, 5, 'supply');
+      createNode(this.cityScavengeArena.x + 296, laneLow, 4, 6, 'medical');
+      createNode(this.cityScavengeArena.x + 420, laneMid, 4, 6, 'supply');
+      createNode(this.cityScavengeArena.x + 530, laneTop, 5, 8, 'tech');
+      createPatrol(laneMid, (risky ? 0.16 : 0.13) * (Math.random() < 0.5 ? -1 : 1), 58);
+      createPatrol(laneLow, (risky ? 0.14 : 0.11) * (Math.random() < 0.5 ? -1 : 1), 54);
+    } else if (route === 'market') {
+      this.cityScavengeRouteRewardMul = risky ? 1.18 : 1.08;
+      this.cityScavengeRouteDangerMul = risky ? 1.22 : 1.02;
+      this.cityScavengeScoreTarget = risky ? 29 : 26;
+      createNode(this.cityScavengeArena.x + 160, laneTop, 3, 5, 'medical');
+      createNode(this.cityScavengeArena.x + 250, laneMid, 5, 7, 'supply');
+      createNode(this.cityScavengeArena.x + 338, laneLow, 6, 8, 'tech');
+      createNode(this.cityScavengeArena.x + 444, laneTop, 5, 8, 'supply');
+      createNode(this.cityScavengeArena.x + 548, laneMid, 7, 10, 'stash');
+      createPatrol(laneTop, (risky ? 0.2 : 0.16) * (Math.random() < 0.5 ? -1 : 1), 62);
+      createPatrol(laneMid, (risky ? 0.21 : 0.17) * (Math.random() < 0.5 ? -1 : 1), 64);
+      createPatrol(laneLow, (risky ? 0.19 : 0.15) * (Math.random() < 0.5 ? -1 : 1), 56);
+    } else {
+      this.cityScavengeRouteRewardMul = risky ? 1.42 : 1.26;
+      this.cityScavengeRouteDangerMul = risky ? 1.46 : 1.24;
+      this.cityScavengeScoreTarget = risky ? 34 : 30;
+      createNode(this.cityScavengeArena.x + 216, laneTop, 5, 7, 'tech');
+      createNode(this.cityScavengeArena.x + 332, laneMid, 7, 10, 'stash');
+      createNode(this.cityScavengeArena.x + 440, laneTop, 8, 11, 'stash');
+      createNode(this.cityScavengeArena.x + 566, laneLow, 9, 13, 'tech');
+      createPatrol(laneTop, (risky ? 0.24 : 0.2) * (Math.random() < 0.5 ? -1 : 1), 68);
+      createPatrol(laneMid, (risky ? 0.24 : 0.2) * (Math.random() < 0.5 ? -1 : 1), 64);
+      createPatrol(laneLow, (risky ? 0.22 : 0.18) * (Math.random() < 0.5 ? -1 : 1), 62);
+      createPatrol((laneTop + laneMid) * 0.5, (risky ? 0.2 : 0.16) * (Math.random() < 0.5 ? -1 : 1), 56);
+    }
+
+    const startY = route === 'rooftop' ? laneTop : route === 'market' ? laneMid : laneLow;
+    if (resetPosition) {
+      this.cityScavengePlayerSprite.x = this.cityScavengeArena.x + 20;
+      this.cityScavengePlayerSprite.y = startY;
+    }
+    const routeName = route === 'alley' ? '背街小巷' : route === 'market' ? '废墟商街' : '高架屋顶';
+    if (this.cityScavengeRouteText) {
+      this.cityScavengeRouteText.setText(`路线：${routeName} · 目标分 ${this.cityScavengeScoreTarget} · 风险x${this.cityScavengeRouteDangerMul.toFixed(2)}`);
+    }
+    if (this.cityScavengeStatusText) {
+      this.cityScavengeStatusText.setText('已进入城区，先搜刮，再返回撤离区').setColor('#cbd5e1');
+    }
+  }
+
+  private triggerCityScavengeAction(): void {
+    if (!this.cityScavengeMiniGameActive || !this.cityScavengeRouteSelected || !this.cityScavengePlayerSprite || !this.cityScavengeArena) return;
+    const player = this.cityScavengePlayerSprite;
+    const nearestNode = this.cityScavengeLootNodes.find((node) => {
+      if (node.collected || !node.sprite.active) return false;
+      const dx = player.x - node.x;
+      const dy = player.y - node.y;
+      return dx * dx + dy * dy <= 24 * 24;
+    });
+    if (nearestNode) {
+      nearestNode.collected = true;
+      this.cityScavengeCarryWeight += nearestNode.weight;
+      this.cityScavengeLootScore += Math.round(nearestNode.value * this.cityScavengeRouteRewardMul);
+      nearestNode.sprite.destroy();
+      nearestNode.pulse.destroy();
+      nearestNode.label.destroy();
+      this.showFloatingText(player.x, player.y - 18, `+${nearestNode.value}分 / +${nearestNode.weight}kg`, '#67e8f9', true);
+      if (this.cityScavengeStatusText) {
+        this.cityScavengeStatusText.setText(`拾取成功：${nearestNode.kind === 'medical' ? '医疗箱' : nearestNode.kind === 'stash' ? '黑箱' : '补给'}入包`).setColor('#67e8f9');
+      }
+      if (this.cityScavengeCarryWeight > this.cityScavengeCarryCap && this.cityScavengeStatusText) {
+        this.cityScavengeStatusText.setText('负重过高：移动显著减速，警报风险上升').setColor('#f59e0b');
+      }
+      this.playMiniGameOutcomeVfx('scavenge', 'good', false, player.x, player.y - 8, true);
       return;
     }
-    this.showFloatingText(
-      this.player.x,
-      this.player.y - 24,
-      `${spot.name} 自动执行中 ${active}人 · 今日${used}/${usageLimit}`,
-      '#38bdf8',
-      false
+    const zone = this.cityScavengeExtractZone;
+    if (zone && Math.abs(player.x - zone.x) <= zone.width * 0.5 && Math.abs(player.y - zone.y) <= zone.height * 0.5) {
+      this.resolveCityScavengeMiniGame(true, 'manual');
+      return;
+    }
+    if (this.cityScavengeStatusText) {
+      this.cityScavengeStatusText.setText('附近无可搜刮目标，继续推进或回撤').setColor('#94a3b8');
+    }
+  }
+
+  private resolveCityScavengeMiniGame(extracted: boolean, reason: 'manual' | 'timeout' | 'retreat'): void {
+    if (!this.cityScavengeMiniGameActive || this.cityScavengeResultResolved || !this.daySpotMiniGameSpot) return;
+    this.cityScavengeResultResolved = true;
+    this.cityScavengeExtracted = extracted;
+    const spot = this.daySpotMiniGameSpot;
+    const carriedRatio = this.cityScavengeLootScore / Math.max(1, this.cityScavengeScoreTarget);
+    const overWeightRatio = Math.max(0, this.cityScavengeCarryWeight - this.cityScavengeCarryCap) / Math.max(1, this.cityScavengeCarryCap);
+    const penalty = this.daySpotMiniGameTrapHits * 0.16 + overWeightRatio * 0.4;
+    const effectiveScore = extracted
+      ? Phaser.Math.Clamp(carriedRatio - penalty, 0, 1.4)
+      : Phaser.Math.Clamp(carriedRatio * 0.44 - 0.22, 0, 1);
+    let finalQuality: 'poor' | 'good' | 'perfect' = effectiveScore >= 0.94 && this.daySpotMiniGameTrapHits <= 0
+      ? 'perfect'
+      : effectiveScore >= 0.5
+        ? 'good'
+        : 'poor';
+    const forcedTrap = !extracted || reason === 'timeout' || this.daySpotMiniGameTrapHits > 0;
+    if (reason === 'timeout') finalQuality = 'poor';
+    const riskyBase = this.daySpotMiniGameRisk === 'risky';
+    const routeRisky = this.cityScavengeRouteDangerMul > 1.18;
+    const risky = riskyBase || routeRisky;
+
+    const stationed = gameState.data.companions.filter((c) => c.status === 'base').length;
+    const active = this.getExplorationSpotResidentCount(spot.id);
+    const usageLimit = this.getActivityUsageLimit(spot.actionType);
+    const used = this.getActivityUsage(spot.actionType);
+
+    this.closeDayExplorationMiniGame();
+    if (used >= usageLimit || gameState.data.isNight) return;
+    this.playDayMiniGameResultFeedback(spot, finalQuality, risky, forcedTrap);
+    this.executeActiveExploration(spot, stationed, active, used, usageLimit, {
+      quality: finalQuality,
+      risky,
+      trapHit: forcedTrap,
+    });
+  }
+
+  private updateCityScavengeMiniGame(delta: number): void {
+    if (!this.cityScavengeMiniGameActive || !this.cityScavengeRouteSelected || !this.cityScavengeArena || !this.cityScavengePlayerSprite) return;
+    this.cityScavengeElapsedMs += delta;
+    const now = this.time.now;
+
+    let moveX = 0;
+    let moveY = 0;
+    if (this.cursors?.left?.isDown || this.moveLeftKey?.isDown) moveX -= 1;
+    if (this.cursors?.right?.isDown || this.moveRightKey?.isDown) moveX += 1;
+    if (this.cursors?.up?.isDown || this.jumpKey?.isDown) moveY -= 1;
+    if (this.cursors?.down?.isDown) moveY += 1;
+    if (Math.abs(moveX) < 0.1 && Math.abs(this.cityScavengeMoveX) > 0.1) moveX = Phaser.Math.Clamp(this.cityScavengeMoveX, -1, 1);
+    if (Math.abs(moveY) < 0.1 && Math.abs(this.cityScavengeMoveY) > 0.1) moveY = Phaser.Math.Clamp(this.cityScavengeMoveY, -1, 1);
+
+    const carryRatio = this.cityScavengeCarryWeight / Math.max(1, this.cityScavengeCarryCap);
+    const overweightPenalty = carryRatio > 1 ? (carryRatio - 1) * 0.56 : 0;
+    const speedMul = Phaser.Math.Clamp(1 - Math.min(0.68, carryRatio * 0.48 + overweightPenalty), 0.3, 1);
+    const speed = this.cityScavengePlayerBaseSpeed * speedMul;
+    this.cityScavengePlayerSprite.x = Phaser.Math.Clamp(
+      this.cityScavengePlayerSprite.x + moveX * speed * delta,
+      this.cityScavengeArena.x + 10,
+      this.cityScavengeArena.right - 10
     );
+    this.cityScavengePlayerSprite.y = Phaser.Math.Clamp(
+      this.cityScavengePlayerSprite.y + moveY * speed * delta,
+      this.cityScavengeArena.y + 10,
+      this.cityScavengeArena.bottom - 10
+    );
+
+    const patrolSpeedMul = this.daySpotMiniGameRisk === 'risky' ? 1.14 : 1;
+    this.cityScavengePatrols.forEach((patrol) => {
+      if (!patrol.sprite.active) return;
+      patrol.sprite.x += patrol.vx * patrolSpeedMul * this.cityScavengeRouteDangerMul * delta;
+      patrol.sprite.setFlipX(patrol.vx < 0);
+      const left = this.cityScavengeArena!.x + patrol.width * 0.5;
+      const right = this.cityScavengeArena!.right - patrol.width * 0.5;
+      if (patrol.sprite.x <= left) {
+        patrol.sprite.x = left;
+        patrol.vx = Math.abs(patrol.vx);
+      } else if (patrol.sprite.x >= right) {
+        patrol.sprite.x = right;
+        patrol.vx = -Math.abs(patrol.vx);
+      }
+      const hit = Math.abs(this.cityScavengePlayerSprite!.x - patrol.sprite.x) <= (patrol.width + this.cityScavengePlayerSprite!.width) * 0.5
+        && Math.abs(this.cityScavengePlayerSprite!.y - patrol.laneY) <= (patrol.height + this.cityScavengePlayerSprite!.height) * 0.5;
+      if (hit && now >= this.cityScavengeTrapCooldownUntil) {
+        this.cityScavengeTrapCooldownUntil = now + 780;
+        this.daySpotMiniGameTrapHits += 1;
+        const lostCarry = Math.min(this.cityScavengeCarryWeight, Phaser.Math.Between(1, this.cityScavengeCarryWeight >= this.cityScavengeCarryCap ? 3 : 2));
+        this.cityScavengeCarryWeight = Math.max(0, this.cityScavengeCarryWeight - lostCarry);
+        this.cityScavengeLootScore = Math.max(0, this.cityScavengeLootScore - Math.round(lostCarry * 1.25));
+        this.cameras.main.shake(this.lowPerfMode ? 80 : 120, this.lowPerfMode ? 0.0036 : 0.0056);
+        const pulse = this.add.circle(this.cityScavengePlayerSprite!.x, this.cityScavengePlayerSprite!.y, 20, 0xef4444, 0.28).setDepth(3470);
+        this.daySpotMiniGameContainer?.add(pulse);
+        this.tweens.add({
+          targets: pulse,
+          scale: 1.7,
+          alpha: 0,
+          duration: 260,
+          onComplete: () => pulse.destroy(),
+        });
+        if (this.cityScavengeStatusText) {
+          this.cityScavengeStatusText.setText(`触发警报：丢失负重 ${lostCarry}kg`).setColor('#f87171');
+        }
+        this.playMiniGameOutcomeVfx(
+          'scavenge',
+          'poor',
+          true,
+          this.cityScavengePlayerSprite!.x,
+          this.cityScavengePlayerSprite!.y - 8,
+          true
+        );
+      }
+    });
+
+    this.cityScavengeLootNodes.forEach((node) => {
+      if (node.collected || !node.pulse.active) return;
+      node.pulse.setAlpha(0.12 + 0.16 * Math.abs(Math.sin((this.time.now + node.x) * 0.01)));
+      node.pulse.setScale(1 + 0.1 * Math.abs(Math.sin((this.time.now + node.y) * 0.012)));
+    });
+
+    const nearestNode = this.cityScavengeLootNodes.find((node) => {
+      if (node.collected || !node.sprite.active) return false;
+      const dx = this.cityScavengePlayerSprite!.x - node.x;
+      const dy = this.cityScavengePlayerSprite!.y - node.y;
+      return dx * dx + dy * dy <= 24 * 24;
+    });
+    const zone = this.cityScavengeExtractZone;
+    const inExtract = !!zone
+      && Math.abs(this.cityScavengePlayerSprite.x - zone.x) <= zone.width * 0.5
+      && Math.abs(this.cityScavengePlayerSprite.y - zone.y) <= zone.height * 0.5;
+    if (this.cityScavengeActionHintText) {
+      if (nearestNode) {
+        this.cityScavengeActionHintText.setText(`E 搜刮 · ${nearestNode.weight}kg / ${nearestNode.value}分`).setColor('#67e8f9');
+      } else if (inExtract) {
+        this.cityScavengeActionHintText.setText(this.cityScavengeLootScore > 0 ? 'E 撤离结算' : '先搜刮再撤离').setColor('#fbbf24');
+      } else {
+        this.cityScavengeActionHintText.setText('沿路线推进，搜刮后返回撤离区').setColor('#94a3b8');
+      }
+    }
+
+    const remainingMs = Math.max(0, this.cityScavengeTimeLimitMs - this.cityScavengeElapsedMs);
+    if (this.cityScavengeTimerText) {
+      this.cityScavengeTimerText.setText(`倒计时 ${Math.ceil(remainingMs / 1000)}s · 警报${this.daySpotMiniGameTrapHits}`);
+      this.cityScavengeTimerText.setColor(remainingMs <= 3500 ? '#fb7185' : '#fbbf24');
+    }
+    if (this.cityScavengeCarryText) {
+      this.cityScavengeCarryText.setText(`负重 ${this.cityScavengeCarryWeight}/${this.cityScavengeCarryCap}kg · 分值 ${this.cityScavengeLootScore}/${this.cityScavengeScoreTarget}`);
+      this.cityScavengeCarryText.setColor(this.cityScavengeCarryWeight > this.cityScavengeCarryCap ? '#fb7185' : '#67e8f9');
+    }
+    if (this.daySpotMiniGameActionLabel) {
+      this.daySpotMiniGameActionLabel.setText(inExtract ? '撤离 [E]' : '搜刮 [E]');
+    }
+    if (remainingMs <= 0) {
+      this.resolveCityScavengeMiniGame(false, 'timeout');
+    }
+  }
+
+  private openCaveRaidMiniGame(spot: ExplorationSpot): void {
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const uiFont = this.getUIFontFamily();
+    const theme = this.getDayMiniGameTheme('cave_explore');
+    const container = this.add.container(0, 0).setDepth(3450).setScrollFactor(0);
+    this.daySpotMiniGameContainer?.destroy();
+    this.daySpotMiniGameContainer = container;
+
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, theme.overlayColor, theme.overlayAlpha).setScrollFactor(0);
+    container.add(overlay);
+    const panelW = Math.min(780, w - 44);
+    const panelH = Math.min(470, h - 50);
+    const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, theme.panelColor, 0.97)
+      .setScrollFactor(0)
+      .setStrokeStyle(2, theme.accent, 0.92);
+    container.add(panel);
+    this.createMiniGamePanelDecor(container, w / 2, h / 2, panelW, panelH, theme);
+    this.addMiniGameThemeIcon(container, w / 2 - panelW / 2 + 28, h / 2 - panelH / 2 + 28, theme, 20);
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 16, `${theme.icon} 洞穴突袭 · ${spot.name}`, {
+      fontSize: this.worldFs(24, 20),
+      color: '#e2e8f0',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0));
+    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 48, '短横版战斗：躲陷阱、清杂兵、击杀小Boss后撤离', {
+      fontSize: this.worldFs(14, 13),
+      color: '#94a3b8',
+      fontFamily: uiFont,
+    }).setOrigin(0.5, 0));
+    if (theme.protocolLevel > 0) {
+      container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 66, `协议联动：${theme.protocolLabel}`, {
+        fontSize: this.worldFs(12, 11),
+        color: this.toHexColor(theme.protocolColor),
+        fontFamily: uiFont,
+      }).setOrigin(0.5, 0));
+    }
+
+    const safeCard = this.add.rectangle(w / 2 - 140, h / 2 - panelH / 2 + 96, 230, 68, theme.safeCardColor, 0.94)
+      .setStrokeStyle(2, 0x60a5fa, 0.92)
+      .setInteractive({ useHandCursor: true });
+    const riskyCard = this.add.rectangle(w / 2 + 140, h / 2 - panelH / 2 + 96, 230, 68, theme.riskyCardColor, 0.9)
+      .setStrokeStyle(2, 0xfb7185, 0.76)
+      .setInteractive({ useHandCursor: true });
+    const safeText = this.add.text(w / 2 - 140, h / 2 - panelH / 2 + 96, '稳妥突入\n时间更长 · 敌压较低', {
+      fontSize: this.worldFs(13, 12),
+      color: '#bfdbfe',
+      fontFamily: uiFont,
+      align: 'center',
+      lineSpacing: 2,
+    }).setOrigin(0.5);
+    const riskyText = this.add.text(w / 2 + 140, h / 2 - panelH / 2 + 96, '冒险突入\n敌压更高 · 掉落更猛', {
+      fontSize: this.worldFs(13, 12),
+      color: '#fecdd3',
+      fontFamily: uiFont,
+      align: 'center',
+      lineSpacing: 2,
+    }).setOrigin(0.5);
+    container.add([safeCard, riskyCard, safeText, riskyText]);
+    this.addMiniGameRectSkin(container, safeCard, theme, 'safe', 0.9);
+    this.addMiniGameRectSkin(container, riskyCard, theme, 'risky', 0.9);
+
+    const arenaW = Math.min(panelW - 60, 720);
+    const arenaH = Math.min(228, panelH - 206);
+    const arenaX = w / 2 - arenaW / 2;
+    const arenaY = h / 2 - 44;
+    const arenaBg = this.add.rectangle(w / 2, arenaY + arenaH / 2, arenaW, arenaH, theme.arenaColor, 0.98)
+      .setStrokeStyle(2, theme.accent, 0.44);
+    const groundY = arenaY + arenaH - 16;
+    const ground = this.add.rectangle(w / 2, groundY, arenaW - 18, 6, 0x475569, 1);
+    const caveFog = this.add.rectangle(w / 2, arenaY + 24, arenaW - 18, 26, 0xa78bfa, 0.08);
+    const leftPlatformW = Math.floor(arenaW * 0.28);
+    const leftPlatformY = groundY - 52;
+    const leftPlatformX = arenaX + 78 + leftPlatformW * 0.5;
+    const leftPlatform = this.add.rectangle(leftPlatformX, leftPlatformY, leftPlatformW, 7, 0x64748b, 0.94)
+      .setStrokeStyle(1, 0xcbd5e1, 0.75);
+    const rightPlatformW = Math.floor(arenaW * 0.24);
+    const rightPlatformY = groundY - 76;
+    const rightPlatformX = arenaX + arenaW - 86 - rightPlatformW * 0.5;
+    const rightPlatform = this.add.rectangle(rightPlatformX, rightPlatformY, rightPlatformW, 7, 0x64748b, 0.94)
+      .setStrokeStyle(1, 0xcbd5e1, 0.75);
+    const torchL = this.add.circle(arenaX + 28, arenaY + 24, 5, 0xf59e0b, 0.9);
+    const torchR = this.add.circle(arenaX + arenaW - 28, arenaY + 24, 5, 0xf59e0b, 0.9);
+    container.add([arenaBg, caveFog, ground, leftPlatform, rightPlatform, torchL, torchR]);
+    this.addMiniGameRectSkin(container, arenaBg, theme, 'tile', 0.24);
+
+    this.caveRaidArena = new Phaser.Geom.Rectangle(arenaX + 8, arenaY + 10, arenaW - 16, arenaH - 20);
+    this.caveRaidGroundY = groundY;
+    this.caveRaidSurfaces = [
+      { x1: arenaX + 8, x2: arenaX + arenaW - 8, y: groundY },
+      { x1: leftPlatformX - leftPlatformW / 2, x2: leftPlatformX + leftPlatformW / 2, y: leftPlatformY },
+      { x1: rightPlatformX - rightPlatformW / 2, x2: rightPlatformX + rightPlatformW / 2, y: rightPlatformY },
+    ];
+    this.caveRaidPlayerSprite = this.add.rectangle(
+      this.caveRaidArena.x + 24,
+      this.caveRaidGroundY - 13,
+      16,
+      26,
+      0x93c5fd,
+      0.05
+    ).setStrokeStyle(1, 0xe2e8f0, 0.95);
+    container.add(this.caveRaidPlayerSprite);
+    this.caveRaidPlayerIcon = this.addMiniGameObjectIcon(
+      container,
+      this.caveRaidPlayerSprite.x,
+      this.caveRaidPlayerSprite.y,
+      theme,
+      'player',
+      22,
+      0.95
+    );
+
+    this.caveRaidStatusText = this.add.text(arenaX + 8, arenaY + arenaH + 10, '清除杂兵，准备迎战小Boss', {
+      fontSize: this.worldFs(13, 12),
+      color: '#cbd5e1',
+      fontFamily: uiFont,
+    });
+    this.caveRaidHpText = this.add.text(arenaX + 8, arenaY - 18, '', {
+      fontSize: this.worldFs(14, 12),
+      color: '#4ade80',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    });
+    this.caveRaidTimerText = this.add.text(arenaX + arenaW - 8, arenaY - 18, '', {
+      fontSize: this.worldFs(14, 12),
+      color: '#fbbf24',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(1, 0);
+    container.add([this.caveRaidStatusText, this.caveRaidHpText, this.caveRaidTimerText]);
+
+    const actionBtn = this.add.rectangle(w / 2, h / 2 + panelH / 2 - 34, 272, 44, theme.buttonColor, 0.98)
+      .setStrokeStyle(2, theme.accent, 0.95)
+      .setInteractive({ useHandCursor: true });
+    const actionLabel = this.add.text(w / 2, h / 2 + panelH / 2 - 34, '攻击 [E / Space] · 跳跃 [W / ↑]', {
+      fontSize: this.worldFs(17, 15),
+      color: theme.buttonTextColor,
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.daySpotMiniGameActionLabel = actionLabel;
+    actionBtn.on('pointerdown', () => this.tryCaveRaidAttack());
+    container.add([actionBtn, actionLabel]);
+    const actionBtnSkin = this.addMiniGameRectSkin(container, actionBtn, theme, 'button', 0.92);
+    this.bindMiniGameButtonInteraction(actionBtn, actionBtnSkin, theme, actionLabel);
+
+    const closeBtn = this.add.text(w / 2 + panelW / 2 - 18, h / 2 - panelH / 2 + 12, '✕', {
+      fontSize: this.worldFs(20, 18),
+      color: '#f87171',
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    closeBtn.on('pointerdown', () => this.resolveCaveRaidMiniGame('retreat'));
+    container.add(closeBtn);
+
+    const refreshRiskVisual = () => {
+      const safeSelected = this.daySpotMiniGameRisk === 'safe';
+      safeCard.setStrokeStyle(2, 0x60a5fa, safeSelected ? 1 : 0.62);
+      riskyCard.setStrokeStyle(2, 0xfb7185, safeSelected ? 0.68 : 1);
+      safeCard.setFillStyle(theme.safeCardColor, safeSelected ? 0.97 : 0.84);
+      riskyCard.setFillStyle(theme.riskyCardColor, safeSelected ? 0.82 : 0.96);
+    };
+    safeCard.on('pointerdown', () => {
+      if (!this.caveRaidMiniGameActive) return;
+      this.daySpotMiniGameRisk = 'safe';
+      this.applyCaveRaidRiskPreset();
+      refreshRiskVisual();
+    });
+    riskyCard.on('pointerdown', () => {
+      if (!this.caveRaidMiniGameActive) return;
+      this.daySpotMiniGameRisk = 'risky';
+      this.applyCaveRaidRiskPreset();
+      refreshRiskVisual();
+    });
+
+    const level = Math.max(1, gameState.data.playerLevel || 1);
+    this.caveRaidMiniGameActive = true;
+    this.caveRaidResultResolved = false;
+    this.caveRaidElapsedMs = 0;
+    this.caveRaidStage = 1;
+    this.caveRaidStageProgress = 0;
+    this.caveRaidStageObjective = this.daySpotMiniGameRisk === 'risky' ? 6 : 4;
+    this.caveRaidKills = 0;
+    this.caveRaidBossSpawned = false;
+    this.caveRaidBossKilled = false;
+    this.caveRaidBossSprite = null;
+    this.caveRaidBossNextSkillAt = 0;
+    this.caveRaidNextSpawnAt = this.time.now + 900;
+    this.caveRaidNextTrapAt = this.time.now + 1800;
+    this.caveRaidEnemies = [];
+    this.caveRaidProjectiles = [];
+    this.caveRaidTraps = [];
+    this.caveRaidMobileMoveX = 0;
+    this.caveRaidMobileMoveY = 0;
+    this.caveRaidPlayerVy = 0;
+    this.caveRaidPlayerGrounded = true;
+    this.caveRaidPlayerJumpCooldownUntil = 0;
+    this.caveRaidPlayerHpMax = Phaser.Math.Clamp(90 + level * 4, 90, 180);
+    this.caveRaidPlayerHp = this.caveRaidPlayerHpMax;
+    this.caveRaidPlayerAttackCooldownUntil = 0;
+    this.caveRaidPlayerInvulUntil = 0;
+    this.applyCaveRaidRiskPreset();
+    this.startCaveRaidStage(1);
+    refreshRiskVisual();
+    this.refreshCaveRaidHud();
+  }
+
+  private applyCaveRaidRiskPreset(): void {
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    if (risky) {
+      this.caveRaidEnemyHpMul = 1.22;
+      this.caveRaidEnemySpeedMul = 1.18;
+      this.caveRaidEnemySpawnIntervalMs = 1500;
+      this.caveRaidDurationMs = 30000;
+      this.caveRaidPlayerSpeed = 0.292;
+      this.caveRaidPlayerJumpForce = 0.48;
+    } else {
+      this.caveRaidEnemyHpMul = 1;
+      this.caveRaidEnemySpeedMul = 1;
+      this.caveRaidEnemySpawnIntervalMs = 2050;
+      this.caveRaidDurationMs = 36000;
+      this.caveRaidPlayerSpeed = 0.255;
+      this.caveRaidPlayerJumpForce = 0.46;
+    }
+    if (this.caveRaidStage === 1) {
+      this.caveRaidStageObjective = this.daySpotMiniGameRisk === 'risky' ? 6 : 4;
+    }
+    this.refreshCaveRaidHud();
+  }
+
+  private startCaveRaidStage(stage: 1 | 2 | 3): void {
+    if (!this.caveRaidMiniGameActive) return;
+    this.caveRaidStage = stage;
+    this.caveRaidStageProgress = 0;
+    if (stage === 1) {
+      this.caveRaidStageObjective = this.daySpotMiniGameRisk === 'risky' ? 6 : 4;
+      this.caveRaidNextSpawnAt = this.time.now + 600;
+      this.caveRaidNextTrapAt = this.time.now + 1900;
+      this.caveRaidBossSpawned = false;
+    } else if (stage === 2) {
+      this.caveRaidStageObjective = this.daySpotMiniGameRisk === 'risky' ? 9000 : 11000;
+      this.caveRaidNextSpawnAt = Number.MAX_SAFE_INTEGER;
+      this.caveRaidNextTrapAt = this.time.now + 420;
+      this.caveRaidEnemies.forEach((enemy) => {
+        enemy.sprite.destroy();
+        enemy.visual?.destroy();
+      });
+      this.caveRaidEnemies = [];
+      this.showFloatingText(this.player.x, this.player.y - 96, '陷阱房！存活后进入Boss房', '#fbbf24', false);
+    } else {
+      this.caveRaidStageObjective = 1;
+      this.caveRaidNextSpawnAt = this.time.now + 1200;
+      this.caveRaidNextTrapAt = this.time.now + 1700;
+      this.caveRaidBossSpawned = true;
+      this.spawnCaveRaidEnemy(true);
+      this.showFloatingText(this.player.x, this.player.y - 98, '小Boss房已开启', '#fb7185', false);
+    }
+    this.refreshCaveRaidHud();
+  }
+
+  private refreshCaveRaidHud(): void {
+    if (!this.caveRaidMiniGameActive) return;
+    const hpRatio = this.caveRaidPlayerHpMax > 0 ? this.caveRaidPlayerHp / this.caveRaidPlayerHpMax : 0;
+    if (this.caveRaidHpText) {
+      this.caveRaidHpText
+        .setText(`生命 ${Math.max(0, Math.ceil(this.caveRaidPlayerHp))}/${this.caveRaidPlayerHpMax} · 陷阱命中${this.daySpotMiniGameTrapHits}`)
+        .setColor(hpRatio > 0.55 ? '#4ade80' : hpRatio > 0.3 ? '#fbbf24' : '#ef4444');
+    }
+    if (this.caveRaidTimerText) {
+      const remain = Math.max(0, this.caveRaidDurationMs - this.caveRaidElapsedMs);
+      this.caveRaidTimerText.setText(`剩余 ${Math.ceil(remain / 1000)}s`);
+    }
+    if (this.caveRaidStatusText) {
+      if (this.caveRaidBossKilled) {
+        this.caveRaidStatusText.setText('小Boss已击杀，立即撤离').setColor('#4ade80');
+      } else if (this.caveRaidStage === 3) {
+        this.caveRaidStatusText.setText(`阶段3/3 · 小Boss战（杂兵击杀${this.caveRaidKills}）`).setColor('#fda4af');
+      } else if (this.caveRaidStage === 2) {
+        const remainMs = Math.max(0, this.caveRaidStageObjective - this.caveRaidStageProgress);
+        this.caveRaidStatusText.setText(`阶段2/3 · 陷阱房生存 ${Math.ceil(remainMs / 1000)}s`).setColor('#fbbf24');
+      } else {
+        this.caveRaidStatusText.setText(`阶段1/3 · 清理杂兵 ${this.caveRaidKills}/${this.caveRaidStageObjective}`).setColor('#cbd5e1');
+      }
+    }
+    if (this.daySpotMiniGameActionLabel) {
+      this.daySpotMiniGameActionLabel.setText(`攻击 [E / Space] · 跳跃 [W / ↑] · ${this.daySpotMiniGameRisk === 'risky' ? '冒险突入' : '稳妥突入'}`);
+    }
+    if (this.caveRaidBossSprite?.active) {
+      const ratio = Math.max(0, (this.caveRaidEnemies.find((enemy) => enemy.isBoss)?.hp || 0) / Math.max(1, this.caveRaidEnemies.find((enemy) => enemy.isBoss)?.maxHp || 1));
+      const bossVisual = this.caveRaidEnemies.find((enemy) => enemy.isBoss)?.visual;
+      if (bossVisual?.active) {
+        bossVisual.setTint(ratio > 0.6 ? 0xf87171 : ratio > 0.3 ? 0xfb923c : 0xfbbf24);
+      }
+    }
+  }
+
+  private spawnCaveRaidEnemy(isBoss: boolean): void {
+    if (!this.caveRaidMiniGameActive || !this.caveRaidArena || !this.daySpotMiniGameContainer) return;
+    const theme = this.getDayMiniGameTheme('cave_explore');
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    const kind: CaveRaidEnemy['kind'] = isBoss
+      ? 'boss'
+      : (Math.random() < 0.54 ? 'runner' : (Math.random() < 0.5 ? 'leaper' : 'spitter'));
+    const baseHp = kind === 'boss'
+      ? 182
+      : kind === 'leaper'
+        ? 32
+        : kind === 'spitter'
+          ? 24
+          : 26;
+    const speedBase = kind === 'boss'
+      ? 0.066
+      : kind === 'leaper'
+        ? 0.092
+        : kind === 'spitter'
+          ? 0.042
+          : 0.102;
+    const hp = Math.max(10, Math.round(baseHp * (1 + day * 0.034) * this.caveRaidEnemyHpMul));
+    const speed = speedBase * this.caveRaidEnemySpeedMul * (1 + Math.min(0.36, day * 0.011));
+    const w = kind === 'boss' ? 34 : kind === 'spitter' ? 18 : 20;
+    const h = kind === 'boss' ? 36 : 24;
+    const spawnFromRight = kind === 'spitter'
+      ? Math.random() < 0.5
+      : ((this.caveRaidPlayerSprite?.x ?? this.caveRaidArena.centerX) < this.caveRaidArena.centerX || Math.random() < 0.62);
+    const spawnX = spawnFromRight
+      ? this.caveRaidArena.right - Phaser.Math.Between(18, 30)
+      : this.caveRaidArena.x + Phaser.Math.Between(18, 30);
+    const groundY = kind === 'spitter'
+      ? (Math.random() < 0.5 ? this.caveRaidGroundY - 52 : this.caveRaidGroundY - 76)
+      : this.caveRaidGroundY;
+    const fill = kind === 'boss'
+      ? 0xdc2626
+      : kind === 'leaper'
+        ? 0xbe123c
+        : kind === 'spitter'
+          ? 0x7c3aed
+          : 0x7f1d1d;
+    const stroke = kind === 'boss'
+      ? 0xfca5a5
+      : kind === 'spitter'
+        ? 0xc4b5fd
+        : 0xf87171;
+    const sprite = this.add.rectangle(
+      spawnX,
+      groundY - h / 2,
+      w,
+      h,
+      fill,
+      0.06
+    ).setStrokeStyle(1, stroke, 0.94);
+    this.daySpotMiniGameContainer.add(sprite);
+    const visualFrame: 'enemy' | 'hint' = kind === 'spitter' ? 'hint' : 'enemy';
+    const visual = this.addMiniGameObjectIcon(
+      this.daySpotMiniGameContainer,
+      spawnX,
+      groundY - h / 2,
+      theme,
+      visualFrame,
+      kind === 'boss' ? 30 : 22,
+      kind === 'boss' ? 1 : 0.94
+    );
+    if (visual) {
+      if (kind === 'boss') visual.setTint(0xf87171);
+      else if (kind === 'spitter') visual.setTint(0xa78bfa);
+      else if (kind === 'leaper') visual.setTint(0xfb7185);
+      else visual.setTint(0xef4444);
+    }
+    const enemy: CaveRaidEnemy = {
+      sprite,
+      visual,
+      hp,
+      maxHp: hp,
+      speed,
+      vx: spawnFromRight ? -speed : speed,
+      vy: 0,
+      kind,
+      touchDamage: kind === 'boss' ? 18 : kind === 'leaper' ? 10 : 8,
+      isBoss,
+      nextAttackAt: this.time.now + Phaser.Math.Between(420, 760),
+      jumpCooldownUntil: this.time.now + Phaser.Math.Between(480, 920),
+      groundY,
+    };
+    this.caveRaidEnemies.push(enemy);
+    if (isBoss) {
+      this.caveRaidBossSprite = sprite;
+      this.caveRaidBossNextSkillAt = this.time.now + 1100;
+      this.showFloatingText(this.player.x, this.player.y - 104, '洞穴首领出现！', '#f87171', false);
+      this.cameras.main.shake(this.lowPerfMode ? 120 : 180, this.lowPerfMode ? 0.004 : 0.0068);
+    }
+  }
+
+  private spawnCaveRaidTrap(mode?: CaveRaidTrap['mode']): void {
+    if (!this.caveRaidMiniGameActive || !this.caveRaidArena || !this.daySpotMiniGameContainer) return;
+    const theme = this.getDayMiniGameTheme('cave_explore');
+    const trapMode = mode || (Math.random() < (this.caveRaidStage === 2 ? 0.5 : 0.28) ? 'drop' : 'floor');
+    const width = trapMode === 'drop'
+      ? Phaser.Math.Between(18, 26)
+      : Phaser.Math.Between(58, this.daySpotMiniGameRisk === 'risky' ? 104 : 90);
+    const centerX = Phaser.Math.Between(
+      Math.floor(this.caveRaidArena.x + width * 0.5),
+      Math.floor(this.caveRaidArena.right - width * 0.5)
+    );
+    const zone = this.add.rectangle(centerX, this.caveRaidGroundY - 4, width, 10, 0xef4444, 0.16)
+      .setStrokeStyle(1, 0xfda4af, 0.9);
+    const pulse = this.add.rectangle(
+      centerX,
+      trapMode === 'drop' ? this.caveRaidArena.y + 12 : this.caveRaidGroundY - 18,
+      trapMode === 'drop' ? width * 0.92 : width * 0.66,
+      trapMode === 'drop' ? 14 : 18,
+      0xf43f5e,
+      0.12
+    );
+    this.daySpotMiniGameContainer.add([zone, pulse]);
+    const icon = this.addMiniGameObjectIcon(
+      this.daySpotMiniGameContainer,
+      centerX,
+      trapMode === 'drop' ? this.caveRaidArena.y + 14 : this.caveRaidGroundY - 18,
+      theme,
+      'trap',
+      trapMode === 'drop' ? 16 : 14,
+      0.86
+    );
+    const now = this.time.now;
+    this.caveRaidTraps.push({
+      zone,
+      pulse,
+      icon,
+      armedAt: now,
+      fireAt: now + Phaser.Math.Between(
+        this.daySpotMiniGameRisk === 'risky' ? 560 : 700,
+        this.daySpotMiniGameRisk === 'risky' ? 940 : 1180
+      ),
+      fired: false,
+      mode: trapMode,
+      travelV: trapMode === 'drop' ? (this.daySpotMiniGameRisk === 'risky' ? 0.46 : 0.38) : 0,
+    });
+  }
+
+  private requestCaveRaidJump(): void {
+    if (!this.caveRaidMiniGameActive || !this.caveRaidPlayerSprite) return;
+    const now = this.time.now;
+    if (now < this.caveRaidPlayerJumpCooldownUntil || !this.caveRaidPlayerGrounded) return;
+    this.caveRaidPlayerJumpCooldownUntil = now + 150;
+    this.caveRaidPlayerGrounded = false;
+    this.caveRaidPlayerVy = -(this.caveRaidPlayerJumpForce * (this.daySpotMiniGameRisk === 'risky' ? 1.03 : 1));
+    this.caveRaidPlayerSprite.y -= 1;
+    const jumpSpark = this.add.circle(this.caveRaidPlayerSprite.x, this.caveRaidPlayerSprite.y + 13, 4, 0x93c5fd, 0.7);
+    this.daySpotMiniGameContainer?.add(jumpSpark);
+    this.tweens.add({
+      targets: jumpSpark,
+      alpha: 0,
+      scale: 1.8,
+      duration: 170,
+      onComplete: () => jumpSpark.destroy(),
+    });
+  }
+
+  private spawnCaveRaidProjectile(
+    x: number,
+    y: number,
+    vx: number,
+    vy: number,
+    damage: number,
+    fromEnemy: boolean,
+    color: number
+  ): void {
+    if (!this.daySpotMiniGameContainer) return;
+    const projectile = this.add.rectangle(x, y, fromEnemy ? 8 : 10, fromEnemy ? 5 : 4, color, 1)
+      .setStrokeStyle(1, fromEnemy ? 0xfca5a5 : 0xffffff, 0.9);
+    this.daySpotMiniGameContainer.add(projectile);
+    this.caveRaidProjectiles.push({
+      sprite: projectile,
+      vx,
+      vy,
+      lifeMs: fromEnemy ? 1700 : 920,
+      damage,
+      fromEnemy,
+    });
+  }
+
+  private tryCaveRaidAttack(): void {
+    if (!this.caveRaidMiniGameActive || !this.caveRaidPlayerSprite || !this.daySpotMiniGameContainer) return;
+    const now = this.time.now;
+    if (now < this.caveRaidPlayerAttackCooldownUntil) return;
+    this.caveRaidPlayerAttackCooldownUntil = now + (this.daySpotMiniGameRisk === 'risky' ? 260 : 340);
+
+    const nearestEnemy = this.caveRaidEnemies.reduce<CaveRaidEnemy | null>((best, enemy) => {
+      if (!enemy.sprite.active) return best;
+      if (!best) return enemy;
+      const bestDist = Math.abs(best.sprite.x - this.caveRaidPlayerSprite!.x);
+      const currentDist = Math.abs(enemy.sprite.x - this.caveRaidPlayerSprite!.x);
+      return currentDist < bestDist ? enemy : best;
+    }, null);
+    let facing = 1;
+    if (this.cursors?.left?.isDown || this.moveLeftKey?.isDown || this.caveRaidMobileMoveX < -0.25) {
+      facing = -1;
+    } else if (this.cursors?.right?.isDown || this.moveRightKey?.isDown || this.caveRaidMobileMoveX > 0.25) {
+      facing = 1;
+    } else if (nearestEnemy) {
+      facing = nearestEnemy.sprite.x >= this.caveRaidPlayerSprite.x ? 1 : -1;
+    }
+
+    const meleeRange = this.daySpotMiniGameRisk === 'risky' ? 44 : 36;
+    const meleeDamage = this.daySpotMiniGameRisk === 'risky' ? 36 : 29;
+    let hitCount = 0;
+    for (let i = this.caveRaidEnemies.length - 1; i >= 0; i -= 1) {
+      const enemy = this.caveRaidEnemies[i];
+      if (!enemy || !enemy.sprite.active) continue;
+      const dx = enemy.sprite.x - this.caveRaidPlayerSprite.x;
+      const dy = Math.abs(enemy.sprite.y - this.caveRaidPlayerSprite.y);
+      if ((dx * facing) >= 0 && Math.abs(dx) <= meleeRange && dy <= 24) {
+        enemy.hp -= meleeDamage;
+        hitCount += 1;
+      }
+    }
+
+    const baseSpeed = this.daySpotMiniGameRisk === 'risky' ? 0.86 : 0.74;
+    this.spawnCaveRaidProjectile(
+      this.caveRaidPlayerSprite.x + facing * 13,
+      this.caveRaidPlayerSprite.y - 4,
+      baseSpeed * facing,
+      0,
+      this.daySpotMiniGameRisk === 'risky' ? 34 : 27,
+      false,
+      0x67e8f9
+    );
+    const flash = this.add.circle(this.caveRaidPlayerSprite.x + facing * 12, this.caveRaidPlayerSprite.y - 4, 5, 0x67e8f9, 0.7);
+    this.daySpotMiniGameContainer.add(flash);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scale: 1.8,
+      duration: 140,
+      onComplete: () => flash.destroy(),
+    });
+    this.playMiniGameOutcomeVfx(
+      'cave_explore',
+      hitCount > 0 ? (hitCount >= 2 ? 'perfect' : 'good') : 'poor',
+      hitCount <= 0,
+      this.caveRaidPlayerSprite.x + facing * 12,
+      this.caveRaidPlayerSprite.y - 8,
+      true
+    );
+  }
+
+  private damageCaveRaidPlayer(amount: number, reason: string): void {
+    if (!this.caveRaidMiniGameActive || !this.caveRaidPlayerSprite) return;
+    const now = this.time.now;
+    if (now < this.caveRaidPlayerInvulUntil) return;
+    this.caveRaidPlayerInvulUntil = now + 460;
+    this.caveRaidPlayerHp = Math.max(0, this.caveRaidPlayerHp - Math.max(1, Math.floor(amount)));
+    this.caveRaidPlayerIcon?.setTint(0xf87171);
+    this.time.delayedCall(120, () => {
+      if (!this.caveRaidMiniGameActive || !this.caveRaidPlayerSprite) return;
+      this.caveRaidPlayerIcon?.clearTint();
+    });
+    if (this.caveRaidStatusText) {
+      this.caveRaidStatusText.setText(`受击 -${Math.floor(amount)} (${reason})`).setColor('#fca5a5');
+    }
+    this.playMiniGameOutcomeVfx('cave_explore', 'poor', true, this.caveRaidPlayerSprite.x, this.caveRaidPlayerSprite.y - 8, true);
+    this.refreshCaveRaidHud();
+    if (this.caveRaidPlayerHp <= 0) {
+      this.resolveCaveRaidMiniGame('down');
+    }
+  }
+
+  private updateCaveRaidPlayerPhysics(delta: number): void {
+    if (!this.caveRaidArena || !this.caveRaidPlayerSprite) return;
+    let moveX = 0;
+    if (this.cursors?.left?.isDown || this.moveLeftKey?.isDown) moveX -= 1;
+    if (this.cursors?.right?.isDown || this.moveRightKey?.isDown) moveX += 1;
+    if (Math.abs(moveX) < 0.01 && Math.abs(this.caveRaidMobileMoveX) > 0.15) {
+      moveX = Phaser.Math.Clamp(this.caveRaidMobileMoveX, -1, 1);
+    }
+    this.caveRaidPlayerSprite.x = Phaser.Math.Clamp(
+      this.caveRaidPlayerSprite.x + moveX * this.caveRaidPlayerSpeed * delta,
+      this.caveRaidArena.x + 10,
+      this.caveRaidArena.right - 10
+    );
+
+    const halfH = this.caveRaidPlayerSprite.height * 0.5;
+    const prevBottom = this.caveRaidPlayerSprite.y + halfH;
+    this.caveRaidPlayerVy += 0.00142 * delta;
+    this.caveRaidPlayerSprite.y += this.caveRaidPlayerVy * delta;
+    const nextBottom = this.caveRaidPlayerSprite.y + halfH;
+
+    let landingSurfaceY: number | null = null;
+    for (let i = 0; i < this.caveRaidSurfaces.length; i += 1) {
+      const surface = this.caveRaidSurfaces[i];
+      if (this.caveRaidPlayerSprite.x < surface.x1 - 8 || this.caveRaidPlayerSprite.x > surface.x2 + 8) continue;
+      if (prevBottom <= surface.y + 2 && nextBottom >= surface.y) {
+        if (landingSurfaceY === null || surface.y < landingSurfaceY) {
+          landingSurfaceY = surface.y;
+        }
+      }
+    }
+    if (landingSurfaceY !== null) {
+      this.caveRaidPlayerSprite.y = landingSurfaceY - halfH;
+      this.caveRaidPlayerVy = 0;
+      this.caveRaidPlayerGrounded = true;
+    } else {
+      const supportY = this.caveRaidSurfaces.find((surface) =>
+        this.caveRaidPlayerSprite!.x >= surface.x1 - 8
+        && this.caveRaidPlayerSprite!.x <= surface.x2 + 8
+        && Math.abs((this.caveRaidPlayerSprite!.y + halfH) - surface.y) <= 2.5
+      )?.y;
+      if (supportY === undefined) {
+        this.caveRaidPlayerGrounded = false;
+      }
+      if (this.caveRaidPlayerSprite.y + halfH >= this.caveRaidGroundY) {
+        this.caveRaidPlayerSprite.y = this.caveRaidGroundY - halfH;
+        this.caveRaidPlayerVy = 0;
+        this.caveRaidPlayerGrounded = true;
+      }
+    }
+
+    const ceilingY = this.caveRaidArena.y + halfH + 2;
+    if (this.caveRaidPlayerSprite.y < ceilingY) {
+      this.caveRaidPlayerSprite.y = ceilingY;
+      if (this.caveRaidPlayerVy < 0) this.caveRaidPlayerVy = 0;
+    }
+    if (this.caveRaidPlayerIcon?.active) {
+      this.caveRaidPlayerIcon.setPosition(this.caveRaidPlayerSprite.x, this.caveRaidPlayerSprite.y);
+      this.caveRaidPlayerIcon.setFlipX(moveX < 0);
+    }
+  }
+
+  private updateCaveRaidMiniGame(delta: number): void {
+    if (!this.caveRaidMiniGameActive || !this.caveRaidArena || !this.caveRaidPlayerSprite) return;
+    this.caveRaidElapsedMs += delta;
+    if (this.caveRaidElapsedMs >= this.caveRaidDurationMs) {
+      this.resolveCaveRaidMiniGame('timeout');
+      return;
+    }
+    if (this.caveRaidMobileMoveY <= -0.86) {
+      this.requestCaveRaidJump();
+    }
+    this.updateCaveRaidPlayerPhysics(delta);
+
+    for (let i = this.caveRaidProjectiles.length - 1; i >= 0; i -= 1) {
+      const projectile = this.caveRaidProjectiles[i];
+      if (!projectile.sprite.active) {
+        this.caveRaidProjectiles.splice(i, 1);
+        continue;
+      }
+      projectile.sprite.x += projectile.vx * delta;
+      projectile.sprite.y += projectile.vy * delta;
+      projectile.lifeMs -= delta;
+      let removeProjectile = projectile.lifeMs <= 0
+        || projectile.sprite.x > this.caveRaidArena.right + 12
+        || projectile.sprite.x < this.caveRaidArena.x - 12
+        || projectile.sprite.y < this.caveRaidArena.y - 14
+        || projectile.sprite.y > this.caveRaidGroundY + 20;
+      if (!removeProjectile && projectile.fromEnemy) {
+        const hitX = Math.abs(projectile.sprite.x - this.caveRaidPlayerSprite.x) <= (projectile.sprite.width + this.caveRaidPlayerSprite.width) * 0.5;
+        const hitY = Math.abs(projectile.sprite.y - this.caveRaidPlayerSprite.y) <= (projectile.sprite.height + this.caveRaidPlayerSprite.height) * 0.5;
+        if (hitX && hitY) {
+          removeProjectile = true;
+          this.damageCaveRaidPlayer(projectile.damage, '远程命中');
+        }
+      } else if (!removeProjectile) {
+        for (let j = this.caveRaidEnemies.length - 1; j >= 0; j -= 1) {
+          const enemy = this.caveRaidEnemies[j];
+          if (!enemy || !enemy.sprite.active) continue;
+          const hitX = Math.abs(projectile.sprite.x - enemy.sprite.x) <= (projectile.sprite.width + enemy.sprite.width) * 0.5;
+          const hitY = Math.abs(projectile.sprite.y - enemy.sprite.y) <= (projectile.sprite.height + enemy.sprite.height) * 0.5 + 6;
+          if (!hitX || !hitY) continue;
+          enemy.hp -= projectile.damage;
+          removeProjectile = true;
+          if (enemy.hp <= 0) {
+            enemy.sprite.destroy();
+            enemy.visual?.destroy();
+            this.caveRaidEnemies.splice(j, 1);
+            if (enemy.isBoss) {
+              this.caveRaidBossKilled = true;
+              this.caveRaidBossSprite = null;
+            } else {
+              this.caveRaidKills += 1;
+            }
+            if (this.caveRaidStage === 1 && this.caveRaidKills >= this.caveRaidStageObjective) {
+              this.startCaveRaidStage(2);
+            }
+          }
+          break;
+        }
+      }
+      if (removeProjectile) {
+        projectile.sprite.destroy();
+        this.caveRaidProjectiles.splice(i, 1);
+      }
+    }
+
+    for (let i = this.caveRaidEnemies.length - 1; i >= 0; i -= 1) {
+      const enemy = this.caveRaidEnemies[i];
+      if (!enemy || !enemy.sprite.active) {
+        enemy?.visual?.destroy();
+        this.caveRaidEnemies.splice(i, 1);
+        continue;
+      }
+      const dxToPlayer = this.caveRaidPlayerSprite.x - enemy.sprite.x;
+      const dyToPlayer = this.caveRaidPlayerSprite.y - enemy.sprite.y;
+      if (enemy.kind === 'spitter') {
+        enemy.vx = 0;
+        if (this.time.now >= enemy.nextAttackAt && Math.abs(dxToPlayer) <= 370) {
+          enemy.nextAttackAt = this.time.now + Phaser.Math.Between(
+            this.daySpotMiniGameRisk === 'risky' ? 760 : 920,
+            this.daySpotMiniGameRisk === 'risky' ? 1020 : 1280
+          );
+          const angle = Math.atan2(dyToPlayer, dxToPlayer);
+          const speed = this.daySpotMiniGameRisk === 'risky' ? 0.34 : 0.29;
+          this.spawnCaveRaidProjectile(
+            enemy.sprite.x,
+            enemy.sprite.y - 2,
+            Math.cos(angle) * speed,
+            Math.sin(angle) * speed,
+            this.daySpotMiniGameRisk === 'risky' ? 12 : 9,
+            true,
+            0xfda4af
+          );
+        }
+      } else {
+        const dir = dxToPlayer >= 0 ? 1 : -1;
+        enemy.vx = dir * enemy.speed * (enemy.kind === 'boss' ? 1.16 : 1);
+        if (enemy.kind === 'leaper' && this.time.now >= enemy.jumpCooldownUntil && Math.abs(dxToPlayer) <= 210) {
+          enemy.vy = -0.4;
+          enemy.jumpCooldownUntil = this.time.now + Phaser.Math.Between(860, 1280);
+        }
+        if (enemy.kind === 'boss' && this.time.now >= this.caveRaidBossNextSkillAt) {
+          const enraged = enemy.hp / Math.max(1, enemy.maxHp) <= 0.5;
+          if (Math.random() < 0.52) {
+            const base = enraged ? 0.46 : 0.38;
+            [-0.15, 0, 0.15].forEach((offset) => {
+              const a = Math.atan2(dyToPlayer, dxToPlayer) + offset;
+              this.spawnCaveRaidProjectile(
+                enemy.sprite.x,
+                enemy.sprite.y - 4,
+                Math.cos(a) * base,
+                Math.sin(a) * base,
+                enraged ? 13 : 10,
+                true,
+                0xfb7185
+              );
+            });
+          } else {
+            this.spawnCaveRaidTrap('floor');
+            if (Math.random() < (enraged ? 0.72 : 0.45)) this.spawnCaveRaidTrap('drop');
+          }
+          this.caveRaidBossNextSkillAt = this.time.now + (enraged ? 1250 : 1820);
+        }
+      }
+
+      enemy.sprite.x += enemy.vx * delta;
+      enemy.vy += 0.0013 * delta;
+      enemy.sprite.y += enemy.vy * delta;
+      if (enemy.visual?.active) {
+        enemy.visual.setPosition(enemy.sprite.x, enemy.sprite.y);
+        enemy.visual.setFlipX(enemy.vx < 0);
+      }
+      const enemyHalfH = enemy.sprite.height * 0.5;
+      if (enemy.sprite.y + enemyHalfH >= enemy.groundY) {
+        enemy.sprite.y = enemy.groundY - enemyHalfH;
+        enemy.vy = 0;
+      }
+
+      if (enemy.sprite.x < this.caveRaidArena.x - 20 || enemy.sprite.x > this.caveRaidArena.right + 20) {
+        enemy.sprite.destroy();
+        enemy.visual?.destroy();
+        this.caveRaidEnemies.splice(i, 1);
+        if (enemy.isBoss) {
+          this.damageCaveRaidPlayer(22, '首领突袭');
+        }
+        continue;
+      }
+      const overlapX = Math.abs(enemy.sprite.x - this.caveRaidPlayerSprite.x) <= (enemy.sprite.width + this.caveRaidPlayerSprite.width) * 0.5;
+      const overlapY = Math.abs(enemy.sprite.y - this.caveRaidPlayerSprite.y) <= (enemy.sprite.height + this.caveRaidPlayerSprite.height) * 0.45;
+      if (overlapX && overlapY && this.time.now >= enemy.nextAttackAt) {
+        enemy.nextAttackAt = this.time.now + (enemy.isBoss ? 420 : enemy.kind === 'leaper' ? 620 : 780);
+        this.damageCaveRaidPlayer(enemy.touchDamage, enemy.isBoss ? '首领重击' : '近身抓咬');
+      }
+    }
+
+    if (this.caveRaidStage === 1 && this.time.now >= this.caveRaidNextSpawnAt) {
+      this.spawnCaveRaidEnemy(false);
+      if (this.daySpotMiniGameRisk === 'risky' && Math.random() < 0.3) {
+        this.spawnCaveRaidEnemy(false);
+      }
+      this.caveRaidNextSpawnAt = this.time.now + Phaser.Math.Between(
+        Math.max(900, this.caveRaidEnemySpawnIntervalMs - 320),
+        this.caveRaidEnemySpawnIntervalMs + 260
+      );
+    }
+    if (this.caveRaidStage === 2) {
+      this.caveRaidStageProgress += delta;
+      if (this.caveRaidStageProgress >= this.caveRaidStageObjective) {
+        this.startCaveRaidStage(3);
+      }
+    }
+    if (this.caveRaidStage === 3 && !this.caveRaidBossKilled && this.time.now >= this.caveRaidNextSpawnAt) {
+      this.spawnCaveRaidEnemy(false);
+      if (this.daySpotMiniGameRisk === 'risky' && Math.random() < 0.36) this.spawnCaveRaidEnemy(false);
+      this.caveRaidNextSpawnAt = this.time.now + Phaser.Math.Between(
+        Math.max(1040, this.caveRaidEnemySpawnIntervalMs - 180),
+        this.caveRaidEnemySpawnIntervalMs + 360
+      );
+    }
+    if (!this.caveRaidBossKilled && this.time.now >= this.caveRaidNextTrapAt) {
+      if (this.caveRaidStage === 2) {
+        this.spawnCaveRaidTrap(Math.random() < 0.5 ? 'drop' : 'floor');
+      } else if (this.caveRaidStage === 3) {
+        this.spawnCaveRaidTrap(Math.random() < 0.4 ? 'drop' : 'floor');
+      } else {
+        this.spawnCaveRaidTrap('floor');
+      }
+      this.caveRaidNextTrapAt = this.time.now + Phaser.Math.Between(
+        this.caveRaidStage === 2
+          ? (this.daySpotMiniGameRisk === 'risky' ? 700 : 920)
+          : (this.daySpotMiniGameRisk === 'risky' ? 1900 : 2500),
+        this.caveRaidStage === 2
+          ? (this.daySpotMiniGameRisk === 'risky' ? 1200 : 1480)
+          : (this.daySpotMiniGameRisk === 'risky' ? 2900 : 3600)
+      );
+    }
+
+    for (let i = this.caveRaidTraps.length - 1; i >= 0; i -= 1) {
+      const trap = this.caveRaidTraps[i];
+      if (!trap.zone.active || !trap.pulse.active) {
+        trap.icon?.destroy();
+        this.caveRaidTraps.splice(i, 1);
+        continue;
+      }
+      if (!trap.fired) {
+        const readyMs = Math.max(1, trap.fireAt - trap.armedAt);
+        const t = Phaser.Math.Clamp((this.time.now - trap.armedAt) / readyMs, 0, 1);
+        trap.zone.setAlpha(0.15 + t * 0.38);
+        trap.pulse.setAlpha(0.12 + 0.16 * Math.abs(Math.sin(this.time.now * 0.028)));
+        trap.pulse.setScale(1 + t * 0.35, 1 + t * 0.12);
+        if (trap.icon?.active) {
+          trap.icon.setPosition(trap.pulse.x, trap.pulse.y);
+          trap.icon.setAlpha(0.68 + t * 0.22);
+        }
+        if (this.time.now >= trap.fireAt) {
+          trap.fired = true;
+          if (trap.mode === 'floor') {
+            trap.zone.setFillStyle(0xef4444, 0.92);
+            trap.pulse.setFillStyle(0xfca5a5, 0.7);
+            trap.icon?.setTint(0xf87171);
+            const hitPlayer = this.caveRaidPlayerSprite.x >= trap.zone.getBounds().left
+              && this.caveRaidPlayerSprite.x <= trap.zone.getBounds().right
+              && this.caveRaidPlayerSprite.y + this.caveRaidPlayerSprite.height * 0.5 >= this.caveRaidGroundY - 8;
+            if (hitPlayer) {
+              this.daySpotMiniGameTrapHits += 1;
+              this.damageCaveRaidPlayer(this.daySpotMiniGameRisk === 'risky' ? 22 : 16, '地雷爆震');
+              this.cameras.main.shake(this.lowPerfMode ? 70 : 110, this.lowPerfMode ? 0.003 : 0.005);
+            }
+          } else {
+            trap.zone.setFillStyle(0xfda4af, 0.28).setAlpha(0.36);
+            trap.pulse.setFillStyle(0xf43f5e, 0.84).setAlpha(0.95);
+            trap.pulse.y = this.caveRaidArena.y + 10;
+            trap.icon?.setTint(0xfb7185);
+          }
+        }
+      } else if (trap.mode === 'floor') {
+        if (this.time.now - trap.fireAt > 260) {
+          trap.zone.destroy();
+          trap.pulse.destroy();
+          trap.icon?.destroy();
+          this.caveRaidTraps.splice(i, 1);
+        }
+      } else {
+        trap.pulse.y += trap.travelV * delta;
+        trap.icon?.setPosition(trap.pulse.x, trap.pulse.y);
+        const hitX = Math.abs(trap.pulse.x - this.caveRaidPlayerSprite.x) <= (trap.pulse.width + this.caveRaidPlayerSprite.width) * 0.45;
+        const hitY = Math.abs(trap.pulse.y - this.caveRaidPlayerSprite.y) <= (trap.pulse.height + this.caveRaidPlayerSprite.height) * 0.45;
+        if (hitX && hitY) {
+          this.daySpotMiniGameTrapHits += 1;
+          this.damageCaveRaidPlayer(this.daySpotMiniGameRisk === 'risky' ? 18 : 14, '落石砸击');
+          trap.zone.destroy();
+          trap.pulse.destroy();
+          trap.icon?.destroy();
+          this.caveRaidTraps.splice(i, 1);
+        } else if (trap.pulse.y > this.caveRaidGroundY + 20) {
+          trap.zone.destroy();
+          trap.pulse.destroy();
+          trap.icon?.destroy();
+          this.caveRaidTraps.splice(i, 1);
+        }
+      }
+    }
+
+    if (this.caveRaidBossKilled) {
+      this.resolveCaveRaidMiniGame('victory');
+      return;
+    }
+    this.refreshCaveRaidHud();
+  }
+
+  private resolveCaveRaidMiniGame(result: 'victory' | 'timeout' | 'down' | 'retreat'): void {
+    if (!this.caveRaidMiniGameActive || this.caveRaidResultResolved || !this.daySpotMiniGameSpot) return;
+    this.caveRaidResultResolved = true;
+    const spot = this.daySpotMiniGameSpot;
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    const trapHit = this.daySpotMiniGameTrapHits > 0;
+
+    let quality: 'poor' | 'good' | 'perfect' = 'poor';
+    if (result === 'victory') {
+      const hpRatio = this.caveRaidPlayerHpMax > 0 ? this.caveRaidPlayerHp / this.caveRaidPlayerHpMax : 0;
+      if (hpRatio >= 0.74 && !trapHit && this.caveRaidElapsedMs <= this.caveRaidDurationMs * 0.78) {
+        quality = 'perfect';
+      } else if (hpRatio >= 0.35 && this.daySpotMiniGameTrapHits <= 3) {
+        quality = 'good';
+      }
+    }
+
+    const stationed = gameState.data.companions.filter((c) => c.status === 'base').length;
+    const active = this.getExplorationSpotResidentCount(spot.id);
+    const usageLimit = this.getActivityUsageLimit(spot.actionType);
+    const used = this.getActivityUsage(spot.actionType);
+    this.closeDayExplorationMiniGame();
+    if (used >= usageLimit || gameState.data.isNight) return;
+    this.playDayMiniGameResultFeedback(spot, quality, risky, trapHit || result !== 'victory');
+    this.executeActiveExploration(spot, stationed, active, used, usageLimit, {
+      quality,
+      risky,
+      trapHit: trapHit || result !== 'victory',
+    });
+  }
+
+  private updateDayExplorationMiniGame(delta: number): void {
+    if (this.caveRaidMiniGameActive) {
+      this.updateCaveRaidMiniGame(delta);
+      return;
+    }
+    if (this.cityScavengeMiniGameActive) {
+      this.updateCityScavengeMiniGame(delta);
+      return;
+    }
+    if (this.forestHuntMiniGameActive) {
+      this.updateForestHuntMiniGame(delta);
+      return;
+    }
+    const profile = this.daySpotMiniGameProfile;
+    if (!this.daySpotMiniGameOpen || !this.daySpotMiniGameCursorVisual || !profile) return;
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    const riskSpeedMul = risky ? profile.riskyTargetSpeedMul : 1;
+    const cursorSpeed = (risky ? 0.00095 : 0.00072) * (this.daySpotMiniGameMode === 'hunt' ? 1.16 : 1);
+    this.daySpotMiniGameCursor += this.daySpotMiniGameCursorDir * cursorSpeed * delta;
+    if (this.daySpotMiniGameCursor <= 0) {
+      this.daySpotMiniGameCursor = 0;
+      this.daySpotMiniGameCursorDir = 1;
+    } else if (this.daySpotMiniGameCursor >= 1) {
+      this.daySpotMiniGameCursor = 1;
+      this.daySpotMiniGameCursorDir = -1;
+    }
+
+    const targetSpeed = profile.baseTargetSpeed * riskSpeedMul;
+    if (this.daySpotMiniGameMode === 'swim') {
+      const oscillation = 0.74 + 0.3 * Math.abs(Math.sin(this.time.now * 0.0042));
+      this.daySpotMiniGameTargetWidth = Phaser.Math.Clamp(profile.baseWidth * oscillation * (risky ? profile.riskyTargetWidthMul : 1), 0.1, 0.44);
+      this.daySpotMiniGameTargetCenter = 0.5 + Math.sin(this.time.now * 0.0018) * 0.08;
+    } else if (this.daySpotMiniGameMode === 'hunt') {
+      this.daySpotMiniGameTargetCenter += this.daySpotMiniGameTargetDir * targetSpeed * delta;
+      this.daySpotMiniGameTargetCenter += Math.sin(this.time.now * 0.011) * 0.0007 * delta;
+      if (this.daySpotMiniGameTargetCenter <= 0.16) {
+        this.daySpotMiniGameTargetCenter = 0.16;
+        this.daySpotMiniGameTargetDir = 1;
+      } else if (this.daySpotMiniGameTargetCenter >= 0.84) {
+        this.daySpotMiniGameTargetCenter = 0.84;
+        this.daySpotMiniGameTargetDir = -1;
+      }
+    } else if (this.daySpotMiniGameMode === 'cave_explore') {
+      const pulse = Math.sin(this.time.now * 0.0038);
+      const anchor = pulse > 0 ? 0.68 : 0.32;
+      this.daySpotMiniGameTargetCenter += (anchor - this.daySpotMiniGameTargetCenter) * 0.12;
+      this.daySpotMiniGameTargetCenter = Phaser.Math.Clamp(this.daySpotMiniGameTargetCenter, 0.12, 0.88);
+      this.daySpotMiniGameTrapCenter = 0.5 + Math.sin(this.time.now * 0.0022) * 0.16;
+    } else if (this.daySpotMiniGameMode === 'scavenge') {
+      this.daySpotMiniGameTargetCenter += this.daySpotMiniGameTargetDir * targetSpeed * 0.66 * delta;
+      if (this.daySpotMiniGameTargetCenter <= 0.2) {
+        this.daySpotMiniGameTargetCenter = 0.2;
+        this.daySpotMiniGameTargetDir = 1;
+      } else if (this.daySpotMiniGameTargetCenter >= 0.8) {
+        this.daySpotMiniGameTargetCenter = 0.8;
+        this.daySpotMiniGameTargetDir = -1;
+      }
+      this.daySpotMiniGameTrapCenter += -this.daySpotMiniGameTargetDir * targetSpeed * 0.5 * delta;
+      if (this.daySpotMiniGameTrapCenter <= 0.16) {
+        this.daySpotMiniGameTrapCenter = 0.16;
+      } else if (this.daySpotMiniGameTrapCenter >= 0.84) {
+        this.daySpotMiniGameTrapCenter = 0.84;
+      }
+    } else {
+      this.daySpotMiniGameTargetCenter += this.daySpotMiniGameTargetDir * targetSpeed * delta;
+      if (this.daySpotMiniGameTargetCenter <= 0.2) {
+        this.daySpotMiniGameTargetCenter = 0.2;
+        this.daySpotMiniGameTargetDir = 1;
+      } else if (this.daySpotMiniGameTargetCenter >= 0.8) {
+        this.daySpotMiniGameTargetCenter = 0.8;
+        this.daySpotMiniGameTargetDir = -1;
+      }
+    }
+
+    const minX = Number(this.daySpotMiniGameCursorVisual.getData('barMinX') || 0);
+    const maxX = Number(this.daySpotMiniGameCursorVisual.getData('barMaxX') || 0);
+    this.daySpotMiniGameCursorVisual.x = minX + (maxX - minX) * this.daySpotMiniGameCursor;
+    this.refreshDayMiniGameZoneVisuals();
+  }
+
+  private resolveDayExplorationMiniGame(): void {
+    if (this.caveRaidMiniGameActive) {
+      this.tryCaveRaidAttack();
+      return;
+    }
+    if (this.cityScavengeMiniGameActive) {
+      this.triggerCityScavengeAction();
+      return;
+    }
+    if (this.forestHuntMiniGameActive) {
+      this.triggerForestHuntAction();
+      return;
+    }
+    if (!this.daySpotMiniGameOpen || !this.daySpotMiniGameSpot || !this.daySpotMiniGameProfile) return;
+    const spot = this.daySpotMiniGameSpot;
+    const targetDist = Math.abs(this.daySpotMiniGameCursor - this.daySpotMiniGameTargetCenter);
+    const targetHalf = this.daySpotMiniGameTargetWidth * 0.5;
+    const perfectHalf = targetHalf * this.daySpotMiniGamePerfectRatio;
+    const hasTrap = this.daySpotMiniGameProfile.hasTrap && this.daySpotMiniGameTrapCenter >= 0 && this.daySpotMiniGameTrapWidth > 0;
+    const inTrap = hasTrap && Math.abs(this.daySpotMiniGameCursor - this.daySpotMiniGameTrapCenter) <= this.daySpotMiniGameTrapWidth * 0.5;
+    const quality: 'poor' | 'good' | 'perfect' =
+      inTrap ? 'poor' : targetDist <= perfectHalf ? 'perfect' : targetDist <= targetHalf ? 'good' : 'poor';
+    const risky = this.daySpotMiniGameRisk === 'risky';
+    const roundPoints = inTrap ? 0 : quality === 'perfect' ? 2 : quality === 'good' ? 1 : 0;
+    this.daySpotMiniGameScore += roundPoints;
+    if (inTrap) this.daySpotMiniGameTrapHits += 1;
+
+    if (this.daySpotMiniGameStageText) {
+      const text = inTrap
+        ? `第${this.daySpotMiniGameRound}回合：踩中陷阱`
+        : `第${this.daySpotMiniGameRound}回合：${quality === 'perfect' ? '完美 +2' : quality === 'good' ? '稳健 +1' : '失误 +0'}`;
+      this.daySpotMiniGameStageText
+        .setText(text)
+        .setColor(inTrap ? '#f87171' : quality === 'perfect' ? '#4ade80' : quality === 'good' ? '#38bdf8' : '#f59e0b');
+    }
+    this.playMiniGameOutcomeVfx(
+      spot.actionType,
+      quality,
+      inTrap,
+      this.daySpotMiniGameCursorVisual?.x ?? this.player.x,
+      (this.daySpotMiniGameCursorVisual?.y ?? this.player.y) - 6,
+      true
+    );
+    if (this.daySpotMiniGameRound < this.daySpotMiniGameRoundsTotal) {
+      this.daySpotMiniGameRound += 1;
+      this.daySpotMiniGameCursor = Phaser.Math.FloatBetween(0.08, 0.92);
+      this.daySpotMiniGameCursorDir = Math.random() < 0.5 ? -1 : 1;
+      this.initializeDayMiniGameState(spot);
+      this.refreshDayMiniGameRoundDisplay();
+      return;
+    }
+
+    const maxPoints = Math.max(1, this.daySpotMiniGameRoundsTotal * 2);
+    const netScore = this.daySpotMiniGameScore - this.daySpotMiniGameTrapHits * 0.8;
+    const scoreRatio = Phaser.Math.Clamp(netScore / maxPoints, 0, 1);
+    let finalQuality: 'poor' | 'good' | 'perfect' = scoreRatio >= 0.76
+      ? 'perfect'
+      : scoreRatio >= 0.42
+        ? 'good'
+        : 'poor';
+    if (this.daySpotMiniGameTrapHits >= Math.ceil(this.daySpotMiniGameRoundsTotal * 0.6)) {
+      finalQuality = 'poor';
+    }
+    const finalTrap = this.daySpotMiniGameTrapHits > 0;
+
+    const stationed = gameState.data.companions.filter((c) => c.status === 'base').length;
+    const active = this.getExplorationSpotResidentCount(spot.id);
+    const usageLimit = this.getActivityUsageLimit(spot.actionType);
+    const used = this.getActivityUsage(spot.actionType);
+
+    this.closeDayExplorationMiniGame();
+    if (used >= usageLimit || gameState.data.isNight) return;
+
+    this.playDayMiniGameResultFeedback(spot, finalQuality, risky, finalTrap);
+    this.executeActiveExploration(spot, stationed, active, used, usageLimit, {
+      quality: finalQuality,
+      risky,
+      trapHit: finalTrap,
+    });
+  }
+
+  private closeDayExplorationMiniGame(): void {
+    if (!this.daySpotMiniGameOpen) return;
+    this.daySpotMiniGameOpen = false;
+    this.daySpotMiniGameContainer?.destroy();
+    this.daySpotMiniGameContainer = null;
+    this.daySpotMiniGameCursorVisual = null;
+    this.daySpotMiniGameTargetVisual = null;
+    this.daySpotMiniGamePerfectVisual = null;
+    this.daySpotMiniGameTrapVisual = null;
+    this.daySpotMiniGameRoundText = null;
+    this.daySpotMiniGameStageText = null;
+    this.daySpotMiniGameActionLabel = null;
+    this.daySpotMiniGameRound = 1;
+    this.daySpotMiniGameRoundsTotal = 1;
+    this.daySpotMiniGameScore = 0;
+    this.daySpotMiniGameTrapHits = 0;
+    this.caveRaidMiniGameActive = false;
+    this.caveRaidResultResolved = false;
+    this.caveRaidArena = null;
+    this.caveRaidGroundY = 0;
+    this.caveRaidSurfaces = [];
+    this.caveRaidPlayerSprite = null;
+    this.caveRaidPlayerVy = 0;
+    this.caveRaidPlayerGrounded = true;
+    this.caveRaidPlayerJumpCooldownUntil = 0;
+    this.caveRaidPlayerAttackCooldownUntil = 0;
+    this.caveRaidPlayerInvulUntil = 0;
+    this.caveRaidElapsedMs = 0;
+    this.caveRaidStage = 1;
+    this.caveRaidStageProgress = 0;
+    this.caveRaidStageObjective = 4;
+    this.caveRaidKills = 0;
+    this.caveRaidBossSpawned = false;
+    this.caveRaidBossKilled = false;
+    this.caveRaidBossSprite = null;
+    this.caveRaidBossNextSkillAt = 0;
+    this.caveRaidNextSpawnAt = 0;
+    this.caveRaidNextTrapAt = 0;
+    this.caveRaidMobileMoveX = 0;
+    this.caveRaidMobileMoveY = 0;
+    this.caveRaidStatusText = null;
+    this.caveRaidHpText = null;
+    this.caveRaidTimerText = null;
+    this.caveRaidEnemies = [];
+    this.caveRaidProjectiles = [];
+    this.caveRaidTraps = [];
+    this.forestHuntMiniGameActive = false;
+    this.forestHuntResultResolved = false;
+    this.forestHuntArena = null;
+    this.forestHuntGroundY = 0;
+    this.forestHuntPlayerSprite = null;
+    this.forestHuntPreySprite = null;
+    this.forestHuntPlayerIcon = null;
+    this.forestHuntPreyIcon = null;
+    this.forestHuntHintIcon = null;
+    this.forestHuntSightVisual = null;
+    if (this.forestHuntClue) {
+      this.forestHuntClue.sprite.destroy();
+      this.forestHuntClue.pulse.destroy();
+    }
+    this.forestHuntClue = null;
+    this.forestHuntStatusText = null;
+    this.forestHuntPhaseText = null;
+    this.forestHuntAlertText = null;
+    this.forestHuntPhase = 'stealth';
+    this.forestHuntPhaseElapsedMs = 0;
+    this.forestHuntStealthDurationMs = 5200;
+    this.forestHuntBurstDurationMs = 2400;
+    this.forestHuntRoundStealthSuccess = false;
+    this.forestHuntAlertMeter = 0;
+    this.forestHuntDetections = 0;
+    this.forestHuntBreathCooldownUntil = 0;
+    this.forestHuntPlayerSpeed = 0.24;
+    this.forestHuntPreyVx = 0.082;
+    this.forestHuntPreyFacing = 1;
+    this.forestHuntMobileMoveX = 0;
+    this.forestHuntBurstCursor = 0.5;
+    this.forestHuntBurstCursorDir = 1;
+    this.forestHuntBurstCursorSpeed = 0.00106;
+    this.forestHuntBurstTargetCenter = 0.5;
+    this.forestHuntBurstTargetDir = 1;
+    this.forestHuntBurstTargetSpeed = 0.00052;
+    this.forestHuntBurstTargetWidth = 0.22;
+    this.forestHuntBurstPerfectRatio = 0.42;
+    this.forestHuntActionHintText = null;
+    this.cityScavengeMiniGameActive = false;
+    this.cityScavengeResultResolved = false;
+    this.cityScavengeArena = null;
+    this.cityScavengePlayerSprite = null;
+    this.cityScavengeExtractZone = null;
+    this.cityScavengeStatusText = null;
+    this.cityScavengeTimerText = null;
+    this.cityScavengeCarryText = null;
+    this.cityScavengeActionHintText = null;
+    this.cityScavengeRouteText = null;
+    this.cityScavengeRoute = 'alley';
+    this.cityScavengeRouteSelected = false;
+    this.cityScavengeElapsedMs = 0;
+    this.cityScavengeTimeLimitMs = 15000;
+    this.cityScavengeCarryWeight = 0;
+    this.cityScavengeCarryCap = 20;
+    this.cityScavengeLootScore = 0;
+    this.cityScavengeScoreTarget = 24;
+    this.cityScavengePlayerBaseSpeed = 0.27;
+    this.cityScavengeMoveX = 0;
+    this.cityScavengeMoveY = 0;
+    this.cityScavengeTrapCooldownUntil = 0;
+    this.cityScavengeLanes = [];
+    this.cityScavengeLootNodes = [];
+    this.cityScavengePatrols = [];
+    this.cityScavengeRouteRewardMul = 1;
+    this.cityScavengeRouteDangerMul = 1;
+    this.cityScavengeExtracted = false;
+    this.daySpotMiniGameSpot = null;
+    this.daySpotMiniGameRisk = 'safe';
+    this.daySpotMiniGameMode = 'fish';
+    this.daySpotMiniGameCursor = 0.5;
+    this.daySpotMiniGameCursorDir = 1;
+    this.daySpotMiniGameTargetCenter = 0.5;
+    this.daySpotMiniGameTargetDir = 1;
+    this.daySpotMiniGameTargetWidth = 0.24;
+    this.daySpotMiniGamePerfectRatio = 0.4;
+    this.daySpotMiniGameTrapCenter = -1;
+    this.daySpotMiniGameTrapWidth = 0;
+    this.daySpotMiniGameProfile = null;
+    this.setUISceneInputEnabled(true);
+    if (!this.currentFacility) {
+      this.playerSystem?.setMovementEnabled(true);
+    }
   }
 
   private createVillageScenery(): void {
@@ -2476,6 +8252,10 @@ export default class GameScene extends Phaser.Scene {
 
   private setupInput(): void {
     this.interactKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.attackKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.moveLeftKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+    this.moveRightKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+    this.jumpKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.W);
     this.emergencyExitKey = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     this.input.keyboard!.on('keydown-B', () => {
       if (this.currentFacility) return;
@@ -2703,6 +8483,41 @@ export default class GameScene extends Phaser.Scene {
   // ============================================================
   update(_time: number, delta: number): void {
     this.frameCounter += 1;
+    if ((gameState.data.playerLevel || 1) !== this.lastAppliedUpgradeLevel) {
+      this.applyDynamicPlayerUpgradeBonuses(true);
+    }
+    this.updateScavengeDurabilityState();
+    if (this.dayChallengeSelectionOpen || this.nightDirectiveSelectionOpen) {
+      this.explorationEdgeIndicators.forEach((indicator) => indicator.setVisible(false));
+      return;
+    }
+    if (this.daySpotMiniGameOpen) {
+      if (this.caveRaidMiniGameActive) {
+        if ((this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey))
+          || (this.attackKey && Phaser.Input.Keyboard.JustDown(this.attackKey))) {
+          this.tryCaveRaidAttack();
+        }
+        if ((this.cursors?.up && Phaser.Input.Keyboard.JustDown(this.cursors.up))
+          || (this.jumpKey && Phaser.Input.Keyboard.JustDown(this.jumpKey))) {
+          this.requestCaveRaidJump();
+        }
+      } else if (this.forestHuntMiniGameActive) {
+        if ((this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey))
+          || (this.attackKey && Phaser.Input.Keyboard.JustDown(this.attackKey))) {
+          this.triggerForestHuntAction();
+        }
+      } else if (this.cityScavengeMiniGameActive) {
+        if ((this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey))
+          || (this.attackKey && Phaser.Input.Keyboard.JustDown(this.attackKey))) {
+          this.triggerCityScavengeAction();
+        }
+      } else if (this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+        this.resolveDayExplorationMiniGame();
+      }
+      this.updateDayExplorationMiniGame(delta);
+      this.explorationEdgeIndicators.forEach((indicator) => indicator.setVisible(false));
+      return;
+    }
     if (this.isGameOver || this.runEventOpen) {
       this.explorationEdgeIndicators.forEach((indicator) => indicator.setVisible(false));
       return;
@@ -2754,18 +8569,23 @@ export default class GameScene extends Phaser.Scene {
     this.updateTurrets();
 
     // Companion system
-    const companionGlobalBonus = Math.max(0, Math.floor((gameState.data.playerLevel || 1) * 2.6 + Math.max(0, this.comboCount) * 0.2));
+    const combatBoost = this.getPlayerCombatBoost();
+    const companionGlobalBonus = Math.max(
+      0,
+      Math.floor(((gameState.data.playerLevel || 1) * 2.6 + Math.max(0, this.comboCount) * 0.2) * combatBoost.companionDamageMul)
+    );
     this.companionSystem.update(
       this.enemies,
       this.companionBullets,
       companionGlobalBonus,
-      this.permanentTalentBonuses.companionFireRateMul
+      this.permanentTalentBonuses.companionFireRateMul * combatBoost.companionFireRateMul
     );
     if (this.time.now >= this.nextCompanionRosterSyncAt) {
       this.nextCompanionRosterSyncAt = this.time.now + (this.lowPerfMode ? 260 : 120);
       this.syncCompanionRoster();
     }
     this.updateNightBaseDefense();
+    this.updateNightDirectivePressure();
     if (this.time.now >= this.nextExplorationUiUpdateAt) {
       this.nextExplorationUiUpdateAt = this.time.now + (this.lowPerfMode ? 280 : 120);
       this.updateExplorationSpotStatus();
@@ -2825,7 +8645,15 @@ export default class GameScene extends Phaser.Scene {
       this.comboCount = 0;
       if (this.comboText) this.comboText.setVisible(false);
     }
+    if (this.time.now >= this.nextGearResonanceCheckAt) {
+      this.nextGearResonanceCheckAt = this.time.now + 1000;
+      this.updateGearResonanceState();
+    }
+    this.updateBattleMomentumState();
+    this.updateComboDisplay();
     this.updateOverdriveState();
+    this.updateLevelSurgeState();
+    this.updateProtocolAuraState();
     this.updatePowerTierState();
 
     // Speed lines when moving fast
@@ -2864,6 +8692,14 @@ export default class GameScene extends Phaser.Scene {
       speedMul: (baseMods.speedMul || 1) * playerCombatBoost.speedMul,
       spreadMul: (baseMods.spreadMul || 1) * playerCombatBoost.spreadMul,
       pierceBonus: (baseMods.pierceBonus || 0) + playerCombatBoost.pierceBonus,
+      patternPower: playerCombatBoost.patternPower,
+      signatureRateMul: playerCombatBoost.signatureRateMul,
+      extraChainChance: playerCombatBoost.extraChainChance,
+      signatureDamageMul: playerCombatBoost.signatureDamageMul,
+      signatureSpeedMul: playerCombatBoost.signatureSpeedMul,
+      orbitAmpMul: playerCombatBoost.orbitAmpMul,
+      companionDamageMul: playerCombatBoost.companionDamageMul,
+      companionFireRateMul: playerCombatBoost.companionFireRateMul,
     };
 
     // Fire primary weapon
@@ -2916,6 +8752,14 @@ export default class GameScene extends Phaser.Scene {
     speedMul: number;
     spreadMul: number;
     pierceBonus: number;
+    patternPower: number;
+    signatureRateMul: number;
+    extraChainChance: number;
+    signatureDamageMul: number;
+    signatureSpeedMul: number;
+    orbitAmpMul: number;
+    companionDamageMul: number;
+    companionFireRateMul: number;
   } {
     const level = Math.max(1, gameState.data.playerLevel || 1);
     const week = Math.max(1, gameState.data.currentWeek || 1);
@@ -2933,8 +8777,10 @@ export default class GameScene extends Phaser.Scene {
     const masteryLevels = Object.values(this.weaponMasteryLevels);
     const masteryAvg = masteryLevels.reduce((sum, lv) => sum + lv, 0) / Math.max(1, masteryLevels.length);
     const masteryPeak = Math.max(...masteryLevels);
+    const pacing = this.getRunPacingProfile();
     const runMomentumTier = Math.min(20, Math.floor(killCount / 35));
     const runMomentumMul = runMomentumTier * 0.02;
+    const protocolBonuses = EvolutionSystem.getProtocolCombatBonuses();
     const permanentDamageBonus = Math.min(0.72, permanentDamageLv * 0.055);
     const permanentSpeedBonus = Math.min(0.25, permanentMobilityLv * 0.018);
     const weekPressureBonus = Math.min(0.32, Math.max(0, week - 1) * 0.04);
@@ -2946,14 +8792,17 @@ export default class GameScene extends Phaser.Scene {
       (level >= 14 ? 1 : 0) +
       (level >= 20 ? 1 : 0) +
       (masteryPeak >= 5 ? 1 : 0) +
-      (runMomentumTier >= 10 ? 1 : 0);
+      (runMomentumTier >= 10 ? 1 : 0) +
+      protocolBonuses.projectileBonus +
+      this.gearResonanceProjectileBonus;
     const pierceBonus =
       (level >= 7 ? 1 : 0) +
       (level >= 13 ? 1 : 0) +
       (level >= 19 ? 1 : 0) +
-      (masteryPeak >= 7 ? 1 : 0);
+      (masteryPeak >= 7 ? 1 : 0) +
+      protocolBonuses.pierceBonus;
     const companionDamageBonus = Math.min(0.25, avgCompanionLevel * 0.013 + roleVariety * 0.018);
-    const fireRateMul = 1 + Math.min(
+    const fireRateMul = (1 + Math.min(
       1.08,
       (level - 1) * 0.017 +
       0.1 +
@@ -2962,8 +8811,8 @@ export default class GameScene extends Phaser.Scene {
       partySyncBonus * 0.9 +
       masteryBonus * 0.85 +
       runMomentumMul * 0.9
-    );
-    const damageMul = 1 + Math.min(
+    )) * protocolBonuses.fireRateMul * this.gearResonanceFireRateMul * pacing.combatMul;
+    const damageMul = (1 + Math.min(
       1.85,
       (level - 1) * 0.03 +
       0.16 +
@@ -2975,17 +8824,67 @@ export default class GameScene extends Phaser.Scene {
       runMomentumMul * 1.15 +
       weekPressureBonus +
       permanentDamageBonus
-    );
-    const speedMul = 1 + Math.min(0.62, (level - 1) * 0.012 + partySyncBonus * 0.55 + masteryBonus * 0.34 + runMomentumMul * 0.2 + permanentSpeedBonus);
+    )) * protocolBonuses.damageMul * this.gearResonanceDamageMul * pacing.combatMul;
+    const speedMul = (1 + Math.min(0.62, (level - 1) * 0.012 + partySyncBonus * 0.55 + masteryBonus * 0.34 + runMomentumMul * 0.2 + permanentSpeedBonus))
+      * protocolBonuses.speedMul;
+    const speedMulWithGear = speedMul * this.gearResonanceSpeedMul;
     const spreadMul = Math.max(0.5, 1 - Math.min(0.5, (level - 1) * 0.014 + partySyncBonus * 0.28 + masteryBonus * 0.32 + runMomentumMul * 0.14));
+    const patternPower = Math.max(0, protocolBonuses.patternPower + Math.floor(level / 10));
+    const signatureRateMul = protocolBonuses.signatureRateMul * (1 + Math.min(0.22, masteryPeak * 0.02));
+    const extraChainChance = protocolBonuses.extraChainChance + Math.min(0.1, runMomentumTier * 0.004);
+    const signatureDamageMul = 1 + Math.min(0.35, patternPower * 0.05);
+    const signatureSpeedMul = 1 + Math.min(0.32, patternPower * 0.045);
+    const orbitAmpMul = 1 + Math.min(0.26, patternPower * 0.04);
+    const companionDamageMul = protocolBonuses.companionDamageMul;
+    const companionFireRateMul = protocolBonuses.companionFireRateMul;
+    const levelSpikeTier = Math.floor((level - 1) / 5);
+    const levelSpikeFireRateMul = 1 + Math.min(0.34, levelSpikeTier * 0.055);
+    const levelSpikeDamageMul = 1 + Math.min(0.52, levelSpikeTier * 0.08);
+    const levelSpikeSpeedMul = 1 + Math.min(0.26, levelSpikeTier * 0.038);
+    const levelSpikeProjectileBonus = Math.floor((level - 1) / 10);
+    const levelSpikePierceBonus = level >= 18 ? 1 : 0;
     const tieredBoost = {
-      fireRateMul: fireRateMul * tier.fireRateMul,
-      damageMul: damageMul * tier.damageMul,
-      projectileBonus: projectileBonus + tier.projectileBonus,
-      speedMul: speedMul * tier.speedMul,
+      fireRateMul: fireRateMul * tier.fireRateMul * levelSpikeFireRateMul,
+      damageMul: damageMul * tier.damageMul * levelSpikeDamageMul,
+      projectileBonus: projectileBonus + tier.projectileBonus + levelSpikeProjectileBonus,
+      speedMul: speedMulWithGear * tier.speedMul * levelSpikeSpeedMul,
       spreadMul: spreadMul,
-      pierceBonus: pierceBonus + tier.pierceBonus,
+      pierceBonus: pierceBonus + tier.pierceBonus + levelSpikePierceBonus,
+      patternPower,
+      signatureRateMul,
+      extraChainChance,
+      signatureDamageMul,
+      signatureSpeedMul,
+      orbitAmpMul,
+      companionDamageMul,
+      companionFireRateMul,
     };
+    if (this.isBattleMomentumActive()) {
+      tieredBoost.fireRateMul *= 1.16;
+      tieredBoost.damageMul *= 1.22;
+      tieredBoost.projectileBonus += 1;
+      tieredBoost.speedMul *= 1.08;
+      tieredBoost.signatureRateMul *= 1.06;
+      tieredBoost.extraChainChance = Math.min(0.72, tieredBoost.extraChainChance + 0.05);
+    }
+    if (this.time.now < this.levelSurgeUntil) {
+      return {
+        fireRateMul: tieredBoost.fireRateMul * 1.24,
+        damageMul: tieredBoost.damageMul * 1.28,
+        projectileBonus: tieredBoost.projectileBonus + 1,
+        speedMul: tieredBoost.speedMul * 1.16,
+        spreadMul: Math.max(0.45, tieredBoost.spreadMul * 0.8),
+        pierceBonus: tieredBoost.pierceBonus + 1,
+        patternPower: tieredBoost.patternPower + 1,
+        signatureRateMul: tieredBoost.signatureRateMul * 1.1,
+        extraChainChance: Math.min(0.62, tieredBoost.extraChainChance + 0.06),
+        signatureDamageMul: tieredBoost.signatureDamageMul * 1.08,
+        signatureSpeedMul: tieredBoost.signatureSpeedMul * 1.08,
+        orbitAmpMul: tieredBoost.orbitAmpMul * 1.06,
+        companionDamageMul: tieredBoost.companionDamageMul * 1.08,
+        companionFireRateMul: tieredBoost.companionFireRateMul * 1.06,
+      };
+    }
     if (this.isOverdriveActive()) {
       return {
         fireRateMul: tieredBoost.fireRateMul * 1.32,
@@ -2994,20 +8893,55 @@ export default class GameScene extends Phaser.Scene {
         speedMul: tieredBoost.speedMul * 1.22,
         spreadMul: Math.max(0.45, tieredBoost.spreadMul * 0.78),
         pierceBonus: tieredBoost.pierceBonus + 1,
+        patternPower: tieredBoost.patternPower + 1,
+        signatureRateMul: tieredBoost.signatureRateMul * 1.14,
+        extraChainChance: Math.min(0.68, tieredBoost.extraChainChance + 0.08),
+        signatureDamageMul: tieredBoost.signatureDamageMul * 1.14,
+        signatureSpeedMul: tieredBoost.signatureSpeedMul * 1.12,
+        orbitAmpMul: tieredBoost.orbitAmpMul * 1.08,
+        companionDamageMul: tieredBoost.companionDamageMul * 1.12,
+        companionFireRateMul: tieredBoost.companionFireRateMul * 1.09,
       };
     }
     return tieredBoost;
   }
 
-  private fireVSWeapon(weaponDef: any, target: Phaser.Physics.Arcade.Sprite, brandMods?: ReturnType<typeof EvolutionSystem.getEquippedBrandCombatModifiers>): number {
+  private fireVSWeapon(
+    weaponDef: any,
+    target: Phaser.Physics.Arcade.Sprite,
+    brandMods?: ReturnType<typeof EvolutionSystem.getEquippedBrandCombatModifiers> & {
+      patternPower?: number;
+      signatureRateMul?: number;
+      extraChainChance?: number;
+      signatureDamageMul?: number;
+      signatureSpeedMul?: number;
+      orbitAmpMul?: number;
+    }
+  ): number {
     if (!weaponDef) return 0;
-    const mods = brandMods || EvolutionSystem.getEquippedBrandCombatModifiers();
+    const mods: ReturnType<typeof EvolutionSystem.getEquippedBrandCombatModifiers> & {
+      patternPower?: number;
+      signatureRateMul?: number;
+      extraChainChance?: number;
+      signatureDamageMul?: number;
+      signatureSpeedMul?: number;
+      orbitAmpMul?: number;
+    } = {
+      ...EvolutionSystem.getEquippedBrandCombatModifiers(),
+      ...(brandMods || {}),
+    };
     const glassesSpecials = EvolutionSystem.getGlassesSpecials();
     const enableGlobalHoming = glassesSpecials.has('emergence_resonance') || glassesSpecials.has('gemini_assist');
     const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y);
     const projectileCount = Math.max(1, (weaponDef.projectileCount || 1) + (mods.projectileBonus || 0));
     const spreadDeg = (weaponDef.spread || 0) * (mods.spreadMul || 1);
     const speed = Math.max(80, (weaponDef.speed || 400) * (mods.speedMul || 1));
+    const patternPower = Math.max(0, Math.floor(mods.patternPower || 0));
+    const signatureRateMul = Math.max(0.55, mods.signatureRateMul || 1);
+    const signatureDamageMul = Math.max(0.7, mods.signatureDamageMul || 1);
+    const signatureSpeedMul = Math.max(0.7, mods.signatureSpeedMul || 1);
+    const orbitAmpMul = Math.max(0.75, mods.orbitAmpMul || 1);
+    const extraChainChance = Phaser.Math.Clamp(mods.extraChainChance || 0, 0, 0.65);
     const finalSpecial = weaponDef.special || mods.forceSpecial;
     const damage = (weaponDef.damage || 10) * (mods.damageMul || 1);
     let created = 0;
@@ -3073,6 +9007,9 @@ export default class GameScene extends Phaser.Scene {
       } else {
         anyBullet.pierceLeft = null;
       }
+      if (extraChainChance > 0 && Math.random() < extraChainChance) {
+        anyBullet.weaponSpecial = 'chain';
+      }
 
       // Auto-destroy after range
       const lifetime = (weaponDef.range || 400) / speed * 1000;
@@ -3092,6 +9029,64 @@ export default class GameScene extends Phaser.Scene {
           this.disableBullet(bullet);
         }
       });
+    }
+
+    const cadence = (base: number): number => Math.max(2, Math.round(base / signatureRateMul));
+    const burstChance = Phaser.Math.Clamp((0.07 + patternPower * 0.035) * (12 / cadence(9)), 0, 0.46);
+    if (patternPower > 0 && created > 0 && Math.random() < burstChance) {
+      const burstCount = Math.min(8, 3 + patternPower);
+      const burstSpread = Math.PI * 2;
+      for (let i = 0; i < burstCount; i++) {
+        const extra = this.acquireBulletFromGroup(this.vsBullets, this.player.x, this.player.y);
+        if (!extra) continue;
+        created += 1;
+        const angleOffset = -burstSpread / 2 + (burstSpread / burstCount) * i;
+        const burstAngle = angle + angleOffset;
+        const burstSpeed = speed * (0.82 + patternPower * 0.05) * signatureSpeedMul;
+        const burstDamage = damage * (0.42 + patternPower * 0.08) * signatureDamageMul;
+        extra.enableBody(true, this.player.x, this.player.y, true, true);
+        extra.setActive(true).setVisible(true);
+        const burstTexture = this.getVSBulletTexture(weaponDef, finalSpecial === 'burn' ? 'burn' : finalSpecial || 'chain');
+        extra.setTexture(burstTexture);
+        extra.setScale(this.getVSBulletScale(burstTexture));
+        extra.setTint(weaponDef.color || 0x0ea5e9);
+        extra.setBlendMode(Phaser.BlendModes.ADD);
+        const body = extra.body as Phaser.Physics.Arcade.Body;
+        body.reset(this.player.x, this.player.y);
+        body.setAllowGravity(false);
+        const extraScale = this.getVSBulletScale(burstTexture);
+        const extraRadius = Math.max(4, Math.min(7, Math.floor(4 * extraScale)));
+        body.setCircle(extraRadius, extra.width / 2 - extraRadius, extra.height / 2 - extraRadius);
+        body.setCollideWorldBounds(false);
+        body.setBounce(0, 0);
+        body.setDrag(0, 0);
+        body.setVelocity(Math.cos(burstAngle) * burstSpeed, Math.sin(burstAngle) * burstSpeed);
+        extra.setRotation(burstAngle + Math.PI / 2);
+        const anyExtra = extra as any;
+        anyExtra.weaponDamage = burstDamage;
+        anyExtra.weaponSpecial = extraChainChance > 0.22 ? 'chain' : finalSpecial;
+        anyExtra.weaponRange = Math.max(160, (weaponDef.range || 400) * 0.75);
+        anyExtra.originX = this.player.x;
+        anyExtra.originY = this.player.y;
+        anyExtra.isHoming = false;
+        anyExtra.homingTarget = null;
+        anyExtra.brandDamageApplied = true;
+        anyExtra.bulletTextureKey = burstTexture;
+        anyExtra.baseVelocityX = Math.cos(burstAngle) * burstSpeed;
+        anyExtra.baseVelocityY = Math.sin(burstAngle) * burstSpeed;
+        anyExtra.swayAmplitude = (10 + patternPower * 2) * orbitAmpMul;
+        anyExtra.swayFrequency = 0.012 + patternPower * 0.0008;
+        anyExtra.swayPhase = (Math.PI * 2 * i) / Math.max(1, burstCount);
+        anyExtra.pierceLeft = anyExtra.weaponSpecial === 'pierce' ? (2 + (mods.pierceBonus || 0)) : null;
+        const burstLife = anyExtra.weaponRange / Math.max(120, burstSpeed) * 1000;
+        anyExtra.spawnTime = this.time.now;
+        anyExtra.maxLifetime = burstLife + 120;
+        if (anyExtra.vsLifetimeTimer) anyExtra.vsLifetimeTimer.remove();
+        anyExtra.vsLifetimeTimer = this.time.delayedCall(burstLife, () => {
+          anyExtra.vsLifetimeTimer = null;
+          if (extra.active) this.disableBullet(extra);
+        });
+      }
     }
     return created;
   }
@@ -3540,10 +9535,19 @@ export default class GameScene extends Phaser.Scene {
       if (this.comboCount >= 20) {
         sourceMultiplier *= 1 + Math.min(0.22, Math.floor(this.comboCount / 20) * 0.04);
       }
+      if (gameState.data.isNight) {
+        sourceMultiplier *= this.nightDirectiveEffects.playerDamageMul;
+      }
     } else if (source.type === 'companion') {
       sourceMultiplier *= 1 + Math.min(0.26, (level - 1) * 0.01);
+      if (gameState.data.isNight) {
+        sourceMultiplier *= this.nightDirectiveEffects.companionDamageMul;
+      }
     } else if (source.type === 'turret') {
       sourceMultiplier *= 1 + Math.min(0.2, (week - 1) * 0.025);
+      if (gameState.data.isNight) {
+        sourceMultiplier *= this.nightDirectiveEffects.turretDamageMul;
+      }
     }
     if (gameState.data.isNight && this.hasDayBuff('training')) {
       if (source.type === 'player') sourceMultiplier *= 1.16;
@@ -3554,6 +9558,7 @@ export default class GameScene extends Phaser.Scene {
     let finalDamage = damage * (1 + stats.damage / 100) * sourceMultiplier;
     if (source.type === 'player') {
       finalDamage *= this.runMutatorEffects.playerDamageMul;
+      finalDamage *= this.getScavengeDurabilityDamageMultiplier();
     } else if (source.type === 'companion') {
       finalDamage *= this.runMutatorEffects.companionDamageMul;
     } else if (source.type === 'turret') {
@@ -3663,6 +9668,22 @@ export default class GameScene extends Phaser.Scene {
         count: gameState.data.gearStash.length,
         dropped: gearDrop,
       });
+      const codexFlag = `gear_codex_rarity_${gearDrop.rarity}`;
+      if (!gameState.data.storyFlags[codexFlag]) {
+        gameState.data.storyFlags[codexFlag] = true;
+        const discoveryXp = 14 + (gearDrop.rarity === 'legendary' ? 12 : gearDrop.rarity === 'mythic' ? 20 : 0);
+        const discoveryBtc = Number((gearDrop.rarity === 'mythic' ? 0.25 : gearDrop.rarity === 'legendary' ? 0.16 : 0.06).toFixed(3));
+        this.grantExperience(discoveryXp);
+        gameState.addResource('bitcoin', discoveryBtc);
+        events.emit('update-resources', gameState.data.resources);
+        this.showFloatingText(
+          enemy.x,
+          enemy.y - 88,
+          `图鉴解锁：${rarityStyle.label}品质 · +XP${discoveryXp} +₿${discoveryBtc.toFixed(3)}`,
+          '#fbbf24',
+          false
+        );
+      }
     }
 
     // Death effect
@@ -3705,6 +9726,7 @@ export default class GameScene extends Phaser.Scene {
     // Notify wave system
     this.waveSystem.onEnemyKilled(enemy);
 
+    this.gainBattleMomentum(ed, source);
     this.gainOverdriveCharge(source);
     this.handleAutoLevelKill(source);
     this.maybeEmitCompanionCombatChatter(source, 'kill');
@@ -3719,6 +9741,112 @@ export default class GameScene extends Phaser.Scene {
         });
       } else {
         enemy.destroy();
+      }
+    }
+  }
+
+  private isBattleMomentumActive(): boolean {
+    return this.time.now < this.battleMomentumBoostUntil;
+  }
+
+  private gainBattleMomentum(enemyData: any, source: DamageSource): void {
+    let gain = 0;
+    if (enemyData?.isBoss) gain = 56;
+    else if (enemyData?.behavior === 'elite' || enemyData?.enemyType === 'elite') gain = 22;
+    else if (enemyData?.behavior === 'heavy' || enemyData?.enemyType === 'tank') gain = 14;
+    else gain = source.type === 'player' ? 8 : source.type === 'companion' ? 6 : 4;
+    gain += Math.min(8, Math.floor(this.killStreakCount / 12) * 2);
+
+    if (this.isBattleMomentumActive()) {
+      this.battleMomentumBoostUntil = Math.min(this.time.now + 11000, this.battleMomentumBoostUntil + gain * 55);
+      return;
+    }
+    this.battleMomentum = Phaser.Math.Clamp(this.battleMomentum + gain, 0, 100);
+    if (this.battleMomentum >= 100) {
+      this.battleMomentum = 0;
+      this.battleMomentumBoostUntil = this.time.now + 8200;
+      this.battleMomentumPulseAt = this.time.now;
+      this.showFloatingText(this.cameras.main.width / 2, 154, '战意爆发：火力全面跃迁', '#f97316', true);
+      this.cameras.main.flash(180, 249, 115, 22);
+    }
+  }
+
+  private updateBattleMomentumState(): void {
+    if (!this.isBattleMomentumActive()) return;
+    if (this.time.now - this.battleMomentumPulseAt < 480) return;
+    this.battleMomentumPulseAt = this.time.now;
+    if (!this.lowPerfMode) {
+      this.createMuzzleFlash(this.player.x + Phaser.Math.Between(-8, 8), this.player.y + Phaser.Math.Between(-8, 8));
+    }
+  }
+
+  private getDiscoveredGearRarityCount(): number {
+    const rarityKeys: Array<'common' | 'magic' | 'rare' | 'epic' | 'legendary' | 'mythic'> = [
+      'common', 'magic', 'rare', 'epic', 'legendary', 'mythic',
+    ];
+    return rarityKeys.reduce((sum, rarity) => sum + (gameState.data.storyFlags[`gear_codex_rarity_${rarity}`] ? 1 : 0), 0);
+  }
+
+  private updateGearResonanceState(force: boolean = false): void {
+    const weaponTypes: GearWeaponType[] = ['pistol', 'shotgun', 'rifle', 'flamethrower', 'laser', 'rocket'];
+    const equipped = weaponTypes
+      .map((weaponType) => gameState.getEquippedGearForWeapon(weaponType))
+      .filter((item): item is NonNullable<ReturnType<typeof gameState.getEquippedGearForWeapon>> => !!item);
+    const rarityCounts = new Map<string, number>();
+    equipped.forEach((item) => {
+      rarityCounts.set(item.rarity, (rarityCounts.get(item.rarity) || 0) + 1);
+    });
+    const maxSameRarity = Math.max(0, ...Array.from(rarityCounts.values()));
+    const allSlotsEquipped = equipped.length >= 6;
+    const highRarityCount = equipped.filter((item) => item.rarity === 'legendary' || item.rarity === 'mythic').length;
+    const codexCount = this.getDiscoveredGearRarityCount();
+    const codexDamageMul = 1 + Math.min(0.12, codexCount * 0.018);
+
+    let tier = 0;
+    let damageMul = codexDamageMul;
+    let fireRateMul = 1;
+    let speedMul = 1;
+    let projectileBonus = 0;
+    let lootMul = 1;
+    if (maxSameRarity >= 2) {
+      tier = 1;
+      damageMul *= 1.1;
+      fireRateMul *= 1.05;
+    }
+    if (maxSameRarity >= 4) {
+      tier = 2;
+      damageMul *= 1.12;
+      fireRateMul *= 1.08;
+      projectileBonus += 1;
+      speedMul *= 1.04;
+    }
+    if (allSlotsEquipped && highRarityCount >= 2) {
+      tier = 3;
+      damageMul *= 1.16;
+      fireRateMul *= 1.1;
+      projectileBonus += 1;
+      speedMul *= 1.06;
+      lootMul *= 1.12;
+    }
+
+    this.gearResonanceDamageMul = Number(damageMul.toFixed(3));
+    this.gearResonanceFireRateMul = Number(fireRateMul.toFixed(3));
+    this.gearResonanceSpeedMul = Number(speedMul.toFixed(3));
+    this.gearResonanceProjectileBonus = projectileBonus;
+    this.gearResonanceLootMul = Number(lootMul.toFixed(3));
+
+    const nextSignature = `${tier}|${maxSameRarity}|${allSlotsEquipped ? 1 : 0}|${highRarityCount}|${codexCount}`;
+    if (force || nextSignature !== this.gearResonanceSignature) {
+      this.gearResonanceSignature = nextSignature;
+      if (tier > 0 || force) {
+        const tierName = tier >= 3 ? '全装共鸣' : tier === 2 ? '高阶共鸣' : tier === 1 ? '初阶共鸣' : '图鉴加成';
+        this.showFloatingText(
+          this.cameras.main.width / 2,
+          262,
+          `装备收集线：${tierName} · 伤害x${this.gearResonanceDamageMul.toFixed(2)} · 射速x${this.gearResonanceFireRateMul.toFixed(2)}`,
+          '#a78bfa',
+          true
+        );
       }
     }
   }
@@ -3752,6 +9880,308 @@ export default class GameScene extends Phaser.Scene {
     if (this.time.now - this.arOverdrivePulseAt < 650) return;
     this.arOverdrivePulseAt = this.time.now;
     this.createMuzzleFlash(this.player.x, this.player.y);
+  }
+
+  private applyDynamicPlayerUpgradeBonuses(showFeedback: boolean): void {
+    const level = Math.max(1, gameState.data.playerLevel || 1);
+    if (!showFeedback && level === this.lastAppliedUpgradeLevel) return;
+    const prevLevel = this.lastAppliedUpgradeLevel;
+    this.lastAppliedUpgradeLevel = level;
+
+    const moveSpeedBonus = Math.min(16, Math.floor((level - 1) / 2));
+    const healthRegenBonus = Math.min(8, Math.floor((level - 1) / 6));
+    const fireRateBonus = Math.min(12, Math.floor((level - 1) / 4));
+    const damageBonus = Math.min(18, Math.floor((level - 1) / 3));
+    this.playerUpgrades.moveSpeedBonus = moveSpeedBonus;
+    this.playerUpgrades.healthRegen = healthRegenBonus;
+    this.playerUpgrades.fireRateBonus = fireRateBonus;
+    this.playerUpgrades.damageBonus = damageBonus;
+    this.playerUpgrades.companionDamage = Math.min(12, Math.floor((level - 1) / 4));
+    this.playerUpgrades.turretFireRate = Math.min(12, Math.floor((level - 1) / 5));
+
+    if (!showFeedback || level <= 1 || level === prevLevel) return;
+    this.showFloatingText(
+      this.cameras.main.width / 2,
+      104,
+      `等级红利生效 · 机动+${moveSpeedBonus} 续航+${healthRegenBonus} 伤害+${damageBonus}%`,
+      '#22d3ee',
+      true
+    );
+  }
+
+  private triggerLevelPowerSurge(choiceName: string): void {
+    const level = Math.max(1, gameState.data.playerLevel || 1);
+    const duration = 11000 + Math.min(7000, level * 260);
+    this.levelSurgeUntil = Math.max(this.levelSurgeUntil, this.time.now + duration);
+    this.levelSurgePulseAt = this.time.now;
+    events.emit(GameEvents.PLAYER_HEAL_REQUEST, {
+      amount: Math.max(6, Math.round((EvolutionSystem.getComputedStats().maxHealth || 100) * 0.08)),
+      source: '升级爆发恢复',
+    });
+    this.cameras.main.flash(220, 56, 189, 248);
+    this.showFloatingText(
+      this.cameras.main.width / 2,
+      144,
+      `等级爆发: ${choiceName} · ${Math.round(duration / 1000)}秒强化`,
+      '#38bdf8',
+      true
+    );
+  }
+
+  private updateLevelSurgeState(): void {
+    if (this.time.now >= this.levelSurgeUntil) {
+      this.player.clearTint();
+      return;
+    }
+    const pulse = Math.sin(this.time.now * 0.02);
+    const tint = pulse > 0 ? 0x9be9ff : 0xffffff;
+    this.player.setTint(tint);
+    if (this.time.now - this.levelSurgePulseAt < 450) return;
+    this.levelSurgePulseAt = this.time.now;
+    this.createMuzzleFlash(this.player.x, this.player.y);
+  }
+
+  private getProtocolTotalLevel(levels?: Record<LevelUpProtocolId, number>): number {
+    const protocolLevels = levels || EvolutionSystem.getProtocolLevels();
+    return (Object.keys(protocolLevels) as LevelUpProtocolId[])
+      .reduce((sum, id) => sum + Math.max(0, protocolLevels[id] || 0), 0);
+  }
+
+  private toHexColor(color: number): string {
+    return `#${color.toString(16).padStart(6, '0')}`;
+  }
+
+  private ensureProtocolAuraVisual(): void {
+    if (!this.player?.active) return;
+    if (this.protocolAuraContainer?.active) return;
+
+    const nodeCount = this.ultraLowPerfMode ? 2 : this.lowPerfMode ? 3 : 4;
+    const container = this.add.container(this.player.x, this.player.y + 2)
+      .setDepth(Math.max(5, (this.player.depth || 8) - 1));
+
+    const outer = this.add.circle(0, 0, 24, this.protocolAuraColor, 0)
+      .setStrokeStyle(2, this.protocolAuraColor, 0.46);
+    const inner = this.add.circle(0, 0, 14, this.protocolAuraColor, 0.2)
+      .setStrokeStyle(1, this.protocolAuraColor, 0.8);
+    outer.setBlendMode(Phaser.BlendModes.ADD);
+    inner.setBlendMode(Phaser.BlendModes.ADD);
+    container.add([outer, inner]);
+
+    const nodes: Phaser.GameObjects.Arc[] = [];
+    for (let i = 0; i < nodeCount; i += 1) {
+      const node = this.add.circle(0, 0, 2 + (i % 2), this.protocolAuraColor, 0.9);
+      node.setBlendMode(Phaser.BlendModes.ADD);
+      container.add(node);
+      nodes.push(node);
+    }
+
+    this.protocolAuraContainer = container;
+    this.protocolAuraOuter = outer;
+    this.protocolAuraInner = inner;
+    this.protocolAuraNodes = nodes;
+  }
+
+  private updateProtocolAuraState(): void {
+    if (!this.player?.active) {
+      this.protocolAuraContainer?.destroy();
+      this.protocolAuraContainer = null;
+      this.protocolAuraInner = null;
+      this.protocolAuraOuter = null;
+      this.protocolAuraNodes = [];
+      this.protocolAuraLevel = 0;
+      return;
+    }
+
+    const levels = EvolutionSystem.getProtocolLevels();
+    const totalLevel = this.getProtocolTotalLevel(levels);
+    if (totalLevel <= 0) {
+      this.protocolAuraContainer?.destroy();
+      this.protocolAuraContainer = null;
+      this.protocolAuraInner = null;
+      this.protocolAuraOuter = null;
+      this.protocolAuraNodes = [];
+      this.protocolAuraLevel = 0;
+      return;
+    }
+
+    if (totalLevel !== this.protocolAuraLevel) {
+      this.protocolAuraLevel = totalLevel;
+      let dominant: LevelUpProtocolId = 'barrage_matrix';
+      let dominantLv = -1;
+      (Object.keys(levels) as LevelUpProtocolId[]).forEach((id) => {
+        const lv = levels[id] || 0;
+        if (lv > dominantLv) {
+          dominantLv = lv;
+          dominant = id;
+        }
+      });
+      this.protocolAuraColor = PROTOCOL_VISUAL_PROFILE[dominant].color;
+    }
+
+    this.ensureProtocolAuraVisual();
+    if (!this.protocolAuraContainer || !this.protocolAuraOuter || !this.protocolAuraInner) return;
+
+    const boosting = this.time.now < this.protocolAuraBoostUntil;
+    const pulseSpeed = 0.007 + Math.min(0.005, totalLevel * 0.00035);
+    const pulse = 1 + Math.sin(this.time.now * pulseSpeed) * (boosting ? 0.14 : 0.08);
+    const baseRadius = 16 + Math.min(16, totalLevel * 1.8);
+    const boostMul = boosting ? 1.16 : 1;
+    const outerRadius = baseRadius * boostMul * pulse;
+    const innerRadius = Math.max(9, outerRadius * 0.54);
+
+    this.protocolAuraContainer.setPosition(this.player.x, this.player.y + 2);
+    this.protocolAuraContainer.setDepth(Math.max(5, (this.player.depth || 8) - 1));
+    this.protocolAuraOuter.setRadius(outerRadius);
+    this.protocolAuraInner.setRadius(innerRadius);
+    this.protocolAuraOuter.setStrokeStyle(
+      boosting ? 3 : 2,
+      this.protocolAuraColor,
+      boosting ? 0.86 : 0.54
+    );
+    this.protocolAuraInner.setFillStyle(this.protocolAuraColor, boosting ? 0.3 : 0.2);
+
+    const orbitScale = boosting ? 1.22 : 1;
+    const orbitRadius = outerRadius * orbitScale;
+    const orbitClock = this.time.now * (0.0018 + Math.min(0.0016, totalLevel * 0.00008));
+    this.protocolAuraNodes.forEach((node, index) => {
+      const angle = orbitClock + (index / Math.max(1, this.protocolAuraNodes.length)) * Math.PI * 2;
+      node.setPosition(
+        Math.cos(angle) * orbitRadius,
+        Math.sin(angle * 1.22) * orbitRadius * 0.64
+      );
+      node.setFillStyle(this.protocolAuraColor, boosting ? 0.95 : 0.8);
+    });
+
+    if (boosting && this.time.now - this.protocolAuraPulseAt >= (this.lowPerfMode ? 360 : 260)) {
+      this.protocolAuraPulseAt = this.time.now;
+      const burst = this.add.circle(this.player.x, this.player.y + 2, outerRadius * 0.5, this.protocolAuraColor, 0)
+        .setStrokeStyle(2, this.protocolAuraColor, 0.72)
+        .setDepth(Math.max(6, (this.player.depth || 8) - 1));
+      burst.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: burst,
+        scale: 1.65,
+        alpha: 0,
+        duration: this.lowPerfMode ? 220 : 320,
+        onComplete: () => burst.destroy(),
+      });
+    }
+  }
+
+  private playProtocolUpgradeSfx(protocolId: LevelUpProtocolId, level: number): void {
+    try {
+      const manager: any = this.sound;
+      const ctx = manager?.context as AudioContext | undefined;
+      if (!ctx) return;
+      if (ctx.state === 'suspended') {
+        void ctx.resume();
+      }
+      const profile = PROTOCOL_VISUAL_PROFILE[protocolId];
+      const t0 = ctx.currentTime + 0.005;
+      const master = ctx.createGain();
+      master.gain.value = this.mobileViewport ? 0.032 : 0.048;
+      master.connect(ctx.destination);
+
+      const playTone = (
+        semitone: number,
+        start: number,
+        duration: number,
+        type: OscillatorType
+      ) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const freq = profile.baseFreq * Math.pow(2, semitone / 12);
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, t0 + start);
+        gain.gain.setValueAtTime(0.0001, t0 + start);
+        gain.gain.exponentialRampToValueAtTime(master.gain.value, t0 + start + 0.016);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + start + duration);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(t0 + start);
+        osc.stop(t0 + start + duration);
+      };
+
+      const lift = Math.min(8, Math.max(0, level - 1));
+      playTone(0 + lift * 0.4, 0, 0.13, 'triangle');
+      playTone(4 + lift * 0.4, 0.08, 0.13, 'sine');
+      playTone(7 + lift * 0.4, 0.16, 0.14, 'triangle');
+      playTone(12 + lift * 0.3, 0.24, 0.18, 'square');
+      if (level >= 3) {
+        playTone(16, 0.3, 0.16, 'sawtooth');
+      }
+
+      this.time.delayedCall(760, () => master.disconnect());
+    } catch {
+      // Ignore audio failures (autoplay policy / unsupported context)
+    }
+  }
+
+  private triggerProtocolLevelFeedback(
+    protocolId: LevelUpProtocolId,
+    level: number,
+    maxLevel?: number
+  ): void {
+    const profile = PROTOCOL_VISUAL_PROFILE[protocolId];
+    this.protocolAuraColor = profile.color;
+    this.protocolAuraBoostUntil = Math.max(this.protocolAuraBoostUntil, this.time.now + 4200 + level * 420);
+    this.protocolAuraPulseAt = 0;
+    this.playProtocolUpgradeSfx(protocolId, level);
+
+    const totalLevel = this.getProtocolTotalLevel();
+    const colorText = this.toHexColor(profile.color);
+    this.showFloatingText(
+      this.player.x,
+      this.player.y - 84,
+      `协议共鸣 Lv.${totalLevel} · ${level}${maxLevel ? `/${maxLevel}` : ''}`,
+      colorText,
+      false
+    );
+
+    const sw = this.cameras.main.width;
+    const sh = this.cameras.main.height;
+    const frame = this.add.rectangle(sw / 2, sh / 2, sw - 24, sh - 78, profile.color, 0)
+      .setStrokeStyle(3, profile.color, 0.94)
+      .setScrollFactor(0)
+      .setDepth(2060);
+    this.tweens.add({
+      targets: frame,
+      alpha: 0,
+      scaleX: 1.02,
+      scaleY: 1.02,
+      duration: 420,
+      onComplete: () => frame.destroy(),
+    });
+
+    const sparkCount = this.ultraLowPerfMode ? 4 : this.lowPerfMode ? 7 : 11;
+    for (let i = 0; i < sparkCount; i += 1) {
+      const spark = this.add.rectangle(
+        this.player.x + Phaser.Math.Between(-12, 12),
+        this.player.y + Phaser.Math.Between(-16, 10),
+        Phaser.Math.Between(2, 5),
+        Phaser.Math.Between(4, 9),
+        profile.color,
+        0.9
+      ).setDepth(1105);
+      spark.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: spark,
+        x: spark.x + Phaser.Math.Between(-66, 66),
+        y: spark.y + Phaser.Math.Between(-46, 46),
+        alpha: 0,
+        angle: Phaser.Math.Between(-160, 160),
+        duration: Phaser.Math.Between(220, 480),
+        onComplete: () => spark.destroy(),
+      });
+    }
+
+    this.cameras.main.flash(this.lowPerfMode ? 100 : 150, 86, 211, 238);
+    events.emit('protocol-updated', {
+      id: protocolId,
+      level,
+      totalLevel,
+      maxLevel: maxLevel || null,
+    });
   }
 
   private getPowerTierProfile(level: number, week: number, killCount: number): {
@@ -3938,7 +10368,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private updateComboDisplay(): void {
-    if (this.comboCount < 3) {
+    if (this.comboCount < 3 && !this.isBattleMomentumActive() && this.battleMomentum < 8) {
       if (this.comboText) { this.comboText.setVisible(false); }
       return;
     }
@@ -3965,9 +10395,18 @@ export default class GameScene extends Phaser.Scene {
     const text = this.comboText;
     if (!text) return;
 
-    const color = this.comboCount >= 20 ? '#ef4444' : this.comboCount >= 10 ? '#f59e0b' : '#fbbf24';
+    const color = this.isBattleMomentumActive()
+      ? '#fb923c'
+      : this.comboCount >= 20
+        ? '#ef4444'
+        : this.comboCount >= 10
+          ? '#f59e0b'
+          : '#fbbf24';
     text.setColor(color);
-    text.setText(`${this.comboCount}x`);
+    const momentumText = this.isBattleMomentumActive()
+      ? '⚡爆发'
+      : `⚡${Math.floor(this.battleMomentum)}`;
+    text.setText(`${Math.max(0, this.comboCount)}x ${momentumText}`);
     text.setVisible(true);
     text.setScale(1);
 
@@ -4822,7 +11261,11 @@ export default class GameScene extends Phaser.Scene {
       const action = this.pendingInteractable.type === 'merchant'
         ? '交易'
         : this.pendingInteractable.type === 'commander'
-          ? '接任务'
+          ? (this.getDayOpsContractsByStage('handoff').length > 0
+            ? '交付委托'
+            : this.getDayOpsContractsByStage('prep').length > 0
+              ? '委托前置'
+              : '接任务')
           : '逛商店';
       this.interactionHint.setText(`[E] ${action} · ${this.pendingInteractable.name}`);
       this.interactionHint.setVisible(true);
@@ -4834,10 +11277,44 @@ export default class GameScene extends Phaser.Scene {
   private onMobileMove(payload: { x?: number; y?: number } | null): void {
     const x = Number(payload?.x ?? 0);
     const y = Number(payload?.y ?? 0);
+    if (this.caveRaidMiniGameActive) {
+      this.caveRaidMobileMoveX = Phaser.Math.Clamp(Number.isFinite(x) ? x : 0, -1, 1);
+      this.caveRaidMobileMoveY = Phaser.Math.Clamp(Number.isFinite(y) ? y : 0, -1, 1);
+      if (this.caveRaidMobileMoveY <= -0.72) {
+        this.requestCaveRaidJump();
+      }
+      return;
+    }
+    if (this.forestHuntMiniGameActive) {
+      this.forestHuntMobileMoveX = Phaser.Math.Clamp(Number.isFinite(x) ? x : 0, -1, 1);
+      return;
+    }
+    if (this.cityScavengeMiniGameActive) {
+      this.cityScavengeMoveX = Phaser.Math.Clamp(Number.isFinite(x) ? x : 0, -1, 1);
+      this.cityScavengeMoveY = Phaser.Math.Clamp(Number.isFinite(y) ? y : 0, -1, 1);
+      return;
+    }
     this.playerSystem?.setVirtualDirection(Number.isFinite(x) ? x : 0, Number.isFinite(y) ? y : 0);
   }
 
   private onMobileInteract(): void {
+    if (this.dayChallengeSelectionOpen || this.nightDirectiveSelectionOpen) return;
+    if (this.daySpotMiniGameOpen) {
+      if (this.caveRaidMiniGameActive) {
+        this.tryCaveRaidAttack();
+        return;
+      }
+      if (this.forestHuntMiniGameActive) {
+        this.triggerForestHuntAction();
+        return;
+      }
+      if (this.cityScavengeMiniGameActive) {
+        this.triggerCityScavengeAction();
+        return;
+      }
+      this.resolveDayExplorationMiniGame();
+      return;
+    }
     if (this.isGameOver || this.runEventOpen) return;
     if (this.currentFacility) {
       this.exitFacility();
@@ -4849,6 +11326,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private onMobileToggleBuild(): void {
+    if (this.dayChallengeSelectionOpen || this.runEventOpen || this.daySpotMiniGameOpen) return;
     if (this.currentFacility) return;
     if (this.isBuildMode) {
       this.exitBuildMode();
@@ -5033,8 +11511,35 @@ export default class GameScene extends Phaser.Scene {
     }
     if (facility.id === 'workbench') {
       gameState.addResource('scrap', 2);
+      let repaired = false;
+      if (this.scavengeDurabilityStacks > 0) {
+        this.scavengeDurabilityStacks = Math.max(0, this.scavengeDurabilityStacks - 1);
+        repaired = true;
+        if (this.scavengeDurabilityStacks <= 0) {
+          this.scavengeDurabilityStacks = 0;
+          this.scavengeDurabilityPenaltyUntil = 0;
+          this.scavengeDurabilityPenaltyStartAt = 0;
+          this.scavengeDurabilityPenaltyDurationMs = 0;
+        } else {
+          const remain = Math.max(8000, this.scavengeDurabilityPenaltyUntil - this.time.now - 5000);
+          this.scavengeDurabilityPenaltyUntil = this.time.now + remain;
+          this.scavengeDurabilityPenaltyStartAt = this.time.now;
+          this.scavengeDurabilityPenaltyDurationMs = remain;
+        }
+      }
       events.emit('update-resources', gameState.data.resources);
-      this.showFloatingText(this.player.x, this.player.y - 26, '工作台：零件 +2', '#60a5fa', false);
+      if (repaired) {
+        const reductionPercent = Math.round((1 - this.getScavengeDurabilityDamageMultiplier()) * 100);
+        this.showFloatingText(
+          this.player.x,
+          this.player.y - 26,
+          `工作台：零件 +2 · 修复耐久(剩余伤害-${reductionPercent}%)`,
+          '#60a5fa',
+          false
+        );
+      } else {
+        this.showFloatingText(this.player.x, this.player.y - 26, '工作台：零件 +2', '#60a5fa', false);
+      }
       return;
     }
     if (facility.id === 'guard_post') {
@@ -5054,6 +11559,26 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private showCommanderUI(): void {
+    const handoffCount = this.handoffReadyDayOpsContracts();
+    const prep = this.prepareDayOpsFromCommander();
+    if (handoffCount > 0) {
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 66,
+        `任务交付 ${handoffCount} 项完成`,
+        '#22d3ee',
+        false
+      );
+    }
+    if (prep.prepared > 0) {
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 52,
+        `已下发执行 ${prep.prepared} 项`,
+        '#38bdf8',
+        false
+      );
+    }
     let msg = '';
     if (QuestSystem.getActiveQuestCount() < QuestSystem.getMaxActiveQuests()) {
       const issued = QuestSystem.acceptRandomQuestFromGiver('awakened_leader');
@@ -5085,7 +11610,8 @@ export default class GameScene extends Phaser.Scene {
       survivorKeys.length > 0 ? Phaser.Utils.Array.GetRandom(survivorKeys) : 'companion'
     ) as Phaser.Physics.Arcade.Sprite;
     if (!survivor) return;
-    survivor.setTint(0x60a5fa);
+    survivor.setScale(2.2);
+    survivor.setTintFill(0x89cfff);
     survivor.setDepth(5);
     this.tweens.add({ targets: survivor, alpha: { from: 0.5, to: 1 }, duration: 600, yoyo: true, repeat: -1 });
 
@@ -5138,6 +11664,7 @@ export default class GameScene extends Phaser.Scene {
       role: config.role || 'tank',
       level: config.level,
       bulletEffect: config.bulletEffect.type,
+      textureKey: config.textureKey,
       status: 'party',
       job: 'idle',
       advancedClass: config.advancedClass,
@@ -5168,6 +11695,7 @@ export default class GameScene extends Phaser.Scene {
           role: c.role || 'tank',
           level: c.level || 1,
           bulletEffect: c.bulletEffect?.type || 'normal',
+          textureKey: c.textureKey,
           status: 'party',
           job: 'idle',
           advancedClass: c.advancedClass,
@@ -5185,6 +11713,10 @@ export default class GameScene extends Phaser.Scene {
         }
         if ((existing.name || '') !== (c.name || '')) {
           existing.name = c.name;
+          dirty = true;
+        }
+        if ((existing.textureKey || '') !== (c.textureKey || '')) {
+          existing.textureKey = c.textureKey;
           dirty = true;
         }
         const nextClass = c.advancedClass || undefined;
@@ -5536,7 +12068,9 @@ export default class GameScene extends Phaser.Scene {
       dangerText = '洞穴异动触发敌潮';
     }
 
-    gameState.addExperience(exp);
+    this.grantExperience(exp);
+    const residentQuality: 'poor' | 'good' | 'perfect' = Math.random() < 0.22 ? 'perfect' : 'good';
+    this.applyDayOpsContractProgress(spot, residentQuality, false);
     events.emit('update-resources', gameState.data.resources);
     this.showFloatingText(container.x, container.y - 36, summary, color, false);
     this.showFloatingText(container.x, container.y - 56, `伙伴远征经验 +${exp}`, '#93c5fd', false);
@@ -5864,6 +12398,7 @@ export default class GameScene extends Phaser.Scene {
         * jobBonus
         * guardPostDamageBonus
         * combatDamageMul
+        * this.nightDirectiveEffects.residentDamageMul
         * this.runMutatorEffects.nightResidentDamageMul
       )
     );
@@ -6539,7 +13074,7 @@ export default class GameScene extends Phaser.Scene {
       Math.round(task.rewardAmount * bonusMult * this.getRunDayActivityGainMultiplier())
     );
     gameState.addResource(task.rewardResource, amount);
-    gameState.addExperience(task.rewardExp + Math.floor((gameState.data.currentDay || 1) / 2));
+    this.grantExperience(task.rewardExp + Math.floor((gameState.data.currentDay || 1) / 2));
     events.emit('update-resources', gameState.data.resources);
     this.showFloatingText(
       container?.x || this.player.x,
@@ -6649,7 +13184,7 @@ export default class GameScene extends Phaser.Scene {
       if (!resource || amount <= 0) continue;
       hadGain = true;
       gameState.addResource(resource, amount);
-      gameState.addExperience(exp);
+      this.grantExperience(exp);
       const label: Record<keyof Resources, string> = {
         wood: '木材',
         metal: '金属',
@@ -6691,7 +13226,7 @@ export default class GameScene extends Phaser.Scene {
               `伙伴共享情报 +1经验 (${after.label})`,
               `伙伴协作提升士气 +1经验 (${after.label})`,
             ]);
-            gameState.addExperience(1);
+            this.grantExperience(1);
             this.showFloatingText(mx, my, socialText, '#bae6fd', false);
           }
         }
@@ -6794,6 +13329,146 @@ export default class GameScene extends Phaser.Scene {
     this.maybeCreateResidentAssistTask(companionId, behavior);
   }
 
+  private maybeEmitDayLifeAtmosphere(): void {
+    if (this.isGameOver || gameState.data.isNight) return;
+    if (this.runEventOpen || this.levelUpPanelOpen || this.daySpotMiniGameOpen) return;
+
+    const now = this.time.now;
+    const expiredSpotIds: string[] = [];
+    this.daySpotBonuses.forEach((bonus, spotId) => {
+      if (bonus.expiresAt <= now) expiredSpotIds.push(spotId);
+    });
+    if (expiredSpotIds.length > 0) {
+      expiredSpotIds.forEach((spotId) => this.daySpotBonuses.delete(spotId));
+      this.updateExplorationSpotStatus(true);
+    }
+
+    const shouldSpawnHotspot = Math.random() < 0.58 && this.explorationSpots.length > 0;
+    if (shouldSpawnHotspot) {
+      const spotCandidates = this.explorationSpots.filter((spot) => {
+        if (this.getActiveDaySpotBonus(spot.id)) return false;
+        if (this.getActivityUsage(spot.actionType) >= this.getActivityUsageLimit(spot.actionType)) return false;
+        const cooldownLeft = spot.cooldown - (now - spot.lastInteract);
+        return cooldownLeft <= 7000;
+      });
+      if (spotCandidates.length > 0) {
+        const spot = Phaser.Utils.Array.GetRandom(spotCandidates);
+        const bonusPool: Record<ExplorationActionType, Omit<DayLifeSpotBonus, 'expiresAt'>[]> = {
+          fish: [
+            { label: '河岸抛竿赛', summary: '收益+28% 风险+6%', rewardMul: 1.28, dangerMul: 1.06, bonusXp: 4, color: '#22d3ee' },
+            { label: '鱼群回潮', summary: '收益+20% 风险不变', rewardMul: 1.2, dangerMul: 1.0, bonusXp: 3, color: '#38bdf8' },
+          ],
+          swim: [
+            { label: '急流冲刺', summary: '收益+18% 风险+12%', rewardMul: 1.18, dangerMul: 1.12, bonusXp: 4, color: '#60a5fa' },
+            { label: '浅滩救援', summary: '收益+16% 风险+4%', rewardMul: 1.16, dangerMul: 1.04, bonusXp: 3, color: '#93c5fd' },
+          ],
+          hunt: [
+            { label: '追踪脚印', summary: '收益+24% 风险+18%', rewardMul: 1.24, dangerMul: 1.18, bonusXp: 5, color: '#4ade80' },
+            { label: '林间伏击', summary: '收益+30% 风险+24%', rewardMul: 1.3, dangerMul: 1.24, bonusXp: 6, color: '#22c55e' },
+          ],
+          scavenge: [
+            { label: '民宅线索', summary: '收益+26% 风险+15%', rewardMul: 1.26, dangerMul: 1.15, bonusXp: 5, color: '#f59e0b' },
+            { label: '黑市暗门', summary: '收益+34% 风险+22%', rewardMul: 1.34, dangerMul: 1.22, bonusXp: 7, color: '#f97316' },
+          ],
+          cave_explore: [
+            { label: '异响回廊', summary: '收益+32% 风险+26%', rewardMul: 1.32, dangerMul: 1.26, bonusXp: 7, color: '#a78bfa' },
+            { label: '深层矿脉', summary: '收益+40% 风险+35%', rewardMul: 1.4, dangerMul: 1.35, bonusXp: 9, color: '#c4b5fd' },
+          ],
+        };
+        const picked = Phaser.Utils.Array.GetRandom(bonusPool[spot.actionType]);
+        const bonus: DayLifeSpotBonus = {
+          ...picked,
+          expiresAt: now + Phaser.Math.Between(16000, 23000),
+        };
+        this.daySpotBonuses.set(spot.id, bonus);
+        this.updateExplorationSpotStatus(true);
+
+        this.tweens.add({
+          targets: spot.marker,
+          scaleX: { from: 1, to: 1.11 },
+          scaleY: { from: 1, to: 1.11 },
+          alpha: { from: 1, to: 0.76 },
+          duration: 280,
+          yoyo: true,
+          repeat: 4,
+        });
+        this.showFloatingText(spot.x, spot.y - 44, `白天热点：${picked.label}`, picked.color, false);
+        if (Phaser.Math.Distance.Between(this.player.x, this.player.y, spot.x, spot.y) <= 280) {
+          this.showFloatingText(this.player.x, this.player.y - 56, `${spot.name} 热点开启 · 按E发起小游戏`, '#fbbf24', false);
+        }
+        return;
+      }
+    }
+
+    const residents = Array.from(this.baseResidents.entries())
+      .filter(([, container]) => container.active && container.visible);
+    if (residents.length <= 0) return;
+
+    const [companionId, container] = Phaser.Utils.Array.GetRandom(residents);
+    const behavior = (container.getData('behavior') || 'stroll') as ResidentBehavior;
+    const companion = gameState.data.companions.find((c) => c.id === companionId);
+    const name = companion?.name?.split('(')[0] || ((container.getData('residentName') || '伙伴') as string);
+
+    const lifeLinePool: Record<ResidentBehavior, string[]> = {
+      fishing: ['正在修补渔网', '在比拼抛竿技巧', '把渔获送去炊事台'],
+      cooking: ['在分发热汤', '把食材切分装箱', '给巡逻队准备便当'],
+      guard: ['在补强路障', '正在轮班巡逻', '检查探照灯电量'],
+      sleep: ['在短暂午休', '靠墙打个盹', '整理床位轮休'],
+      forage: ['翻到可用零件', '捡回了木料', '推着小车回营'],
+      adventure: ['记录外出路线', '整理探险见闻', '校准随身终端'],
+      stroll: ['和邻里打招呼', '在广场散步', '正在喂营地小狗'],
+    };
+    const line = `${name} ${Phaser.Utils.Array.GetRandom(lifeLinePool[behavior])}`;
+    const colorByBehavior: Record<ResidentBehavior, string> = {
+      fishing: '#38bdf8',
+      cooking: '#fbbf24',
+      guard: '#93c5fd',
+      sleep: '#c4b5fd',
+      forage: '#4ade80',
+      adventure: '#fda4af',
+      stroll: '#cbd5e1',
+    };
+    this.showFloatingText(
+      container.x + Phaser.Math.Between(-14, 14),
+      container.y - 34 + Phaser.Math.Between(-3, 3),
+      line,
+      colorByBehavior[behavior],
+      false
+    );
+    this.rememberResidentChatter(companionId, line);
+
+    if (Math.random() < 0.2) {
+      const rewardByBehavior: Record<ResidentBehavior, keyof Resources> = {
+        fishing: 'food',
+        cooking: 'food',
+        guard: 'ammo',
+        sleep: 'water',
+        forage: 'scrap',
+        adventure: 'metal',
+        stroll: 'water',
+      };
+      const reward = rewardByBehavior[behavior];
+      const rewardName: Record<keyof Resources, string> = {
+        wood: '木材',
+        metal: '金属',
+        food: '食物',
+        water: '净水',
+        scrap: '零件',
+        medical: '医疗',
+        ammo: '弹药',
+        bitcoin: '比特币',
+        energyCore: '能量核',
+      };
+      gameState.addResource(reward, 1);
+      this.grantExperience(1);
+      events.emit('update-resources', gameState.data.resources);
+      this.showFloatingText(container.x + 24, container.y - 52, `民生补给 +1${rewardName[reward]}`, '#86efac', false);
+    }
+    if (!this.residentAssistTask && Math.random() < 0.18) {
+      this.maybeCreateResidentAssistTask(companionId, behavior);
+    }
+  }
+
   private maybeEmitResidentSocialMoment(): void {
     if (this.isGameOver || gameState.data.isNight) return;
     const activeResidents = Array.from(this.baseResidents.entries())
@@ -6827,7 +13502,7 @@ export default class GameScene extends Phaser.Scene {
       });
       this.showFloatingText(mx, my, `默契协作 · ${relation.label}`, '#86efac', false);
       if (Math.random() < 0.5) {
-        gameState.addExperience(1);
+        this.grantExperience(1);
       }
       return;
     }
@@ -6969,28 +13644,52 @@ export default class GameScene extends Phaser.Scene {
   // EVENTS
   // ============================================================
   private onNightStart(): void {
+    this.closeDayChallengeSelectionPanel();
+    this.closeDayExplorationMiniGame();
+    this.closeNightDirectiveSelectionPanel();
+    this.daySpotBonuses.clear();
     this.clearResidentAssistTask();
     this.residentDayYieldNextAt.clear();
+    this.pendingDayRunEventAfterChallenge = false;
     this.activateNightResidentDefense();
     const triggered = this.maybeTriggerRunEvent('night');
     if (triggered) {
       this.pendingNightWaveStartAfterEvent = true;
     } else {
-      this.waveSystem.startNightWaves();
+      this.openNightDirectiveSelectionPanel();
     }
     this.updateExplorationSpotStatus(true);
   }
 
   private onDayStart(): void {
     this.waveSystem.stopWaves();
+    this.closeNightDirectiveSelectionPanel();
+    this.dayOpsRenownBonuses = gameState.getDayOpsRenownBonuses();
+    this.nightDirectiveId = null;
+    this.nightDirectiveEffects = {
+      playerDamageMul: 1,
+      companionDamageMul: 1,
+      turretDamageMul: 1,
+      residentDamageMul: 1,
+      lootMul: 1,
+      xpMul: 1,
+      enemyPressureMul: 1,
+    };
+    this.nightDirectivePressureNextAt = 0;
     this.deactivateNightResidentDefense();
     CompanionPersonalitySystem.applyDailyDrift(gameState.data.companions);
     this.residentDayYieldNextAt.clear();
     this.dayActivityUsage.clear();
+    this.daySpotBonuses.clear();
+    this.dayAdventureChain = 0;
+    this.dayAdventureLastAt = 0;
+    this.dayChallengeHintCooldownUntil = 0;
+    this.pendingDayRunEventAfterChallenge = true;
+    this.createOrRefreshDayExplorationChallenge(true);
+    this.createOrRefreshDayOpsContracts(true);
     this.updateExplorationSpotStatus(true);
     QuestSystem.updateProgress('survive_time', undefined, 1);
     this.pendingNightWaveStartAfterEvent = false;
-    this.maybeTriggerRunEvent('day');
 
     const tick = BaseSystem.applyDailyTick();
     let totalFoodDeficit = Math.max(0, gameState.data.base.foodDeficit || 0);
@@ -7075,13 +13774,46 @@ export default class GameScene extends Phaser.Scene {
       const glassesIndex = BaseSystem.getDailyGlassesPriceMultiplier();
       this.showFloatingText(w / 2, y + 30, `行情: ${topRates}  ·  镜价指数 x${glassesIndex.toFixed(2)}`, '#38bdf8', true);
       this.showFloatingText(w / 2, y + 60, '白天日常开启：伙伴将持续产出与触发协助事件', '#93c5fd', true);
-      this.showFloatingText(w / 2, y + 90, '白天探索：河流钓鱼/游泳 · 森林打猎 · 城区搜刮 · 山洞探险', '#22d3ee', true);
-      if (this.activeRunMutators.length > 0) {
+      this.showFloatingText(w / 2, y + 90, '白天探索升级：地点可手动触发高风险高收益连携事件', '#22d3ee', true);
+      if (this.dayExplorationChallenge && !this.dayExplorationChallenge.completed) {
+        const qualityText = this.dayExplorationChallenge.targetQuality === 'perfect' ? '完美' : '良好';
         this.showFloatingText(
           w / 2,
           y + 120,
+          `今日挑战: ${this.dayExplorationChallenge.branchNameCN} · ${this.dayExplorationChallenge.title} · ${qualityText} ${this.dayExplorationChallenge.required}次`,
+          '#67e8f9',
+          true
+        );
+      }
+      if (this.activeRunMutators.length > 0) {
+        this.showFloatingText(
+          w / 2,
+          y + (this.dayExplorationChallenge && !this.dayExplorationChallenge.completed ? 150 : 120),
           `本局词缀: ${this.activeRunMutators.map((m) => m.nameCN).join(' · ')}`,
           '#fbbf24',
+          true
+        );
+      }
+      if (this.dayOpsContracts.length > 0) {
+        const ops = this.dayOpsContracts
+          .map((contract) => {
+            const stageCN = contract.stage === 'prep'
+              ? '前置'
+              : contract.stage === 'execute'
+                ? '执行'
+                : contract.stage === 'handoff'
+                  ? '交付'
+                  : '完成';
+            return `${stageCN}:${contract.title} ${contract.progress}/${contract.target}`;
+          })
+          .join('  |  ');
+        this.showFloatingText(
+          w / 2,
+          y + (this.activeRunMutators.length > 0
+            ? (this.dayExplorationChallenge && !this.dayExplorationChallenge.completed ? 180 : 150)
+            : (this.dayExplorationChallenge && !this.dayExplorationChallenge.completed ? 150 : 120)),
+          `白天委托链: ${ops} · 永久声望Lv.${gameState.getDayOpsRenown()}`,
+          '#f97316',
           true
         );
       }
@@ -7098,6 +13830,28 @@ export default class GameScene extends Phaser.Scene {
     this.levelUpPanelOpen = false;
     const w = this.cameras.main.width;
     this.showFloatingText(w / 2, 120, `获得: ${choice.nameCN}`, '#fbbf24', true);
+    if (choice?.type === 'upgrade_protocol') {
+      const protocolId = (choice.protocolId || choice.id) as LevelUpProtocolId;
+      const level = EvolutionSystem.getProtocolLevel(protocolId);
+      const bonuses = EvolutionSystem.getProtocolCombatBonuses();
+      this.showFloatingText(
+        w / 2,
+        146,
+        `战斗协议升级: ${choice.nameCN} Lv.${level}${choice.maxLevel ? `/${choice.maxLevel}` : ''}`,
+        '#22d3ee',
+        true
+      );
+      this.showFloatingText(
+        w / 2,
+        172,
+        `弹幕强度+${bonuses.patternPower} · 触发率x${bonuses.signatureRateMul.toFixed(2)} · 伙伴x${bonuses.companionDamageMul.toFixed(2)}`,
+        '#67e8f9',
+        true
+      );
+      this.triggerProtocolLevelFeedback(protocolId, level, choice.maxLevel);
+    }
+    this.applyDynamicPlayerUpgradeBonuses(true);
+    this.triggerLevelPowerSurge(choice.nameCN || '强化');
 
     // Check evolution
     const evolutions = EvolutionSystem.checkEvolutions();
@@ -7225,6 +13979,8 @@ export default class GameScene extends Phaser.Scene {
   private gameOver(): void {
     if (this.isGameOver) return;
     this.isGameOver = true;
+    this.closeDayChallengeSelectionPanel();
+    this.closeDayExplorationMiniGame();
     this.waveSystem.stopWaves();
     this.playPlayerAction('death', true, 2400);
 
@@ -7434,11 +14190,20 @@ export default class GameScene extends Phaser.Scene {
     this.residentSocialPulseTimer?.remove(false);
     this.baseRoutineTimer?.remove(false);
     this.dayResidentEconomyTimer?.remove(false);
+    this.dayLifePulseTimer?.remove(false);
     this.baseLifePulseTimer = null;
     this.residentSocialPulseTimer = null;
     this.baseRoutineTimer = null;
     this.dayResidentEconomyTimer = null;
+    this.dayLifePulseTimer = null;
     this.residentDayYieldNextAt.clear();
+    this.daySpotBonuses.clear();
+    this.dayExplorationChallenge = null;
+    this.dayChallengeHintCooldownUntil = 0;
+    this.scavengeDurabilityStacks = 0;
+    this.scavengeDurabilityPenaltyUntil = 0;
+    this.scavengeDurabilityPenaltyStartAt = 0;
+    this.scavengeDurabilityPenaltyDurationMs = 0;
     this.companionCombatRecentChatter.clear();
     this.companionCombatNextAt.clear();
     this.clearResidentAssistTask();
@@ -7448,11 +14213,43 @@ export default class GameScene extends Phaser.Scene {
     this.runEventContainer?.destroy();
     this.runEventContainer = null;
     this.runEventOpen = false;
+    this.nightDirectiveAutoPickTimer?.remove(false);
+    this.nightDirectiveAutoPickTimer = null;
+    this.nightDirectiveSelectionContainer?.destroy();
+    this.nightDirectiveSelectionContainer = null;
+    this.nightDirectiveSelectionOpen = false;
+    this.nightDirectiveId = null;
+    this.dayOpsContracts = [];
+    this.dayOpsNightPrepStacks = 0;
+    this.battleMomentum = 0;
+    this.battleMomentumBoostUntil = 0;
+    this.battleMomentumPulseAt = 0;
+    this.nextGearResonanceCheckAt = 0;
+    this.gearResonanceSignature = '';
+    this.gearResonanceDamageMul = 1;
+    this.gearResonanceFireRateMul = 1;
+    this.gearResonanceSpeedMul = 1;
+    this.gearResonanceProjectileBonus = 0;
+    this.gearResonanceLootMul = 1;
+    this.closeDayChallengeSelectionPanel();
+    this.closeDayExplorationMiniGame();
+    this.protocolAuraContainer?.destroy();
+    this.protocolAuraContainer = null;
+    this.protocolAuraInner = null;
+    this.protocolAuraOuter = null;
+    this.protocolAuraNodes = [];
+    this.protocolAuraLevel = 0;
+    this.protocolAuraBoostUntil = 0;
+    this.protocolAuraPulseAt = 0;
     this.setUISceneInputEnabled(true);
     this.pendingNightWaveStartAfterEvent = false;
+    this.pendingDayRunEventAfterChallenge = false;
     this.playerSystem?.setVirtualDirection(0, 0);
     (window as any).__force_bloodmoon_test = undefined;
     (window as any).__debug_trigger_run_event = undefined;
+    (window as any).__debug_open_cave_raid = undefined;
+    (window as any).__debug_open_forest_hunt = undefined;
+    (window as any).__debug_open_city_scavenge = undefined;
     (window as any).__in_game = false;
   }
 }

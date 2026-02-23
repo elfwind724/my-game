@@ -15,6 +15,7 @@ interface CompanionInstance {
     sprite: Phaser.Physics.Arcade.Sprite;
     lastFire: number;
     lastHeal: number;
+    lastPattern: number;
     killCount: number;
     nextLevelKills: number;
     baseDamage: number;
@@ -23,6 +24,7 @@ interface CompanionInstance {
     baseHealth: number;
     baseBulletDamage: number;
     baseBulletColor: number;
+    baseTextureKey: string;
 }
 
 interface AdvancedClassDef {
@@ -89,9 +91,15 @@ export class CompanionSystem {
         const config = this.resolveConfig(configOrRole);
         config.level = Phaser.Math.Clamp(Math.max(1, config.level || 1), 1, COMPANION_MAX_LEVEL);
         config.promotionTier = config.promotionTier === 1 || !!config.advancedClass ? 1 : 0;
-        const sprite = this.group.create(x, y, 'companion') as Phaser.Physics.Arcade.Sprite;
-        sprite.setScale(2);
-        sprite.setTint(config.bulletEffect.color ?? 0xffffff);
+        const textureKey = this.resolveCompanionTextureKey(config);
+        config.textureKey = textureKey;
+        const sprite = this.group.create(x, y, textureKey) as Phaser.Physics.Arcade.Sprite;
+        sprite.setScale(textureKey === 'companion' ? 2.15 : 2.25);
+        if (textureKey === 'companion') {
+            sprite.setTint(config.bulletEffect.color ?? 0xffffff);
+        } else {
+            sprite.clearTint();
+        }
         sprite.setCollideWorldBounds(true);
         const body = sprite.body as Phaser.Physics.Arcade.Body;
         body.setSize(22, 24);
@@ -108,6 +116,7 @@ export class CompanionSystem {
             sprite,
             lastFire: 0,
             lastHeal: 0,
+            lastPattern: 0,
             killCount: 0,
             nextLevelKills: this.getKillsToNextLevel(config.level),
             baseDamage: this.inferBaseValue(config.stats.damage, config.level, 1.08),
@@ -115,7 +124,8 @@ export class CompanionSystem {
             baseRange: this.inferBaseValue(config.stats.range, config.level, 1.02),
             baseHealth: this.inferBaseValue(config.stats.health, config.level, 1.09),
             baseBulletDamage: this.inferBaseValue(config.bulletEffect.damage, config.level, 1.08),
-            baseBulletColor: config.bulletEffect.color ?? 0xffffff
+            baseBulletColor: config.bulletEffect.color ?? 0xffffff,
+            baseTextureKey: textureKey,
         };
         this.applyLevelScaling(companion);
 
@@ -154,6 +164,7 @@ export class CompanionSystem {
             id: data.id,
             name: data.name,
             level,
+            textureKey: data.textureKey,
             advancedClass: data.advancedClass,
             promotionTier: data.promotionTier === 1 || !!data.advancedClass ? 1 : 0,
             role,
@@ -270,6 +281,11 @@ export class CompanionSystem {
             level: 1,
             promotionTier: 0,
             role: input,
+            textureKey: input === 'tank'
+                ? 'companion_tank'
+                : input === 'sniper'
+                    ? 'companion_sniper'
+                    : 'companion_medic',
             bulletEffect: {
                 type: input === 'sniper' ? 'piercing' : input === 'tank' ? 'explosive' : 'homing',
                 damage: input === 'sniper' ? 35 : 15,
@@ -309,6 +325,48 @@ export class CompanionSystem {
         const promoted = pool[Phaser.Math.Between(0, pool.length - 1)];
         comp.config.advancedClass = promoted.nameCN;
         comp.config.promotionTier = 1;
+        comp.config.textureKey = this.resolveCompanionTextureKey(comp.config);
+    }
+
+    private resolveCompanionTextureKey(config: CompanionConfig): string {
+        const role = config.role || 'tank';
+        const has = (key: string): boolean => this.scene.textures.exists(key);
+        const advanced = !!config.advancedClass || config.promotionTier === 1;
+        const preferred = ((): string[] => {
+            if (role === 'tank') {
+                return advanced
+                    ? ['companion_raider', 'companion_tank', 'companion_engineer', 'companion']
+                    : ['companion_tank', 'companion_engineer', 'companion'];
+            }
+            if (role === 'sniper') {
+                return advanced
+                    ? ['companion_raider', 'companion_sniper', 'companion_tank', 'companion']
+                    : ['companion_sniper', 'companion_raider', 'companion'];
+            }
+            return advanced
+                ? ['companion_support', 'companion_medic', 'companion_engineer', 'companion']
+                : ['companion_medic', 'companion_support', 'companion'];
+        })();
+        const explicit = config.textureKey;
+        if (explicit && has(explicit)) return explicit;
+        const found = preferred.find((key) => has(key));
+        return found || 'companion';
+    }
+
+    private refreshCompanionVisual(comp: CompanionInstance): void {
+        const resolved = this.resolveCompanionTextureKey(comp.config);
+        const fallbackKey = this.scene.textures.exists(comp.baseTextureKey) ? comp.baseTextureKey : 'companion';
+        const key = this.scene.textures.exists(resolved) ? resolved : fallbackKey;
+        comp.config.textureKey = key;
+        if (comp.sprite.texture?.key !== key) {
+            comp.sprite.setTexture(key);
+        }
+        comp.sprite.setScale(key === 'companion' ? 2.15 : 2.25);
+        if (key === 'companion') {
+            comp.sprite.setTint(comp.config.bulletEffect.color ?? comp.baseBulletColor);
+        } else {
+            comp.sprite.clearTint();
+        }
     }
 
     private getFormationAnchor(
@@ -456,34 +514,67 @@ export class CompanionSystem {
         damageBonus: number
     ): void {
         const effect = comp.config.bulletEffect;
-        const levelBurstBonus = Math.floor(Math.max(0, comp.config.level - 1) / 5);
+        const role = comp.config.role || 'tank';
+        const level = Math.max(1, comp.config.level || 1);
+        const levelBurstBonus = Math.floor(Math.max(0, level - 1) / 5);
+        const promotionBonus = comp.config.promotionTier === 1 ? 1 : 0;
         const basePellets = effect.type === 'scatter' ? effect.scatterCount ?? 5 : 1;
-        const pellets = Math.min(9, basePellets + levelBurstBonus);
-        const spread = effect.type === 'scatter'
-            ? Phaser.Math.DegToRad(25 + levelBurstBonus * 3)
-            : (levelBurstBonus > 0 ? Phaser.Math.DegToRad(8 + levelBurstBonus * 2) : 0);
+        const rolePelletBonus = role === 'tank'
+            ? Math.floor(level / 12) + promotionBonus
+            : role === 'sniper'
+                ? (level >= 14 ? 1 : 0) + promotionBonus
+                : (level >= 10 ? 1 : 0) + promotionBonus;
+        const pellets = Math.min(8, Math.max(1, basePellets + levelBurstBonus + rolePelletBonus));
+        let spreadDeg = effect.type === 'scatter'
+            ? 25 + levelBurstBonus * 3
+            : (levelBurstBonus > 0 ? 8 + levelBurstBonus * 2 : 0);
+        if (role === 'tank') spreadDeg += 10 + promotionBonus * 4;
+        if (role === 'sniper') spreadDeg = Math.max(2, spreadDeg * 0.56);
+        if (role === 'medic') spreadDeg += 6;
+        const spread = Phaser.Math.DegToRad(spreadDeg);
         const baseAngle = Phaser.Math.Angle.Between(comp.sprite.x, comp.sprite.y, target.x, target.y);
 
         for (let i = 0; i < pellets; i++) {
             const bullet = this.acquireBullet(bullets, comp.sprite.x, comp.sprite.y);
             if (!bullet) continue;
 
-            bullet.enableBody(true, comp.sprite.x, comp.sprite.y, true, true);
-            bullet.setActive(true);
-            bullet.setVisible(true);
-            const texture = this.getTextureByEffect(effect.type);
-            bullet.setTexture(texture);
-            bullet.setAlpha(1);
-            const scale = texture === 'bullet_cannon' ? 3 : 2;
-            bullet.setScale(scale);
-            bullet.setTint(effect.color ?? 0xffffff);
-            bullet.setBlendMode(Phaser.BlendModes.ADD);
-            bullet.setDepth(10);
-
             const clonedEffect: BulletEffect = {
                 ...effect,
                 damage: effect.damage + damageBonus + levelBurstBonus * 2
             };
+            if (role === 'tank') {
+                clonedEffect.type = 'explosive';
+                clonedEffect.explosionRadius = Math.max(56, (clonedEffect.explosionRadius || 56) + Math.floor(level * 0.9));
+                clonedEffect.speed = Math.max(260, Math.round((clonedEffect.speed || 360) * 0.9));
+                clonedEffect.damage = Math.round(clonedEffect.damage * 1.14);
+            } else if (role === 'sniper') {
+                clonedEffect.type = 'piercing';
+                clonedEffect.pierceCount = Math.min(14, Math.max(2, (clonedEffect.pierceCount || 2) + Math.floor(level / 6)));
+                clonedEffect.speed = Math.max(420, Math.round((clonedEffect.speed || 460) * 1.22));
+                clonedEffect.damage = Math.round(clonedEffect.damage * (1.12 + Math.min(0.24, level * 0.004)));
+            } else {
+                if (level >= 20 && i % 3 === 2) {
+                    clonedEffect.type = 'chain';
+                    clonedEffect.chainCount = Math.max(2, (clonedEffect.chainCount || 2) + Math.floor(level / 16));
+                } else {
+                    clonedEffect.type = 'homing';
+                    clonedEffect.homingStrength = Math.min(0.36, (clonedEffect.homingStrength || 0.09) + level * 0.0034);
+                }
+                clonedEffect.speed = Math.max(320, Math.round((clonedEffect.speed || 380) * 1.06));
+                clonedEffect.damage = Math.round(clonedEffect.damage * 1.04);
+            }
+
+            bullet.enableBody(true, comp.sprite.x, comp.sprite.y, true, true);
+            bullet.setActive(true);
+            bullet.setVisible(true);
+            const texture = this.getTextureByEffect(clonedEffect.type);
+            bullet.setTexture(texture);
+            bullet.setAlpha(1);
+            const scale = texture === 'bullet_cannon' ? 3 : texture === 'bullet_pierce' ? 2.2 : 2;
+            bullet.setScale(scale);
+            bullet.setTint(clonedEffect.color ?? 0xffffff);
+            bullet.setBlendMode(Phaser.BlendModes.ADD);
+            bullet.setDepth(10);
 
             (bullet as any).bulletEffect = clonedEffect;
             (bullet as any).damage = clonedEffect.damage;
@@ -503,7 +594,7 @@ export class CompanionSystem {
                 ? baseAngle - spread / 2 + (spread / (pellets - 1)) * i + Phaser.Math.FloatBetween(-0.05, 0.05)
                 : baseAngle;
 
-            const speed = (clonedEffect.speed || 400) * (1 + Math.min(0.35, comp.config.level * 0.012));
+            const speed = (clonedEffect.speed || 400) * (1 + Math.min(0.35, level * 0.012));
             const body = bullet.body as Phaser.Physics.Arcade.Body;
             body.reset(comp.sprite.x, comp.sprite.y);
             body.setAllowGravity(false);
@@ -520,13 +611,20 @@ export class CompanionSystem {
             anyBullet.bulletTextureKey = texture;
             anyBullet.baseVelocityX = velocityX;
             anyBullet.baseVelocityY = velocityY;
-            const swayAmp = effect.type === 'chain' || effect.type === 'laser'
-                ? 14
-                : effect.type === 'burning'
-                    ? 10
+            const dynamicType = String(clonedEffect.type || '');
+            const swayAmp = role === 'sniper'
+                ? 6 + Math.min(10, level * 0.3)
+                : role === 'tank'
+                    ? 4 + Math.min(8, level * 0.2)
+                    : dynamicType === 'chain' || dynamicType === 'laser'
+                        ? 16
+                        : dynamicType === 'burning'
+                            ? 11
+                            : dynamicType === 'homing'
+                                ? 6
                     : 0;
             anyBullet.swayAmplitude = swayAmp;
-            anyBullet.swayFrequency = swayAmp > 0 ? (effect.type === 'burning' ? 0.02 : 0.013) : 0;
+            anyBullet.swayFrequency = swayAmp > 0 ? (dynamicType === 'burning' ? 0.02 : 0.013) : 0;
             anyBullet.swayPhase = Math.random() * Math.PI * 2;
             if (anyBullet.lifetimeTimer) {
                 anyBullet.lifetimeTimer.remove();
@@ -540,6 +638,67 @@ export class CompanionSystem {
                 anyBullet.lifetimeTimer = null;
                 if (bullet.active) this.disableBullet(bullet);
             });
+        }
+
+        if (comp.config.level >= 18 && this.scene.time.now - comp.lastPattern > (role === 'sniper' ? 1350 : 1600)) {
+            comp.lastPattern = this.scene.time.now;
+            const burstCount = role === 'tank' ? 4 : role === 'sniper' ? 3 : 5;
+            const burstSpread = role === 'sniper' ? 18 : 52;
+            for (let j = 0; j < burstCount; j++) {
+                const extra = this.acquireBullet(bullets, comp.sprite.x, comp.sprite.y);
+                if (!extra) continue;
+                const extraAngle = baseAngle + Phaser.Math.DegToRad(-burstSpread / 2 + (burstSpread / Math.max(1, burstCount - 1)) * j);
+                const burstEffect: BulletEffect = {
+                    ...effect,
+                    type: role === 'tank' ? 'explosive' : role === 'sniper' ? 'piercing' : 'chain',
+                    damage: Math.round(effect.damage + damageBonus + level * 2.2),
+                    speed: Math.round((effect.speed || 420) * (role === 'sniper' ? 1.25 : role === 'tank' ? 0.88 : 1.05)),
+                    explosionRadius: role === 'tank' ? Math.max(72, (effect.explosionRadius || 56) + 24) : effect.explosionRadius,
+                    pierceCount: role === 'sniper' ? Math.max(4, (effect.pierceCount || 3) + 1) : effect.pierceCount,
+                    chainCount: role === 'medic' ? Math.max(3, (effect.chainCount || 2) + 1) : effect.chainCount,
+                };
+                extra.enableBody(true, comp.sprite.x, comp.sprite.y, true, true);
+                extra.setActive(true).setVisible(true);
+                const extraTexture = this.getTextureByEffect(burstEffect.type);
+                extra.setTexture(extraTexture);
+                extra.setScale(extraTexture === 'bullet_cannon' ? 3 : 2);
+                extra.setTint(burstEffect.color ?? 0xffffff);
+                extra.setBlendMode(Phaser.BlendModes.ADD);
+                extra.setDepth(10);
+                const body = extra.body as Phaser.Physics.Arcade.Body;
+                body.reset(comp.sprite.x, comp.sprite.y);
+                body.setAllowGravity(false);
+                const burstScale = extraTexture === 'bullet_cannon' ? 3 : 2;
+                const radius = Math.max(4, Math.min(7, Math.floor(4 * burstScale)));
+                body.setCircle(radius, extra.width / 2 - radius, extra.height / 2 - radius);
+                const velocityX = Math.cos(extraAngle) * (burstEffect.speed || 420);
+                const velocityY = Math.sin(extraAngle) * (burstEffect.speed || 420);
+                body.setVelocity(velocityX, velocityY);
+                extra.setRotation(extraAngle + Math.PI / 2);
+                const anyExtra = extra as any;
+                anyExtra.bulletEffect = burstEffect;
+                anyExtra.damage = burstEffect.damage;
+                anyExtra.pierceLeft = burstEffect.pierceCount ?? 0;
+                anyExtra.ownerType = 'companion';
+                anyExtra.ownerId = comp.id;
+                anyExtra.isHoming = false;
+                anyExtra.homingTarget = null;
+                anyExtra.homingStrength = null;
+                anyExtra.bulletTextureKey = extraTexture;
+                anyExtra.baseVelocityX = velocityX;
+                anyExtra.baseVelocityY = velocityY;
+                anyExtra.swayAmplitude = role === 'medic' ? 18 : 10;
+                anyExtra.swayFrequency = role === 'medic' ? 0.016 : 0.012;
+                anyExtra.swayPhase = Math.random() * Math.PI * 2;
+                const lifetime = (comp.config.stats.range || 300) / Math.max(120, burstEffect.speed || 420) * 1000;
+                anyExtra.spawnTime = this.scene.time.now;
+                anyExtra.maxLifetime = lifetime + 180;
+                if (anyExtra.lifetimeTimer) anyExtra.lifetimeTimer.remove();
+                anyExtra.lifetimeTimer = this.scene.time.delayedCall(lifetime, () => {
+                    anyExtra.lifetimeTimer = null;
+                    if (extra.active) this.disableBullet(extra);
+                });
+            }
         }
     }
 
@@ -675,7 +834,7 @@ export class CompanionSystem {
             }
         }
         comp.config.bulletEffect.color = LEVEL_COLOR_CYCLE[(level - 1) % LEVEL_COLOR_CYCLE.length] ?? comp.baseBulletColor;
-        comp.sprite.setTint(comp.config.bulletEffect.color);
+        this.refreshCompanionVisual(comp);
         const spriteData = comp.sprite as any;
         spriteData.maxHealth = comp.config.stats.health;
         const current = Number.isFinite(spriteData.health) ? spriteData.health : comp.config.stats.health;

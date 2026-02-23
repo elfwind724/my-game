@@ -3,7 +3,7 @@
  * Full-screen overlay with 3-4 animated cards
  */
 import Phaser from 'phaser';
-import { EvolutionSystem, LevelUpChoice } from '../systems/EvolutionSystem';
+import { EvolutionSystem, LevelUpChoice, type LevelUpProtocolId } from '../systems/EvolutionSystem';
 import { RARITY_COLORS } from '../data/weapons';
 
 export class LevelUpPanel {
@@ -32,6 +32,13 @@ export class LevelUpPanel {
     const portrait = h > w;
     const boost = this.isMobileViewport() ? (portrait ? 1.2 : 1.08) : 1;
     return `${Math.max(min, Math.round(base * boost))}px`;
+  }
+
+  private getProtocolTextureKey(choice: LevelUpChoice): string | null {
+    if (choice.type !== 'upgrade_protocol') return null;
+    const protocolId = (choice.protocolId || choice.id) as LevelUpProtocolId | undefined;
+    if (!protocolId) return null;
+    return `protocol_icon_${protocolId}`;
   }
 
   show(onChoice: (choice: LevelUpChoice) => void): void {
@@ -96,11 +103,23 @@ export class LevelUpPanel {
     // Rarity glow
     const glow = this.scene.add.rectangle(x, y, w + 4, h + 4, rarityColor, 0.15);
     this.container.add(glow);
+    const isProtocolChoice = choice.type === 'upgrade_protocol';
+    const protocolColor = choice.color || rarityColor;
+    const protocolFrame = isProtocolChoice
+      ? this.scene.add.rectangle(x, y, w + 16, h + 16, protocolColor, 0)
+          .setStrokeStyle(2, protocolColor, 0.88)
+      : null;
+    const protocolHalo = isProtocolChoice
+      ? this.scene.add.circle(x, y - 40, 34, protocolColor, 0.16).setStrokeStyle(2, protocolColor, 0.8)
+      : null;
+    if (protocolFrame) this.container.add(protocolFrame);
+    if (protocolHalo) this.container.add(protocolHalo);
 
     // Type badge
     const typeLabels: Record<string, string> = {
       new_weapon: '新武器', upgrade_weapon: '武器升级',
       new_passive: '新被动', upgrade_passive: '被动升级',
+      upgrade_protocol: '战斗协议',
     };
     const badge = this.scene.add.text(x, y - h / 2 + 20, typeLabels[choice.type] || '', {
       fontSize: this.fs(12, 11), color: '#000000', fontFamily: this.getUIFontFamily(), fontStyle: 'bold',
@@ -110,9 +129,17 @@ export class LevelUpPanel {
     this.container.add(badge);
 
     // Icon
-    const icon = this.scene.add.text(x, y - 40, choice.icon, {
-      fontSize: '48px',
-    }).setOrigin(0.5);
+    const protocolTextureKey = this.getProtocolTextureKey(choice);
+    const icon = protocolTextureKey && this.scene.textures.exists(protocolTextureKey)
+      ? this.scene.add.image(x, y - 40, protocolTextureKey).setScale(2.1)
+      : this.scene.add.text(x, y - 40, choice.icon, {
+          fontSize: isProtocolChoice ? this.fs(40, 34) : '48px',
+          fontFamily: this.getUIFontFamily(),
+          color: isProtocolChoice ? `#${protocolColor.toString(16).padStart(6, '0')}` : '#ffffff',
+          stroke: '#020617',
+          strokeThickness: 2,
+        });
+    icon.setOrigin(0.5);
     this.container.add(icon);
 
     // Name
@@ -123,8 +150,10 @@ export class LevelUpPanel {
 
     // Level indicator
     let levelText: Phaser.GameObjects.Text | null = null;
-    if (choice.currentLevel) {
-      levelText = this.scene.add.text(x, y + 48, `Lv.${choice.currentLevel} → Lv.${choice.currentLevel + 1}`, {
+    if (choice.currentLevel != null) {
+      const maxLevel = choice.maxLevel ?? Math.max(choice.currentLevel + 1, 1);
+      const nextLevel = Math.min(maxLevel, choice.currentLevel + 1);
+      levelText = this.scene.add.text(x, y + 48, `Lv.${choice.currentLevel} → Lv.${nextLevel}${choice.maxLevel ? ` / ${maxLevel}` : ''}`, {
         fontSize: this.fs(14, 12), color: '#fbbf24', fontFamily: this.getUIFontFamily(),
       }).setOrigin(0.5);
       this.container.add(levelText);
@@ -156,11 +185,15 @@ export class LevelUpPanel {
       bg.setFillStyle(0x334155, 1);
       bg.setStrokeStyle(4, 0xfbbf24);
       this.scene.tweens.add({ targets: [bg, glow], scaleX: 1.05, scaleY: 1.05, duration: 100 });
+      if (protocolFrame) protocolFrame.setStrokeStyle(3, 0xfbbf24, 1);
+      if (protocolHalo) protocolHalo.setFillStyle(protocolColor, 0.22);
     });
     bg.on('pointerout', () => {
       bg.setFillStyle(0x1e293b, 0.95);
       bg.setStrokeStyle(3, rarityColor);
       this.scene.tweens.add({ targets: [bg, glow], scaleX: 1, scaleY: 1, duration: 100 });
+      if (protocolFrame) protocolFrame.setStrokeStyle(2, protocolColor, 0.88);
+      if (protocolHalo) protocolHalo.setFillStyle(protocolColor, 0.16);
     });
     bg.on('pointerdown', () => {
       this.selectChoice(choice);
@@ -175,6 +208,8 @@ export class LevelUpPanel {
       name as Phaser.GameObjects.GameObject & { y: number; setAlpha: (value: number) => any },
       desc as Phaser.GameObjects.GameObject & { y: number; setAlpha: (value: number) => any },
     ];
+    if (protocolFrame) allElements.push(protocolFrame as Phaser.GameObjects.GameObject & { y: number; setAlpha: (value: number) => any });
+    if (protocolHalo) allElements.push(protocolHalo as Phaser.GameObjects.GameObject & { y: number; setAlpha: (value: number) => any });
     if (levelText) allElements.push(levelText);
     if (preview) allElements.push(preview);
     allElements.forEach(el => {
@@ -188,6 +223,29 @@ export class LevelUpPanel {
       duration: 400, delay: 200 + index * 150,
       ease: 'Back.easeOut',
     });
+
+    if (protocolFrame) {
+      this.scene.tweens.add({
+        targets: protocolFrame,
+        alpha: { from: 0.35, to: 0.78 },
+        scaleX: { from: 1, to: 1.02 },
+        scaleY: { from: 1, to: 1.02 },
+        duration: 760,
+        yoyo: true,
+        repeat: -1,
+      });
+    }
+    if (protocolHalo) {
+      this.scene.tweens.add({
+        targets: protocolHalo,
+        alpha: { from: 0.26, to: 0.52 },
+        scaleX: { from: 0.95, to: 1.08 },
+        scaleY: { from: 0.95, to: 1.08 },
+        duration: 680,
+        yoyo: true,
+        repeat: -1,
+      });
+    }
   }
 
   private selectChoice(choice: LevelUpChoice): void {

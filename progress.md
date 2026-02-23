@@ -1397,3 +1397,223 @@ src/
 - 2026-02-19 mobile perf pass: added adaptive low/ultra mobile performance tiers (fps, arcade fps, bullet VFX throttling, weather particle throttling, damage text limits, lighting/update throttles).
 - 2026-02-19 deploy note: documented CN-friendly deployment alternatives to Netlify in README (Cloudflare Pages / COS+CDN / OSS+CDN / OBS+CDN).
 - 2026-02-19 verification: npm run build passed; Playwright client smoke ran with no new console/page errors but remained in menu state (state json scene=menu), needs dedicated menu-start automation selector later.
+
+- 2026-02-19 redesign pass: daytime map spots now support active manual exploration chain (risk/reward, cooldown, day buffs, threat spawns, XP + resource payouts) instead of passive-only hints.
+- 2026-02-19 progression pass: added dynamic level upgrade bonuses + level surge state for stronger visible power spikes; wired level-up choice to trigger surge feedback.
+- 2026-02-19 XP reliability: GameScene now routes XP through grantExperience() to emit EXP/LEVEL events consistently; GameState.addExperience now handles multi-level gains in one grant.
+- 2026-02-19 validation: npm run build passed. Playwright smoke executed with no console/page errors but headless capture still stuck on black/menu frame in this environment.
+
+## 2026-02-23（白天玩法重构：小游戏 + 民生热点脉冲）
+
+### 用户反馈
+- 白天没有真正小游戏，过程无聊。
+- 伙伴生活感不够，缺少“民生气息”。
+
+### 本轮实现
+- 文件：`src/scenes/GameScene.ts`
+  - 修复编译阻断：补齐缺失的 `maybeEmitDayLifeAtmosphere()`。
+  - 新增白天“生活热点”系统：
+    - 河流/森林/城区/山洞探索点会周期性触发短时热点（高收益/高风险词缀）。
+    - 热点写入 `daySpotBonuses`，带 `rewardMul/dangerMul/bonusXp/expiresAt`。
+    - 热点会同步到探索点状态与交互提示（`updateExplorationSpotStatus/getExplorationHintText`）。
+  - 热点接入探索结算：
+    - `executeActiveExploration()` 会消耗热点并叠加收益、风险和额外经验，形成明显“白天冲点”动机。
+  - 白天小游戏面板增强：
+    - 若当前点位存在热点，会在小游戏面板中直接展示热点信息。
+  - 伙伴生活氛围增强：
+    - `maybeEmitDayLifeAtmosphere()` 在无热点可刷时触发居民日常生活文本/小额补给/偶发协助任务，提升白天“有人在生活”的反馈密度。
+  - 生命周期清理补全：
+    - 新增 `daySpotBonuses`、`dayLifePulseTimer` 在 `onDayStart/onNightStart/shutdown` 的重置与清理，防止状态残留。
+
+### 兼容性修正
+- 移除 `handleExplorationSpotInteraction()` 中未使用局部变量，消除 TS noUnusedLocals 报错。
+
+### 验证
+- `npm run build` 通过。
+- `npm run test:game` 通过（本地起服后）：
+  - `output/web-game/errors-0.json` 为空。
+  - `output/web-game/state-0.json` 显示已进入 `scene=game`，白天场景正常运行。
+- 2026-02-23 daytime mini-game V2: exploration mini-game split by action type (fish/swim/hunt/scavenge/cave) with distinct timing profiles, moving target windows, and trap zones (for scavenge/cave).
+- 2026-02-23 mini-game UX: panel now shows mode title + rule text; risk mode dynamically shrinks target width / speeds target movement.
+- 2026-02-23 reward coupling: mini-game quality now computed against dynamic target center/width (not fixed 0.5), trap-hit forces poor result and can trigger backlash damage.
+- 2026-02-23 validation: npm run build passed; npm run test:game passed; output/web-game/errors-0.json is empty.
+- 2026-02-23 daytime mini-game V3 visual pass: per-zone panel theming (river/forest/city/cave accent color + icon + title band), no longer shared visual skin.
+- 2026-02-23 daytime mini-game result FX: added lock-result banner + world spark burst + quality-linked camera response (perfect flash / fail shake), including trap-trigger feedback.
+- 2026-02-23 performance-safe FX: result particles scale down under low/ultra mobile performance tiers.
+- 2026-02-23 validation: npm run build passed; npm run test:game passed; output/web-game/errors-0.json is empty.
+- 2026-02-23 daytime risk differentiation V4: area-specific failure penalties implemented.
+- River (fish/swim) failure now yields low reward only (reduced multipliers, no forced damage), preserving low-risk identity.
+- Forest (hunt) failure now applies direct player injury (damage event) as main penalty.
+- City (scavenge) failure now applies durability-wear debuff stacks (temporary player damage reduction), with trap-hit causing heavier wear.
+- Cave (cave_explore) failure now guarantees enemy aggro spawn, making failure cost map pressure instead of pure HP loss.
+- Added durability wear lifecycle: stack/expire handlers and live damage multiplier integration in player damage pipeline.
+- Validation: npm run build passed; npm run test:game passed; output/web-game/errors-0.json is empty.
+- 2026-02-23 HUD debuff pass: added top-left durability-wear indicator (icon + stack-based damage reduction text + remaining-time bar), supports expanded/collapsed HUD layout.
+- 2026-02-23 penalty feedback pass: added zone-specific failure VFX+SFX for river/forest/city/cave penalties.
+- River fail: ripple FX + soft low-risk tone; Forest fail: slash FX + hit shake + harsh tone; City fail: spark/flash + wear-warning tone; Cave fail: purple shockwave + alert tone.
+- 2026-02-23 durability-state bridge: exposed runtime duration metadata from GameScene for UIScene countdown bar synchronization.
+- 2026-02-23 validation: npm run build passed; npm run test:game passed; output/web-game/errors-0.json is empty.
+- 2026-02-23 daytime loop expansion V5: added daily exploration challenge system (action-type specific objective with quality threshold + progress + completion rewards).
+- 2026-02-23 challenge UX: exploration spot hints/status now show challenge progress for matching zones; day-start summary now includes today's challenge objective.
+- 2026-02-23 counterplay update: workbench interaction now repairs durability-wear debuff stacks (with remaining penalty feedback), creating a clear recovery loop after city failure.
+- 2026-02-23 validation: npm run build passed; npm run test:game passed; output/web-game/errors-0.json is empty.
+
+## 最新进展（2026-02-23 每日分支层）
+- [x] 日挑战重构为“3选1分支”：白天开局弹出 `稳妥 / 冒险 / 极限` 选择面板，不再是单一随机挑战。
+- [x] 分支接入永久成长：`GameState.meta` 新增 `dayChallengeMastery`（持久化、旧存档兼容、跨轮次保留），完成挑战可提升对应分支精通。
+- [x] 分支精通收益接入实战：
+  - `稳妥`：日间风险缓解与稳态收益提升
+  - `冒险`：日间收益与比特币奖励提升
+  - `极限`：常驻伤害/经验增益更高
+- [x] 白天探索小游戏升级为“多回合”判定：
+  - 河流/游泳：2回合
+  - 森林/城区：3回合
+  - 山洞：4回合
+  - 每回合记分，最终按总分与陷阱命中计算 `poor/good/perfect`，避免单次判定千篇一律。
+- [x] `render_game_to_text` 输出扩展：加入 `dayChallengeSelectionOpen / dayChallenge / dayChallengeChoices / dayChallengeBranchSelected` 便于自动化验证。
+- [x] 构建验证：`npm run build` 通过。
+- [x] 自动化验证：`npm run test:game` 通过，`output/web-game/errors-0.json` 为空；并额外验证了“分支选择前后”状态与截图。
+
+### 后续建议
+- [ ] 把“探险”扩展为真正独立玩法模板（例如：洞穴横版战斗小关 + 森林追踪战 + 城区潜入搜刮 + 河流节奏类），复用现有分支奖励池。
+- [ ] 为四类点位补专属音效包与回合结算 VFX，让回合差异体感更明显。
+- [ ] 给每日分支面板加移动端快捷按钮（1/2/3）与倒计时自动选择，防止新手停留过久。
+
+## 最新进展（2026-02-23 洞穴短横版战斗关 V1）
+- [x] 山洞玩法从“单次判定条”切换为独立短横版战斗实例（进入后锁定为洞穴战斗面板）。
+- [x] 洞穴战新增三阶段流程：
+  - 阶段1：清杂兵（稳妥4 / 冒险6）
+  - 阶段2：陷阱房生存（稳妥11s / 冒险9s）
+  - 阶段3：小Boss房（含杂兵压力）
+- [x] 洞穴战新增平台层与跳跃手感：
+  - 角色可用 `W/↑` 跳跃
+  - 战斗区加入上下平台，避免纯平面站桩
+  - 移动端摇杆上推可触发跳跃
+- [x] 洞穴敌人AI分型：
+  - `runner`（贴身压迫）
+  - `leaper`（跳扑）
+  - `spitter`（远程吐射，平台位）
+  - `boss`（弹幕/陷阱技能循环，半血强化）
+- [x] 洞穴陷阱扩展：
+  - 地雷爆震（地面范围）
+  - 落石砸击（纵向掉落）
+- [x] 调试链路增强：
+  - `__debug_open_cave_raid` 可在“每日挑战弹窗”存在时自动兜底选择分支后继续开洞穴，避免测试被阻塞。
+  - `render_game_to_text` 的 `dayMiniGame` 增加 `caveStage/caveStageProgress/caveStageObjective/caveTrapHits`。
+- [x] 稳定性修复：
+  - 修复洞穴阶段切换时 `caveRaidEnemies` 变更导致的 `undefined.sprite` 崩溃（循环中增加空值保护）。
+- [x] 验证结果：
+  - `npm run build` 通过。
+  - `npm run test:game` 通过，`output/web-game/errors-0.json` 为空。
+  - Playwright实测：可稳定打开洞穴战，平台/跳跃/三阶段状态字段可读取，无新的控制台报错。
+
+## 最新进展（2026-02-23 森林追踪狩猎战 V1）
+- [x] 森林点位改为独立“潜行 + 爆发”玩法，不再复用通用单条判定：
+  - 潜行阶段：左右位移追踪猎迹，避开猎物视野锥；`[E]` 屏息可压低警觉。
+  - 爆发阶段：移动窗口射击条，按 `E/Space` 在绿色窗口开火结算当回合得分。
+- [x] 冒险/稳妥风险预设接入森林玩法：
+  - 冒险：潜行时限更短、爆发窗口更窄、目标移动更快，但走高收益倍率。
+  - 稳妥：窗口更宽、时限更宽松，容错更高。
+- [x] 多回合结算接入：按总分 + 暴露/失误计算 `poor/good/perfect`，并回传到探索奖励链。
+- [x] 手感强化：
+  - 新增潜行阶段“屏息冷却”实时提示；
+  - 新增“被发现”专属反馈（红色脉冲 + 震屏 + 浮字）；
+  - 新增爆发命中专属 VFX（完美/良好/失手差异化闪爆）。
+- [x] 调试链路：新增 `window.__debug_open_forest_hunt()` 直接开森林玩法，便于快速验收。
+- [x] 验证结果：
+  - `npm run build` 通过。
+  - `npm run test:game` 通过，`output/web-game/errors-0.json` 为空。
+  - Playwright 实测可进入森林玩法，`render_game_to_text` 显示 `dayMiniGame.mode = hunt` 且阶段状态正常切换。
+
+## 最新进展（2026-02-23 城区限时搜刮战 V1）
+- [x] 城区点位切换为独立玩法“限时搜刮战（路线+负重）”，不再使用通用判定条。
+- [x] 新增路线分支：
+  - `背街小巷`：低风险、基础收益
+  - `废墟商街`：均衡风险/收益
+  - `高架屋顶`：高风险、高回报
+- [x] 新增负重机制：
+  - 搜刮战利品会增加 `kg` 负重与分值；
+  - 负重越高，移动越慢；超重会显著拖慢并提高警报压力。
+- [x] 新增限时+巡逻警报：
+  - 倒计时结束会强制失手撤离；
+  - 巡逻警报命中会累计失败惩罚并掉失部分负重/分值。
+- [x] 新增撤离结算：
+  - 必须回到左侧撤离区执行撤离动作结算；
+  - 结算按“分值/目标 + 警报/超重惩罚”评定 `poor/good/perfect`，并接入原探索奖励链。
+- [x] 输入与调试链路补全：
+  - 键盘/移动端交互都可触发搜刮与撤离；
+  - 新增 `window.__debug_open_city_scavenge()` 快速打开城区玩法；
+  - `render_game_to_text` 新增城区状态字段（路线、负重、分值、警报、计时、是否撤离）。
+- [x] 验证结果：
+  - `npm run build` 通过；
+  - `npm run test:game` 通过，`output/web-game/errors-0.json` 为空；
+  - Playwright 定向检查可进入城区玩法并触发结算，控制台无 error。
+
+## 最新进展（2026-02-23 角色美术 + 弹幕系统 + 升级系统重构）
+- [x] 伙伴外观修复：获救后不再统一回退到巫师斗篷贴图。
+  - `CompanionSystem` 改为按职业/转职阶段自动分配贴图（`companion_tank/sniper/medic/support/raider/engineer`），并在升级/转职时自动刷新外观。
+  - 伙伴配置与存档数据新增 `textureKey`，保证出战/驻守切换后外观一致。
+- [x] 伙伴弹幕增强：不同职业有明显弹道差异。
+  - 坦克：爆炸型多弹片 + 高等级爆发齐射。
+  - 狙击：高速度穿透束 + 低扩散精确压制。
+  - 医疗：追踪/连锁脉冲弹 + 高等级辅助爆发。
+- [x] 玩家弹幕系统升级：`WeaponSystem` 新增更丰富签名弹幕形态。
+  - 新增弧形/环形签名弹发射逻辑，支持轨迹摆动参数（幅度/频率/相位）。
+  - 根据武器类型触发差异化签名弹（手枪、霰弹、步枪、喷火、激光、火箭各自不同）。
+  - VS武器补充“额外环形爆发弹”逻辑，提升高等级割草体感。
+- [x] 升级系统全面强化：新增“战斗协议（run内叠层）”。
+  - `LevelUpPanel` 新增 `战斗协议` 卡牌类型，支持等级显示（`Lv.x -> Lv.y / max`）。
+  - `EvolutionSystem` 新增协议分支：
+    - 弹幕矩阵、相位穿矛、过载链路、回声反应堆、猎手本能、伙伴协同。
+  - 协议升级会直接影响战斗计算（伤害/射速/弹速/投射物/穿透/签名触发率/轨迹复杂度/伙伴同步增益）。
+  - 协议选择加入强度预览文案，关卡内升级反馈更明显。
+- [x] 验证结果：
+  - `npm run build` 通过；
+  - `npm run test:game` 通过；
+  - `output/web-game/errors-0.json` 为空。
+
+## 最新进展（2026-02-23 夜间 UI 贴图化）
+- [x] 白天四类小游戏 UI 从程序化几何层升级到贴图化皮肤包接入：
+  - `GameScene.addMiniGameRectSkin` 扩展支持 `tile` 皮肤层。
+  - 河流/森林/城区/洞穴四套小游戏入口统一接入 `mg_*` 贴图（风险卡、按钮、条形区、场地底纹）。
+  - 城区/洞穴补齐主题图标入口（`addMiniGameThemeIcon`），森林/河流保持统一样式。
+- [x] 清理重复贴图调用：河流小游戏风险卡皮肤重复叠加已移除。
+- [x] 编译验证：`npm run build` 通过。
+- [~] 自动化截图验证：`develop-web-game` 客户端仍出现黑屏截图（已知 headless/WebGL 捕获问题）；改用 Playwright MCP 页面截图确认菜单渲染正常，后续需要补“进入游戏后 + 打开四类小游戏窗口”的实机截图回归。
+
+### TODO（下一步）
+- [ ] 给四套皮肤补独立按钮状态贴图（normal/hover/pressed）并接输入反馈。
+- [ ] 四类小游戏内的道具/陷阱对象替换为专属 icon atlas（不再用纯色矩形）。
+- [ ] 补跑可见截图回归：进入游戏后分别打开河流/森林/城区/洞穴面板并留档。
+
+## 最新进展（2026-02-23 主玩法扩展）
+- [x] 白天主线新增「日内委托系统」：每天自动生成2条委托（河流/森林/城区/洞穴），按质量与风险条件推进，完成后即时结算资源+经验+比特币。
+- [x] 新增「夜战筹备层数」：白天完成委托可累积筹备层，夜晚转化为战术指令增益，形成“白天经营 -> 夜晚战斗”闭环。
+- [x] 夜晚主线新增「战术指令选择」：夜晚开始会进入3选1（坚守防线/猎杀出击/夜行回收），分别改变夜间伤害、掉落、经验与敌压强度；支持自动兜底选择。
+- [x] 新增「夜间压力波」：不同夜战指令会周期触发不同强度的压力敌潮；夜行回收路线会额外触发夜间回收收益。
+- [x] 战斗线新增「战意爆发」：击杀会累计战意值，满值触发短时爆发窗口（伤害/射速/弹道增强），并接入视觉反馈脉冲。
+- [x] 装备收集线新增「图鉴解锁奖励」：首次获得某稀有度装备时，触发图鉴解锁并奖励经验与比特币。
+- [x] 装备线新增「共鸣套装」：根据已装备武器位的稀有度组合动态计算共鸣层级（伤害/射速/移速/额外投射物/掉落），并周期刷新。
+- [x] 探索交互可见性增强：地图点位状态与 `[E]` 提示文本已接入“委托进度 + 夜间指令”信息，白天目标和夜晚策略更可感知。
+- [x] 调试信息扩展：`render_game_to_text` 状态中新增 dayOps/nightDirective/battleMomentum 字段，便于回归验证。
+- [x] 回归结果：`npm run build` 通过；运行态手工联调验证白天委托推进、夜间指令生效、战意爆发触发、装备共鸣计算与图鉴奖励逻辑均可执行；控制台 error 为 0。
+
+## 最新进展（2026-02-24 手机夜战指令 + 委托任务链 + 节奏平衡）
+- [x] 夜间战术指令手机端可点击闭环完成（不依赖键盘）：
+  - 夜间选择面板改为移动端友好布局（竖屏卡片纵向排布 + 大点击区按钮 `触控执行指令`）。
+  - 每个指令加入专属图标（坚守盾徽/出击双刃/回收补给箱）及持续脉冲动画。
+  - 回归验证：竖屏下触发 `pointerdown` 可直接执行指令，面板关闭并写入夜战增益。
+- [x] 日内委托升级为“前置 -> 执行 -> 交付”多阶段任务链：
+  - 新增前置物资消耗与任务官下发逻辑（`prep` 阶段）。
+  - 白天点位完成条件后进入 `handoff`，需要到任务官交付后才发奖励（资源/经验/比特币/夜战筹备）。
+  - 接入永久成长：新增 `dayOpsRenown` 声望值，交付后永久累积并影响后续局内收益、经验、夜战指令伤害与筹备上限。
+- [x] 前3天爽感提升，中后期成长拉长：
+  - `GameScene.getRunPacingProfile`：前3天提高 XP/奖励并降低目标与危险，中后期反向提高目标/压力并轻微压低收益。
+  - `WaveSystem.getDayBalanceProfile`：前3天减少敌数与刷怪强度，中后期提高敌潮密度与生存能力。
+  - `GameState.addExperience`：经验需求曲线分段，前期升级更快、后期抬升更明显。
+- [x] 验证结果：
+  - `npm run build` 通过。
+  - Playwright + `render_game_to_text` 运行态检查通过：
+    - 夜间面板出现“手机端：直接点击下方大按钮执行指令”与3个“触控执行指令”按钮；
+    - 指令按钮点击后 `nightDirective.open: true -> false`，并写入 `nightDirective.id/effects`；
+    - 委托链可从 `execute -> handoff -> done`，交付后 `renown` 与 `prepStacks` 增长。

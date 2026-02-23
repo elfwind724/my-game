@@ -58,6 +58,9 @@ export default class BootScene extends Phaser.Scene {
     this.generateCompanionSprite();
     this.generateCharacterRoleSprites();
     this.generateProjectileSprites();
+    this.generateProtocolUiTextures();
+    this.generateMiniGameUiSkinTextures();
+    this.generateMiniGameObjectAtlasTextures();
     this.generateStructureSprites();
     this.generateLootSprites();
     this.generateParticleTextures();
@@ -728,6 +731,439 @@ export default class BootScene extends Phaser.Scene {
       g.fillRect(9, 7, 2, 2);
       g.fillRect(5, 9, 2, 2);
       g.fillRect(9, 11, 2, 2);
+    });
+  }
+
+  private generateProtocolUiTextures(): void {
+    this.drawTexture('icon_protocol', 18, 18, (g) => {
+      g.fillStyle(0x071120, 0.95);
+      g.fillCircle(9, 9, 8);
+      g.fillStyle(0x22d3ee, 0.24);
+      g.fillCircle(9, 9, 7);
+      g.fillStyle(0x22d3ee, 0.95);
+      g.fillRect(3, 8, 12, 2);
+      g.fillRect(8, 3, 2, 12);
+      g.fillStyle(0x67e8f9, 1);
+      g.fillCircle(9, 9, 2);
+    });
+
+    this.drawTexture('protocol_icon_barrage_matrix', 28, 28, (g) => {
+      g.fillStyle(0x041526, 1);
+      g.fillRect(1, 1, 26, 26);
+      g.lineStyle(1, 0x22d3ee, 0.9);
+      g.strokeRect(1, 1, 26, 26);
+      g.fillStyle(0x0ea5e9, 0.92);
+      g.fillRect(5, 6, 4, 4);
+      g.fillRect(12, 6, 4, 4);
+      g.fillRect(19, 6, 4, 4);
+      g.fillRect(8, 13, 4, 4);
+      g.fillRect(15, 13, 4, 4);
+      g.fillRect(12, 20, 4, 4);
+      g.fillStyle(0xe0f2fe, 0.8);
+      g.fillRect(13, 11, 2, 6);
+    });
+
+    this.drawTexture('protocol_icon_phase_lance', 28, 28, (g) => {
+      g.fillStyle(0x06182b, 1);
+      g.fillRect(1, 1, 26, 26);
+      g.lineStyle(1, 0x7dd3fc, 0.9);
+      g.strokeRect(1, 1, 26, 26);
+      g.fillStyle(0x38bdf8, 0.95);
+      g.fillRect(13, 4, 2, 20);
+      g.fillStyle(0xe0f2fe, 0.95);
+      g.fillRect(12, 2, 4, 5);
+      g.fillRect(11, 20, 6, 4);
+      g.fillStyle(0x67e8f9, 0.72);
+      g.fillRect(8, 10, 12, 2);
+      g.fillRect(9, 14, 10, 2);
+    });
+
+    this.drawTexture('protocol_icon_overclock_link', 28, 28, (g) => {
+      g.fillStyle(0x281005, 1);
+      g.fillRect(1, 1, 26, 26);
+      g.lineStyle(1, 0xf59e0b, 0.95);
+      g.strokeRect(1, 1, 26, 26);
+      g.fillStyle(0xfb923c, 0.95);
+      g.fillRect(10, 4, 8, 4);
+      g.fillRect(7, 11, 7, 4);
+      g.fillRect(12, 18, 9, 4);
+      g.fillStyle(0xfef3c7, 0.96);
+      g.fillRect(14, 6, 2, 8);
+      g.fillRect(11, 13, 2, 7);
+    });
+
+    this.drawTexture('protocol_icon_echo_reactor', 28, 28, (g) => {
+      g.fillStyle(0x1b0d2f, 1);
+      g.fillRect(1, 1, 26, 26);
+      g.lineStyle(1, 0xa78bfa, 0.9);
+      g.strokeRect(1, 1, 26, 26);
+      g.fillStyle(0xc4b5fd, 0.2);
+      g.fillCircle(14, 14, 10);
+      g.lineStyle(2, 0xc4b5fd, 0.95);
+      g.strokeCircle(14, 14, 8);
+      g.fillStyle(0xa78bfa, 0.9);
+      g.fillCircle(14, 14, 4);
+      g.fillStyle(0xf5d0fe, 0.95);
+      g.fillRect(13, 4, 2, 4);
+      g.fillRect(13, 20, 2, 4);
+      g.fillRect(4, 13, 4, 2);
+      g.fillRect(20, 13, 4, 2);
+    });
+
+    this.drawTexture('protocol_icon_hunter_instinct', 28, 28, (g) => {
+      g.fillStyle(0x062316, 1);
+      g.fillRect(1, 1, 26, 26);
+      g.lineStyle(1, 0x34d399, 0.9);
+      g.strokeRect(1, 1, 26, 26);
+      g.fillStyle(0x10b981, 0.92);
+      g.fillRect(4, 19, 7, 3);
+      g.fillRect(10, 14, 6, 3);
+      g.fillRect(15, 10, 6, 3);
+      g.fillStyle(0x6ee7b7, 0.95);
+      g.fillRect(20, 8, 4, 4);
+      g.fillStyle(0xbbf7d0, 1);
+      g.fillRect(21, 9, 2, 2);
+    });
+
+    this.drawTexture('protocol_icon_companion_sync', 28, 28, (g) => {
+      g.fillStyle(0x08192a, 1);
+      g.fillRect(1, 1, 26, 26);
+      g.lineStyle(1, 0x38bdf8, 0.9);
+      g.strokeRect(1, 1, 26, 26);
+      g.fillStyle(0x38bdf8, 0.9);
+      g.fillCircle(10, 11, 4);
+      g.fillCircle(18, 11, 4);
+      g.fillStyle(0x67e8f9, 0.85);
+      g.fillRect(7, 15, 6, 5);
+      g.fillRect(15, 15, 6, 5);
+      g.fillStyle(0xbfdbfe, 0.92);
+      g.fillRect(12, 12, 4, 2);
+      g.fillRect(13, 10, 2, 6);
+    });
+  }
+
+  private generateMiniGameUiSkinTextures(): void {
+    const variants = [
+      {
+        id: 'river',
+        accent: '#34d9ff',
+        base: '#0b1d35',
+        tileA: '#133d66',
+        tileB: '#102f4d',
+        edge: '#5edfff',
+        glow: '#7dd3fc',
+      },
+      {
+        id: 'forest',
+        accent: '#4ade80',
+        base: '#12261c',
+        tileA: '#214531',
+        tileB: '#193928',
+        edge: '#86efac',
+        glow: '#bbf7d0',
+      },
+      {
+        id: 'city',
+        accent: '#f59e0b',
+        base: '#22180f',
+        tileA: '#3a2b1b',
+        tileB: '#2e2318',
+        edge: '#fbbf24',
+        glow: '#fde68a',
+      },
+      {
+        id: 'cave',
+        accent: '#a78bfa',
+        base: '#1a1430',
+        tileA: '#2d2251',
+        tileB: '#241b45',
+        edge: '#c4b5fd',
+        glow: '#ddd6fe',
+      },
+    ] as const;
+
+    const drawCornerDeco = (ctx: CanvasRenderingContext2D, w: number, h: number, edge: string) => {
+      ctx.strokeStyle = edge;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(10, 4); ctx.lineTo(4, 4); ctx.lineTo(4, 10);
+      ctx.moveTo(w - 10, 4); ctx.lineTo(w - 4, 4); ctx.lineTo(w - 4, 10);
+      ctx.moveTo(10, h - 4); ctx.lineTo(4, h - 4); ctx.lineTo(4, h - 10);
+      ctx.moveTo(w - 10, h - 4); ctx.lineTo(w - 4, h - 4); ctx.lineTo(w - 4, h - 10);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+
+    variants.forEach((v) => {
+      this.drawCanvasTexture(`mg_tile_${v.id}`, 96, 96, (ctx, w, h) => {
+        ctx.fillStyle = v.base;
+        ctx.fillRect(0, 0, w, h);
+        const grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, `${v.tileA}cc`);
+        grad.addColorStop(1, `${v.tileB}cc`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        for (let y = 0; y < h; y += 8) {
+          for (let x = 0; x < w; x += 8) {
+            const checker = ((x + y) / 8) % 2 === 0;
+            ctx.fillStyle = checker ? `${v.tileA}55` : `${v.tileB}44`;
+            ctx.fillRect(x, y, 7, 7);
+          }
+        }
+        ctx.strokeStyle = `${v.edge}55`;
+        ctx.lineWidth = 1;
+        for (let i = 6; i < w; i += 16) {
+          ctx.beginPath();
+          ctx.moveTo(i, 0);
+          ctx.lineTo(i + 6, h);
+          ctx.stroke();
+        }
+      });
+
+      this.drawCanvasTexture(`mg_panel_${v.id}`, 360, 240, (ctx, w, h) => {
+        ctx.fillStyle = '#020617';
+        ctx.fillRect(0, 0, w, h);
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, `${v.base}f8`);
+        grad.addColorStop(1, `${v.base}d4`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(2, 2, w - 4, h - 4);
+        ctx.strokeStyle = `${v.edge}cc`;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(1.5, 1.5, w - 3, h - 3);
+        ctx.strokeStyle = `${v.accent}66`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(6.5, 6.5, w - 13, h - 13);
+        drawCornerDeco(ctx, w, h, v.edge);
+        const glow = ctx.createRadialGradient(w * 0.5, h * 0.12, 8, w * 0.5, h * 0.12, w * 0.4);
+        glow.addColorStop(0, `${v.glow}66`);
+        glow.addColorStop(1, '#00000000');
+        ctx.fillStyle = glow;
+        ctx.fillRect(0, 0, w, h * 0.55);
+      });
+
+      this.drawCanvasTexture(`mg_safe_${v.id}`, 240, 84, (ctx, w, h) => {
+        ctx.fillStyle = `${v.tileA}e6`;
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = `${v.glow}22`;
+        ctx.fillRect(0, 0, w, h * 0.38);
+        ctx.strokeStyle = `${v.edge}dd`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, w - 2, h - 2);
+        ctx.fillStyle = `${v.edge}66`;
+        for (let x = 8; x < w - 8; x += 14) {
+          ctx.fillRect(x, h - 10, 7, 2);
+        }
+      });
+
+      this.drawCanvasTexture(`mg_risky_${v.id}`, 240, 84, (ctx, w, h) => {
+        ctx.fillStyle = '#2b111b';
+        ctx.fillRect(0, 0, w, h);
+        const grad = ctx.createLinearGradient(0, 0, w, 0);
+        grad.addColorStop(0, '#7f1d1d88');
+        grad.addColorStop(1, `${v.accent}22`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#fb7185dd';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, w - 2, h - 2);
+        ctx.fillStyle = '#fb718566';
+        for (let x = 6; x < w - 8; x += 16) {
+          ctx.fillRect(x, 6, 8, 2);
+        }
+      });
+
+      this.drawCanvasTexture(`mg_button_${v.id}`, 320, 56, (ctx, w, h) => {
+        ctx.fillStyle = `${v.tileA}f2`;
+        ctx.fillRect(0, 0, w, h);
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, `${v.glow}44`);
+        grad.addColorStop(1, '#00000000');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = `${v.edge}e6`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, w - 2, h - 2);
+        ctx.strokeStyle = `${v.accent}66`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(6, 6, w - 12, h - 12);
+      });
+      this.drawCanvasTexture(`mg_button_hover_${v.id}`, 320, 56, (ctx, w, h) => {
+        ctx.fillStyle = `${v.tileA}ff`;
+        ctx.fillRect(0, 0, w, h);
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, `${v.glow}66`);
+        grad.addColorStop(1, `${v.glow}16`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = `${v.edge}ff`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, w - 2, h - 2);
+        ctx.strokeStyle = `${v.accent}99`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(5, 5, w - 10, h - 10);
+      });
+      this.drawCanvasTexture(`mg_button_pressed_${v.id}`, 320, 56, (ctx, w, h) => {
+        ctx.fillStyle = `${v.tileB}ff`;
+        ctx.fillRect(0, 0, w, h);
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, '#00000066');
+        grad.addColorStop(1, `${v.glow}22`);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = `${v.edge}dd`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, w - 2, h - 2);
+        ctx.strokeStyle = `${v.accent}88`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(7, 7, w - 14, h - 14);
+      });
+
+      this.drawCanvasTexture(`mg_bar_${v.id}`, 420, 32, (ctx, w, h) => {
+        ctx.fillStyle = '#0b1220';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = `${v.tileB}d9`;
+        ctx.fillRect(2, 2, w - 4, h - 4);
+        ctx.strokeStyle = `${v.edge}cc`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, w - 2, h - 2);
+        ctx.fillStyle = `${v.glow}33`;
+        ctx.fillRect(4, 4, w - 8, Math.floor(h * 0.35));
+      });
+
+      this.drawCanvasTexture(`mg_icon_${v.id}`, 28, 28, (ctx, w, h) => {
+        ctx.fillStyle = '#020617';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = `${v.edge}dd`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(1, 1, w - 2, h - 2);
+        ctx.fillStyle = `${v.accent}cc`;
+        ctx.fillRect(6, 12, 16, 4);
+        ctx.fillRect(12, 6, 4, 16);
+        ctx.fillStyle = `${v.glow}cc`;
+        ctx.fillRect(10, 10, 8, 8);
+      });
+    });
+  }
+
+  private generateMiniGameObjectAtlasTextures(): void {
+    const variants = [
+      {
+        id: 'river',
+        edge: '#67e8f9',
+        fill: '#0c4a6e',
+        glow: '#a5f3fc',
+        danger: '#fb7185',
+      },
+      {
+        id: 'forest',
+        edge: '#4ade80',
+        fill: '#14532d',
+        glow: '#bbf7d0',
+        danger: '#f59e0b',
+      },
+      {
+        id: 'city',
+        edge: '#fbbf24',
+        fill: '#3f2a14',
+        glow: '#fde68a',
+        danger: '#fb7185',
+      },
+      {
+        id: 'cave',
+        edge: '#c4b5fd',
+        fill: '#2a1f47',
+        glow: '#ddd6fe',
+        danger: '#fb7185',
+      },
+    ] as const;
+    const frameNames = ['player', 'loot', 'trap', 'enemy', 'hint', 'medical', 'tech', 'stash'] as const;
+    const frameSize = 32;
+
+    variants.forEach((variant) => {
+      const key = `mg_obj_${variant.id}`;
+      this.drawCanvasTexture(key, frameSize * frameNames.length, frameSize, (ctx, w, h) => {
+        ctx.clearRect(0, 0, w, h);
+        frameNames.forEach((frameName, index) => {
+          const x = index * frameSize;
+          ctx.fillStyle = '#030712';
+          ctx.fillRect(x + 1, 1, frameSize - 2, frameSize - 2);
+          ctx.strokeStyle = `${variant.edge}cc`;
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + 1.5, 1.5, frameSize - 3, frameSize - 3);
+          ctx.fillStyle = `${variant.fill}dd`;
+          ctx.fillRect(x + 4, 4, frameSize - 8, frameSize - 8);
+          ctx.fillStyle = `${variant.glow}44`;
+          ctx.fillRect(x + 4, 4, frameSize - 8, 8);
+
+          if (frameName === 'player') {
+            ctx.fillStyle = '#93c5fd';
+            ctx.fillRect(x + 12, 8, 8, 6);
+            ctx.fillRect(x + 11, 14, 10, 9);
+            ctx.fillRect(x + 12, 23, 3, 5);
+            ctx.fillRect(x + 17, 23, 3, 5);
+            ctx.fillStyle = '#67e8f9';
+            ctx.fillRect(x + 13, 10, 6, 2);
+          } else if (frameName === 'loot') {
+            ctx.fillStyle = '#facc15';
+            ctx.fillRect(x + 8, 13, 16, 11);
+            ctx.fillStyle = '#92400e';
+            ctx.fillRect(x + 8, 11, 16, 3);
+            ctx.fillStyle = '#fde68a';
+            ctx.fillRect(x + 10, 16, 12, 2);
+          } else if (frameName === 'trap') {
+            ctx.fillStyle = variant.danger;
+            for (let i = 0; i < 5; i += 1) {
+              const sx = x + 7 + i * 4;
+              ctx.beginPath();
+              ctx.moveTo(sx, 25);
+              ctx.lineTo(sx + 2, 11);
+              ctx.lineTo(sx + 4, 25);
+              ctx.fill();
+            }
+          } else if (frameName === 'enemy') {
+            ctx.fillStyle = '#ef4444';
+            ctx.fillRect(x + 10, 9, 12, 8);
+            ctx.fillRect(x + 9, 17, 14, 9);
+            ctx.fillStyle = '#111827';
+            ctx.fillRect(x + 12, 12, 2, 2);
+            ctx.fillRect(x + 18, 12, 2, 2);
+          } else if (frameName === 'hint') {
+            ctx.fillStyle = variant.glow;
+            ctx.fillRect(x + 15, 6, 2, 14);
+            ctx.fillRect(x + 12, 20, 8, 2);
+            ctx.fillStyle = variant.edge;
+            ctx.fillRect(x + 14, 24, 4, 4);
+          } else if (frameName === 'medical') {
+            ctx.fillStyle = '#22d3ee';
+            ctx.fillRect(x + 8, 10, 16, 14);
+            ctx.fillStyle = '#cffafe';
+            ctx.fillRect(x + 14, 12, 4, 10);
+            ctx.fillRect(x + 11, 15, 10, 4);
+          } else if (frameName === 'tech') {
+            ctx.fillStyle = '#a78bfa';
+            ctx.fillRect(x + 9, 9, 14, 14);
+            ctx.fillStyle = '#ddd6fe';
+            ctx.fillRect(x + 12, 12, 8, 2);
+            ctx.fillRect(x + 12, 16, 8, 2);
+            ctx.fillRect(x + 12, 20, 5, 2);
+          } else {
+            ctx.fillStyle = '#f97316';
+            ctx.fillRect(x + 9, 9, 14, 14);
+            ctx.fillStyle = '#ffedd5';
+            ctx.fillRect(x + 11, 11, 10, 10);
+            ctx.fillStyle = '#f97316';
+            ctx.fillRect(x + 13, 13, 6, 6);
+          }
+        });
+      });
+      const texture = this.textures.get(key);
+      frameNames.forEach((frameName, index) => {
+        if (!texture.has(frameName)) {
+          texture.add(frameName, 0, index * frameSize, 0, frameSize, frameSize);
+        }
+      });
     });
   }
 

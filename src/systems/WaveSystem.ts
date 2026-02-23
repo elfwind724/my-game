@@ -28,6 +28,32 @@ export class WaveSystem {
     this.enemies = enemies;
   }
 
+  private getDayBalanceProfile(dayOverride?: number): {
+    enemyCountMul: number;
+    spawnIntervalMul: number;
+    enemySurviveMul: number;
+    enemyOffenseMul: number;
+    enemySpeedMul: number;
+  } {
+    const day = Math.max(1, dayOverride || gameState.data.currentDay || 1);
+    if (day <= 1) {
+      return { enemyCountMul: 0.84, spawnIntervalMul: 1.12, enemySurviveMul: 0.82, enemyOffenseMul: 0.88, enemySpeedMul: 0.94 };
+    }
+    if (day <= 2) {
+      return { enemyCountMul: 0.9, spawnIntervalMul: 1.08, enemySurviveMul: 0.88, enemyOffenseMul: 0.92, enemySpeedMul: 0.96 };
+    }
+    if (day <= 3) {
+      return { enemyCountMul: 0.96, spawnIntervalMul: 1.04, enemySurviveMul: 0.94, enemyOffenseMul: 0.96, enemySpeedMul: 0.98 };
+    }
+    if (day <= 7) {
+      return { enemyCountMul: 1, spawnIntervalMul: 1, enemySurviveMul: 1, enemyOffenseMul: 1, enemySpeedMul: 1 };
+    }
+    if (day <= 12) {
+      return { enemyCountMul: 1.08, spawnIntervalMul: 0.94, enemySurviveMul: 1.12, enemyOffenseMul: 1.08, enemySpeedMul: 1.04 };
+    }
+    return { enemyCountMul: 1.16, spawnIntervalMul: 0.88, enemySurviveMul: 1.22, enemyOffenseMul: 1.14, enemySpeedMul: 1.08 };
+  }
+
   startNightWaves(): void {
     this.currentWave = 0;
     this.bossSpawnCount = 0;
@@ -86,12 +112,14 @@ export class WaveSystem {
     const isBloodMoon = state.isBloodMoon;
     const week = state.currentWeek;
     const pressure = Math.max(0, this.currentWave - 1);
+    const pace = this.getDayBalanceProfile(state.currentDay);
 
     // Base enemy count scales with day and week
     let baseCount = 22 + state.currentDay * 4 + week * 6 + pressure * 8;
     if (isBloodMoon) {
       baseCount = Math.floor(baseCount * (3.6 + week * 0.95));
     }
+    baseCount = Math.max(8, Math.floor(baseCount * pace.enemyCountMul));
     this.enemiesInWave = baseCount;
     this.enemiesKilledInWave = 0;
     this.spawnedInWave = 0;
@@ -112,8 +140,9 @@ export class WaveSystem {
       isBloodMoon ? 75 : 120,
       (isBloodMoon ? 180 : 320) - pressure * 32 - week * 14
     );
+    const pacedSpawnInterval = Math.max(isBloodMoon ? 70 : 110, Math.round(spawnInterval * pace.spawnIntervalMul));
     this.waveSpawnTimer = this.scene.time.addEvent({
-      delay: spawnInterval,
+      delay: pacedSpawnInterval,
       callback: this.spawnNextEnemy,
       callbackScope: this,
       loop: true,
@@ -224,6 +253,7 @@ export class WaveSystem {
     const day = Math.max(1, gameState.data.currentDay || 1);
     const week = Math.max(1, gameState.data.currentWeek || 1);
     const bloodMoon = !!gameState.data.isBloodMoon;
+    const pace = this.getDayBalanceProfile(day);
     const survivabilityMul = 1 + Math.min(
       2.8,
       pressure * 0.08 + (week - 1) * 0.16 + (day - 1) * 0.035 + (bloodMoon ? 0.45 : 0)
@@ -236,10 +266,10 @@ export class WaveSystem {
       0.55,
       pressure * 0.015 + (week - 1) * 0.025 + (bloodMoon ? 0.08 : 0)
     );
-    ed.health = Math.max(1, Math.floor(ed.health * survivabilityMul));
+    ed.health = Math.max(1, Math.floor(ed.health * survivabilityMul * pace.enemySurviveMul));
     ed.maxHealth = ed.health;
-    ed.damage = Math.max(1, Math.floor(ed.damage * offenseMul));
-    ed.speed = Math.max(20, Math.floor(ed.speed * speedMul));
+    ed.damage = Math.max(1, Math.floor(ed.damage * offenseMul * pace.enemyOffenseMul));
+    ed.speed = Math.max(20, Math.floor(ed.speed * speedMul * pace.enemySpeedMul));
 
     return enemy;
   }

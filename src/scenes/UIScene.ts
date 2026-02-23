@@ -51,6 +51,7 @@ export default class UIScene extends Phaser.Scene {
     glasses?: Phaser.GameObjects.Text;
     tree?: Phaser.GameObjects.Text;
     group?: Phaser.GameObjects.Text;
+    protocol?: Phaser.GameObjects.Text;
   } = {};
 
   // Wave / Blood Moon
@@ -72,6 +73,13 @@ export default class UIScene extends Phaser.Scene {
   private leftHudPanelX: number = 12;
   private leftHudExpandedW: number = 352;
   private leftHudCollapsedW: number = 168;
+  private durabilityDebuffContainer!: Phaser.GameObjects.Container;
+  private durabilityDebuffBg!: Phaser.GameObjects.Rectangle;
+  private durabilityDebuffIcon!: Phaser.GameObjects.Text;
+  private durabilityDebuffTitle!: Phaser.GameObjects.Text;
+  private durabilityDebuffTime!: Phaser.GameObjects.Text;
+  private durabilityDebuffBarBg!: Phaser.GameObjects.Rectangle;
+  private durabilityDebuffBar!: Phaser.GameObjects.Rectangle;
 
   // Panels
   private craftingPanel!: CraftingPanel;
@@ -244,6 +252,7 @@ export default class UIScene extends Phaser.Scene {
       fontSize: this.hudFs(12, 11), color: '#e2e8f0', fontFamily: this.uiFontFamily,
     }).setDepth(1001);
     this.leftHudCollapsibleObjects.push(this.waveText, this.questHudText);
+    this.createDurabilityDebuffHud();
     this.setLeftHudExpanded(true);
 
     // ========================================
@@ -389,6 +398,96 @@ export default class UIScene extends Phaser.Scene {
       this.leftHudToggleText.setText(expanded ? '收起' : '展开');
       this.leftHudToggleText.setColor(expanded ? '#93c5fd' : '#67e8f9');
     }
+    this.layoutDurabilityDebuffHud();
+  }
+
+  private createDurabilityDebuffHud(): void {
+    this.durabilityDebuffContainer = this.add.container(0, 0).setDepth(1004).setScrollFactor(0).setVisible(false);
+    this.durabilityDebuffBg = this.add.rectangle(0, 0, 120, 44, 0x1f1510, 0.92)
+      .setOrigin(0, 0)
+      .setStrokeStyle(1, 0xf59e0b, 0.92);
+    this.durabilityDebuffIcon = this.add.text(8, 4, '🛠', {
+      fontSize: this.hudFs(13, 12),
+      color: '#fbbf24',
+      fontFamily: this.uiFontFamily,
+      fontStyle: 'bold',
+    }).setOrigin(0, 0);
+    this.durabilityDebuffTitle = this.add.text(27, 4, '耐久磨损', {
+      fontSize: this.hudFs(11, 10),
+      color: '#fdba74',
+      fontFamily: this.uiFontFamily,
+      fontStyle: 'bold',
+    }).setOrigin(0, 0);
+    this.durabilityDebuffTime = this.add.text(113, 4, '0s', {
+      fontSize: this.hudFs(11, 10),
+      color: '#fde68a',
+      fontFamily: this.uiFontFamily,
+      fontStyle: 'bold',
+    }).setOrigin(1, 0);
+    this.durabilityDebuffBarBg = this.add.rectangle(8, 27, 104, 8, 0x2b3446, 0.95)
+      .setOrigin(0, 0)
+      .setStrokeStyle(1, 0x475569, 0.9);
+    this.durabilityDebuffBar = this.add.rectangle(9, 28, 102, 6, 0xf59e0b, 0.95).setOrigin(0, 0);
+    this.durabilityDebuffContainer.add([
+      this.durabilityDebuffBg,
+      this.durabilityDebuffIcon,
+      this.durabilityDebuffTitle,
+      this.durabilityDebuffTime,
+      this.durabilityDebuffBarBg,
+      this.durabilityDebuffBar,
+    ]);
+    this.layoutDurabilityDebuffHud();
+  }
+
+  private layoutDurabilityDebuffHud(): void {
+    if (!this.durabilityDebuffContainer) return;
+    if (this.leftHudExpanded) {
+      this.durabilityDebuffContainer.setPosition(this.leftHudPanelX + this.leftHudExpandedW - 132, 80);
+      this.durabilityDebuffBg.setSize(120, 44);
+      this.durabilityDebuffTitle.setText('耐久磨损').setX(27);
+      this.durabilityDebuffTime.setX(113);
+      this.durabilityDebuffBarBg.setPosition(8, 27).setSize(104, 8);
+      this.durabilityDebuffBar.setPosition(9, 28).setSize(102, 6);
+    } else {
+      this.durabilityDebuffContainer.setPosition(this.leftHudPanelX + this.leftHudCollapsedW - 104, 79);
+      this.durabilityDebuffBg.setSize(92, 40);
+      this.durabilityDebuffTitle.setText('磨损').setX(27);
+      this.durabilityDebuffTime.setX(84);
+      this.durabilityDebuffBarBg.setPosition(8, 25).setSize(76, 8);
+      this.durabilityDebuffBar.setPosition(9, 26).setSize(74, 6);
+    }
+  }
+
+  private updateDurabilityDebuffHud(): void {
+    if (!this.durabilityDebuffContainer) return;
+    const gameScene = this.scene.get('GameScene') as any;
+    if (!gameScene || !gameScene.scene?.isActive?.()) {
+      this.durabilityDebuffContainer.setVisible(false);
+      return;
+    }
+    const stacks = Number(gameScene.scavengeDurabilityStacks || 0);
+    const until = Number(gameScene.scavengeDurabilityPenaltyUntil || 0);
+    const duration = Math.max(1, Number(gameScene.scavengeDurabilityPenaltyDurationMs || 1));
+    const now = Number(gameScene.time?.now || this.time.now);
+    const remainMs = until - now;
+    if (stacks <= 0 || remainMs <= 0) {
+      this.durabilityDebuffContainer.setVisible(false);
+      return;
+    }
+
+    this.durabilityDebuffContainer.setVisible(true);
+    const remainRatio = Phaser.Math.Clamp(remainMs / duration, 0, 1);
+    const barMax = this.leftHudExpanded ? 102 : 74;
+    this.durabilityDebuffBar.setSize(Math.max(4, barMax * remainRatio), 6);
+    const remainSec = Math.max(1, Math.ceil(remainMs / 1000));
+    const reductionPercent = Math.round(stacks * 8);
+    const color = stacks >= 3 ? '#ef4444' : stacks >= 2 ? '#f59e0b' : '#fbbf24';
+    this.durabilityDebuffTime.setText(`${remainSec}s`).setColor('#fde68a');
+    this.durabilityDebuffTitle.setColor(color);
+    this.durabilityDebuffBar.setFillStyle(stacks >= 3 ? 0xef4444 : stacks >= 2 ? 0xf59e0b : 0xfbbf24, 0.95);
+    this.durabilityDebuffBg.setStrokeStyle(1, stacks >= 3 ? 0xef4444 : 0xf59e0b, 0.92);
+    this.durabilityDebuffIcon.setText(stacks >= 3 ? '⚠' : '🛠').setColor(color);
+    this.durabilityDebuffTitle.setText(this.leftHudExpanded ? `耐久磨损 -${reductionPercent}%` : `磨损-${reductionPercent}%`);
   }
 
   private setupEventListeners(): void {
@@ -449,6 +548,7 @@ export default class UIScene extends Phaser.Scene {
             role: c.role || 'tank',
             level: c.level || 1,
             bulletEffect: c.bulletEffect?.type || 'normal',
+            textureKey: c.textureKey,
             status: 'party',
             job: 'idle',
             advancedClass: c.advancedClass,
@@ -556,6 +656,10 @@ export default class UIScene extends Phaser.Scene {
       const popCap = BaseSystem.getPopulationCapacity();
       this.rightStatusTexts.group?.setText(`${totalCount}/${popCap}人`);
       events.emit('update-resources', gameState.data.resources);
+    });
+
+    events.on('protocol-updated', () => {
+      this.refreshProtocolStatusHud();
     });
 
     events.on('quest-completed', (_data: any) => {
@@ -775,6 +879,7 @@ export default class UIScene extends Phaser.Scene {
   update(time: number, delta: number): void {
     this.updateMinimap();
     this.updateWeaponSlots();
+    this.updateDurabilityDebuffHud();
     if (this.mobileViewport && time >= this.mobileUiRefreshAt) {
       this.mobileUiRefreshAt = time + 120;
       this.refreshMobileActionButtons();
@@ -1142,6 +1247,12 @@ export default class UIScene extends Phaser.Scene {
         color: '#38bdf8',
         text: `${gameState.data.companions.length}/${BaseSystem.getPopulationCapacity()}人`,
       },
+      {
+        id: 'protocol',
+        icon: 'icon_protocol',
+        color: '#67e8f9',
+        text: this.getProtocolStatusText(),
+      },
     ];
     rows.forEach((row, idx) => {
       const y = startY + idx * rowH;
@@ -1159,10 +1270,22 @@ export default class UIScene extends Phaser.Scene {
         fontFamily: this.uiFontFamily,
         fontStyle: 'bold',
       }).setDepth(1002).setScrollFactor(0);
-      this.rightStatusTexts[row.id as 'glasses' | 'tree' | 'group'] = value;
+      this.rightStatusTexts[row.id as 'glasses' | 'tree' | 'group' | 'protocol'] = value;
       bg.setData('hud-role', row.id);
       icon.setData('hud-role', row.id);
     });
+  }
+
+  private getProtocolStatusText(): string {
+    const levels = EvolutionSystem.getProtocolLevels();
+    const totalLevel = Object.values(levels).reduce((sum, lv) => sum + Math.max(0, lv || 0), 0);
+    if (totalLevel <= 0) return '协议: 未激活';
+    const peak = Math.max(...Object.values(levels));
+    return `协议 Lv.${totalLevel} · 峰值${peak}`;
+  }
+
+  private refreshProtocolStatusHud(): void {
+    this.rightStatusTexts.protocol?.setText(this.getProtocolStatusText());
   }
 
   private refreshQuestHud(): void {
@@ -1206,6 +1329,7 @@ export default class UIScene extends Phaser.Scene {
     events.off(GameEvents.BASE_UPDATED);
     events.off('quest-completed');
     events.off('show-levelup-panel');
+    events.off('protocol-updated');
     events.off('toggle-collection');
     events.off('glasses-equipped');
     events.off(GameEvents.BUILD_MODE_TOGGLED);

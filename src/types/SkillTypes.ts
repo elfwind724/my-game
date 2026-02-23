@@ -58,6 +58,8 @@ export interface CompanionConfig {
   bulletEffect: BulletEffect;
   stats: CompanionStats;
   role?: CompanionRole;
+  textureKey?: string;
+  accentColor?: number;
   specialAbility?: SpecialAbility;
   advancedClass?: string;
   promotionTier?: 0 | 1;
@@ -312,6 +314,11 @@ export function generateRandomCompanion(level: number = 1): CompanionConfig {
     name: `${name}(${profession}·${abilityTitle})`,
     level,
     role,
+    textureKey: role === 'tank'
+      ? 'companion_tank'
+      : role === 'sniper'
+        ? 'companion_sniper'
+        : 'companion_medic',
     bulletEffect: baseEffect,
     stats: {
       damage: baseEffect.damage,

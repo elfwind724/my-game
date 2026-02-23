@@ -83,6 +83,7 @@ export interface CompanionData {
   role: 'tank' | 'sniper' | 'medic';
   level: number;
   bulletEffect: string;
+  textureKey?: string;
   status: 'party' | 'base';
   job: BaseJob;
   advancedClass?: string;
@@ -159,6 +160,7 @@ export interface BitcoinPerkBonuses {
 
 export type PermanentUpgradeChoice = 'damage' | 'vitality' | 'mobility';
 export type PermanentTalentBranch = 'turret' | 'companion' | 'economy';
+export type DayChallengeBranch = 'stable' | 'adventure' | 'extreme';
 export type PermanentTalentNodeId =
   | 'turret_core'
   | 'turret_matrix'
@@ -174,6 +176,8 @@ export interface MetaProgression {
   bitcoinBank: number;
   permanentUpgrades: Record<PermanentUpgradeChoice, number>;
   permanentTalents: Record<PermanentTalentNodeId, number>;
+  dayChallengeMastery: Record<DayChallengeBranch, number>;
+  dayOpsRenown: number;
 }
 
 export interface PermanentTalentBonuses {
@@ -198,6 +202,22 @@ export interface PermanentTalentChoice {
   level: number;
   nextLevel: number;
   maxLevel: number;
+}
+
+export interface DayChallengeMasteryBonuses {
+  stableDangerMitigationMul: number;
+  stableRewardMul: number;
+  adventureRewardMul: number;
+  adventureBitcoinMul: number;
+  extremeDamageMul: number;
+  extremeXpMul: number;
+}
+
+export interface DayOpsRenownBonuses {
+  dayRewardMul: number;
+  dayXpMul: number;
+  nightDirectiveDamageMul: number;
+  prepCapBonus: number;
 }
 
 export interface GameStateData {
@@ -403,6 +423,12 @@ const EMPTY_TALENT_LEVELS: Record<PermanentTalentNodeId, number> = {
   economy_fund: 0,
 };
 
+const EMPTY_DAY_CHALLENGE_MASTERY: Record<DayChallengeBranch, number> = {
+  stable: 0,
+  adventure: 0,
+  extreme: 0,
+};
+
 const EMPTY_EQUIPPED_GEAR_SLOTS: Record<GearWeaponType, string | null> = {
   pistol: null,
   shotgun: null,
@@ -524,6 +550,8 @@ function createDefaultState(): GameStateData {
         mobility: 0,
       },
       permanentTalents: { ...EMPTY_TALENT_LEVELS },
+      dayChallengeMastery: { ...EMPTY_DAY_CHALLENGE_MASTERY },
+      dayOpsRenown: 0,
     },
     gearStash: [],
     equippedGearSlots: { ...EMPTY_EQUIPPED_GEAR_SLOTS },
@@ -784,14 +812,31 @@ class GameStateManager {
   // --- Experience ---
   addExperience(amount: number): boolean {
     const xpAmount = Math.floor(amount * this.state.baseStats.xpMultiplier);
+    if (xpAmount <= 0) return false;
     this.state.playerExp += xpAmount;
-    if (this.state.playerExp >= this.state.expToNextLevel) {
+    let leveled = false;
+    while (this.state.playerExp >= this.state.expToNextLevel) {
       this.state.playerExp -= this.state.expToNextLevel;
       this.state.playerLevel++;
-      this.state.expToNextLevel = Math.floor(this.state.expToNextLevel * 1.15) + 20;
-      return true; // leveled up
+      const day = Math.max(1, this.state.currentDay || 1);
+      const growthMul = day <= 3
+        ? 1.12
+        : day <= 7
+          ? 1.15
+          : day <= 12
+            ? 1.18
+            : 1.22;
+      const flatGain = day <= 3
+        ? 14
+        : day <= 7
+          ? 20
+          : day <= 12
+            ? 28
+            : 36;
+      this.state.expToNextLevel = Math.floor(this.state.expToNextLevel * growthMul) + flatGain;
+      leveled = true;
     }
-    return false;
+    return leveled;
   }
 
   // --- Day Cycle ---
@@ -866,6 +911,11 @@ class GameStateManager {
               ...defaults.meta.permanentTalents,
               ...(parsed.meta?.permanentTalents || {}),
             },
+            dayChallengeMastery: {
+              ...defaults.meta.dayChallengeMastery,
+              ...(parsed.meta?.dayChallengeMastery || {}),
+            },
+            dayOpsRenown: Math.max(0, Number(parsed.meta?.dayOpsRenown || 0)),
           },
           equippedGearSlots: {
             ...defaults.equippedGearSlots,
@@ -920,6 +970,11 @@ class GameStateManager {
           ...EMPTY_TALENT_LEVELS,
           ...(this.state.meta?.permanentTalents || {}),
         },
+        dayChallengeMastery: {
+          ...EMPTY_DAY_CHALLENGE_MASTERY,
+          ...(this.state.meta?.dayChallengeMastery || {}),
+        },
+        dayOpsRenown: Math.max(0, Number(this.state.meta?.dayOpsRenown || 0)),
       },
     };
     this.state = createDefaultState();
@@ -1025,6 +1080,65 @@ class GameStateManager {
       economyBitcoinMul: Number(economyBitcoinMul.toFixed(3)),
       economyFoodUseMul: Number(economyFoodUseMul.toFixed(3)),
     };
+  }
+
+  getDayChallengeMasteryLevels(): Record<DayChallengeBranch, number> {
+    return {
+      ...EMPTY_DAY_CHALLENGE_MASTERY,
+      ...(this.state.meta?.dayChallengeMastery || {}),
+    };
+  }
+
+  getDayChallengeMasteryBonuses(): DayChallengeMasteryBonuses {
+    const levels = this.getDayChallengeMasteryLevels();
+    const stableDangerMitigationMul = Math.max(0.72, 1 - levels.stable * 0.018);
+    const stableRewardMul = 1 + levels.stable * 0.012;
+    const adventureRewardMul = 1 + levels.adventure * 0.02;
+    const adventureBitcoinMul = 1 + levels.adventure * 0.016;
+    const extremeDamageMul = 1 + levels.extreme * 0.018;
+    const extremeXpMul = 1 + levels.extreme * 0.014;
+    return {
+      stableDangerMitigationMul: Number(stableDangerMitigationMul.toFixed(3)),
+      stableRewardMul: Number(stableRewardMul.toFixed(3)),
+      adventureRewardMul: Number(adventureRewardMul.toFixed(3)),
+      adventureBitcoinMul: Number(adventureBitcoinMul.toFixed(3)),
+      extremeDamageMul: Number(extremeDamageMul.toFixed(3)),
+      extremeXpMul: Number(extremeXpMul.toFixed(3)),
+    };
+  }
+
+  addDayChallengeMastery(branch: DayChallengeBranch, gain: number = 1): number {
+    if (!this.state.meta.dayChallengeMastery) {
+      this.state.meta.dayChallengeMastery = { ...EMPTY_DAY_CHALLENGE_MASTERY };
+    }
+    const safeGain = Math.min(5, Math.max(1, Math.floor(gain || 0)));
+    const next = Math.max(0, (this.state.meta.dayChallengeMastery[branch] || 0) + safeGain);
+    this.state.meta.dayChallengeMastery[branch] = next;
+    return next;
+  }
+
+  getDayOpsRenown(): number {
+    return Math.max(0, Number(this.state.meta?.dayOpsRenown || 0));
+  }
+
+  getDayOpsRenownBonuses(): DayOpsRenownBonuses {
+    const renown = this.getDayOpsRenown();
+    const dayRewardMul = 1 + Math.min(0.52, renown * 0.015);
+    const dayXpMul = 1 + Math.min(0.42, renown * 0.012);
+    const nightDirectiveDamageMul = 1 + Math.min(0.34, renown * 0.01);
+    const prepCapBonus = Math.min(8, Math.floor(renown / 4));
+    return {
+      dayRewardMul: Number(dayRewardMul.toFixed(3)),
+      dayXpMul: Number(dayXpMul.toFixed(3)),
+      nightDirectiveDamageMul: Number(nightDirectiveDamageMul.toFixed(3)),
+      prepCapBonus,
+    };
+  }
+
+  addDayOpsRenown(gain: number = 1): number {
+    const safeGain = Math.min(6, Math.max(0, Math.floor(gain || 0)));
+    this.state.meta.dayOpsRenown = Math.max(0, Number((this.state.meta.dayOpsRenown || 0) + safeGain));
+    return this.state.meta.dayOpsRenown;
   }
 
   getPermanentUpgradeChoices(): Array<{ id: PermanentUpgradeChoice; nameCN: string; descCN: string }> {
