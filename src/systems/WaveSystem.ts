@@ -167,14 +167,25 @@ export class WaveSystem {
     const availableTypes = getEnemiesForWeek(week);
     if (availableTypes.length === 0) return;
 
-    // Weighted random selection
-    const totalWeight = availableTypes.reduce((sum, e) => sum + e.spawnWeight, 0);
+    // Weighted random selection + faction bias from GameScene.
+    const factionWeights = gameState.data.isNight
+      ? (((this.scene as any).getNightEnemyFactionWeights?.() || {}) as Record<string, number>)
+      : {};
+    const weightedEntries = availableTypes.map((type) => {
+      const mul = Phaser.Math.Clamp(Number(factionWeights[type.id] || 1), 0.18, 2.3);
+      return {
+        type,
+        weight: Math.max(0.01, type.spawnWeight * mul),
+      };
+    });
+    const totalWeight = weightedEntries.reduce((sum, entry) => sum + entry.weight, 0);
+    if (totalWeight <= 0) return;
     let roll = Math.random() * totalWeight;
-    let selectedType: EnemyDef = availableTypes[0];
-    for (const type of availableTypes) {
-      roll -= type.spawnWeight;
+    let selectedType: EnemyDef = weightedEntries[0].type;
+    for (const entry of weightedEntries) {
+      roll -= entry.weight;
       if (roll <= 0) {
-        selectedType = type;
+        selectedType = entry.type;
         break;
       }
     }

@@ -1784,87 +1784,107 @@ export default class BootScene extends Phaser.Scene {
   }
 
   private generateLootSprites(): void {
-    this.drawTexture('loot_wood', 24, 24, (g) => {
-      g.fillStyle(0x92400e);
-      g.fillRect(4, 8, 16, 6);
-      g.fillRect(6, 14, 12, 6);
-      g.fillStyle(0xa16207);
-      g.fillCircle(8, 11, 2);
-      g.fillCircle(16, 11, 2);
+    const drawToken = (
+      key: string,
+      accent: number,
+      iconPainter: (g: Phaser.GameObjects.Graphics) => void
+    ) => {
+      this.drawTexture(key, 28, 28, (g) => {
+        g.fillStyle(0x020712);
+        g.fillRect(1, 1, 26, 26);
+        g.fillStyle(0x0b1425);
+        g.fillRect(2, 2, 24, 24);
+        g.fillStyle(accent);
+        g.fillRect(2, 2, 24, 2);
+        g.fillStyle(0x0a1222);
+        g.fillRect(4, 6, 20, 18);
+        iconPainter(g);
+      });
+    };
+
+    drawToken('loot_wood', 0xb77b45, (g) => {
+      g.fillStyle(0x8a5a33);
+      g.fillRect(7, 12, 14, 3);
+      g.fillRect(8, 16, 12, 3);
+      g.fillStyle(0xc9955f);
+      g.fillRect(8, 12, 2, 3);
+      g.fillRect(17, 16, 2, 3);
     });
 
-    this.drawTexture('loot_metal', 24, 24, (g) => {
-      g.fillStyle(0x9ca3af);
-      g.fillRect(4, 8, 16, 10);
+    drawToken('loot_metal', 0x90a4b7, (g) => {
+      g.fillStyle(0x7b8ea1);
+      g.fillRect(7, 11, 14, 9);
+      g.fillStyle(0xc0cedc);
+      g.fillRect(8, 12, 12, 2);
+      g.fillStyle(0x5f6f80);
+      g.fillRect(9, 15, 10, 3);
+    });
+
+    drawToken('loot_food', 0xd5a557, (g) => {
+      g.fillStyle(0xa17f44);
+      g.fillRect(8, 10, 12, 10);
+      g.fillStyle(0xcfb07a);
+      g.fillRect(9, 11, 10, 4);
       g.fillStyle(0x6b7280);
-      g.fillRect(6, 10, 12, 6);
-      g.fillStyle(0xd1d5db);
-      g.fillRect(6, 10, 4, 2);
-    });
-
-    this.drawTexture('loot_food', 24, 24, (g) => {
-      g.fillStyle(0xdc2626);
-      g.fillRect(6, 6, 12, 14);
-      g.fillStyle(0xef4444);
-      g.fillRect(8, 8, 8, 10);
-      g.fillStyle(0xfef3c7);
-      g.fillRect(8, 10, 8, 4);
-      g.fillStyle(0x9ca3af);
-      g.fillRect(7, 5, 10, 3);
-    });
-
-    this.drawTexture('loot_ammo', 24, 24, (g) => {
-      g.fillStyle(0x78350f);
-      g.fillRect(4, 8, 16, 12);
-      g.fillStyle(0x92400e);
-      g.fillRect(6, 10, 12, 8);
-      g.fillStyle(0xfbbf24);
-      for (let i = 0; i < 3; i++) {
-        g.fillRect(8 + i * 3, 4, 2, 8);
-        g.fillStyle(0xf59e0b);
-        g.fillRect(8 + i * 3, 4, 2, 3);
-        g.fillStyle(0xfbbf24);
-      }
-    });
-
-    this.drawTexture('loot_scrap', 24, 24, (g) => {
-      g.fillStyle(0x6b7280);
-      g.fillRect(4, 4, 8, 8);
-      g.fillRect(12, 12, 8, 8);
-      g.fillStyle(0x9ca3af);
-      g.fillCircle(8, 8, 3);
-      g.fillCircle(16, 16, 3);
+      g.fillRect(9, 9, 10, 1);
       g.fillStyle(0x374151);
-      g.fillCircle(8, 8, 1);
-      g.fillCircle(16, 16, 1);
+      g.fillRect(11, 16, 6, 2);
     });
 
-    this.drawTexture('loot_water', 24, 24, (g) => {
-      g.fillStyle(0x1d4ed8);
-      g.fillRect(8, 4, 8, 16);
-      g.fillStyle(0x60a5fa);
-      g.fillRect(9, 7, 6, 10);
-      g.fillStyle(0x93c5fd);
-      g.fillRect(10, 3, 4, 3);
+    drawToken('loot_ammo', 0xcf9154, (g) => {
+      g.fillStyle(0xc89d58);
+      g.fillRect(8, 10, 2, 8);
+      g.fillRect(12, 9, 2, 9);
+      g.fillRect(16, 10, 2, 8);
+      g.fillStyle(0x9a6f39);
+      g.fillRect(8, 17, 2, 2);
+      g.fillRect(12, 17, 2, 2);
+      g.fillRect(16, 17, 2, 2);
+      g.fillStyle(0xf6d365);
+      g.fillRect(8, 9, 2, 2);
+      g.fillRect(12, 8, 2, 2);
+      g.fillRect(16, 9, 2, 2);
     });
 
-    this.drawTexture('loot_medical', 24, 24, (g) => {
-      g.fillStyle(0xdc2626);
-      g.fillRect(5, 7, 14, 12);
-      g.fillStyle(0xffffff);
-      g.fillRect(10, 9, 4, 8);
-      g.fillRect(8, 11, 8, 4);
-      g.fillStyle(0x7f1d1d);
-      g.fillRect(9, 5, 6, 2);
+    drawToken('loot_scrap', 0x7d8fa4, (g) => {
+      g.fillStyle(0x667788);
+      g.fillRect(7, 11, 6, 6);
+      g.fillRect(14, 13, 6, 6);
+      g.fillStyle(0x9bafc2);
+      g.fillCircle(10, 14, 2);
+      g.fillCircle(17, 16, 2);
+      g.fillStyle(0x394554);
+      g.fillCircle(10, 14, 1);
+      g.fillCircle(17, 16, 1);
     });
 
-    this.drawTexture('loot_core', 24, 24, (g) => {
-      g.fillStyle(0x6d28d9);
-      g.fillCircle(12, 12, 8);
-      g.fillStyle(0xa78bfa);
-      g.fillCircle(12, 12, 5);
-      g.fillStyle(0xf5d0fe);
-      g.fillCircle(12, 12, 2);
+    drawToken('loot_water', 0x5aa7d6, (g) => {
+      g.fillStyle(0x3b88b8);
+      g.fillRect(10, 9, 8, 10);
+      g.fillStyle(0x8cc7ea);
+      g.fillRect(11, 10, 6, 7);
+      g.fillStyle(0xb8e3fb);
+      g.fillRect(12, 8, 4, 2);
+    });
+
+    drawToken('loot_medical', 0xc46a6a, (g) => {
+      g.fillStyle(0x975454);
+      g.fillRect(8, 10, 12, 10);
+      g.fillStyle(0xe5e7eb);
+      g.fillRect(12, 11, 2, 8);
+      g.fillRect(10, 14, 6, 2);
+      g.fillStyle(0x6e3131);
+      g.fillRect(9, 9, 10, 1);
+    });
+
+    drawToken('loot_core', 0x9d84e6, (g) => {
+      g.fillStyle(0x7c66c7);
+      g.fillRect(11, 10, 6, 8);
+      g.fillRect(10, 11, 8, 6);
+      g.fillStyle(0xc2b0f5);
+      g.fillRect(12, 12, 4, 4);
+      g.fillStyle(0xe4ddff);
+      g.fillRect(12, 10, 4, 1);
     });
   }
 

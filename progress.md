@@ -1617,3 +1617,86 @@ src/
     - 夜间面板出现“手机端：直接点击下方大按钮执行指令”与3个“触控执行指令”按钮；
     - 指令按钮点击后 `nightDirective.open: true -> false`，并写入 `nightDirective.id/effects`；
     - 委托链可从 `execute -> handoff -> done`，交付后 `renown` 与 `prepStacks` 增长。
+
+## 最新进展（2026-02-24 事件/掉落可读性重构）
+- [x] **随机事件频率去固定化**：`GameScene.maybeTriggerRunEvent()` 新增全局冷却 `runEventGlobalCooldownUntilDay`，并重算触发概率（更低基础概率 + 干旱天补偿 + 同期惩罚），避免“几乎天天都触发”。
+- [x] **随机事件剧情数据库扩展**：新增 `RUN_EVENT_LORE_SNIPPETS`（8条故事线共32条碎片），每次事件会随机抽取并优先未解锁碎片，面板显示“事件线索/碎片库”进度。
+- [x] **事件面板字体放大**：白天/夜间事件标题、说明、词缀、选项文本统一放大，并优化奖励预览（超长时自动压缩为“其余N项变化”）防止溢出。
+- [x] **每日挑战/夜间指令面板放大**：三路分支面板和夜间指令面板字号提升、按钮区域变大，移动端/桌面端都更易读。
+- [x] **掉落资源视觉重做（可辨识优先）**：
+  - `BootScene.generateLootSprites()`：重绘 loot icon（28x28，更大图标占比）。
+  - `LootSystem.spawnResourceDrop()`：新增资源底板、降低发光噪声、提高标签字号到 13px、强化黑色描边和对比度。
+  - 掉落跟随更新与销毁流程补齐 `_badge`，避免对象残留。
+- [x] **崩溃兜底**：`addMiniGameObjectIcon()` 不再硬编码回退到 `__BASE`，改为安全帧名回退，避免 frame 缺失导致黑屏级异常。
+
+### 本轮验证
+- [x] `npm run -s build` 通过（仅保留 Vite 大包告警）。
+- [x] Playwright 自动回归：`output/web-game/shot-0.png` ~ `shot-2.png`，`errors-0/1/2.json` 均为空数组。
+- [x] 调试触发事件截图：
+  - `/Users/fengnian/my-game/output/web-game/run-event-day.png`
+  - `/Users/fengnian/my-game/output/web-game/run-event-night.png`
+  - 调试记录 `/Users/fengnian/my-game/output/web-game/run-event-debug.json` 显示 day/night 触发成功且无 console error。
+
+### 下一步建议
+- [ ] 给掉落资源做“图标图例小面板”（首次出现时短提示），进一步降低新手识别成本。
+- [ ] 给随机事件新增“派系关系值”与“章节节点”门槛，形成更明确的分支剧情树。
+- [ ] 对事件面板做一次移动端专项（竖屏）截断与按钮命中范围回归。
+
+## 最新进展（2026-02-24 续开发：事件章节/派系 + 掉落图例 + 竖屏事件面板）
+- [x] **随机事件新增“章节层 + 派系关系层”**：
+  - 新增事件元数据：`RUN_EVENT_META_BY_ID`（每个事件绑定章节与派系）。
+  - 新增派系定义与标签：`RUN_EVENT_FACTION_LABELS`。
+  - 新增章节定义：`RUN_EVENT_CHAPTER_LABELS`。
+  - 新增选择项关系变化库：`RUN_EVENT_CHOICE_FACTION_DELTA`（不同决策会改变派系关系值）。
+- [x] **事件池随机策略继续去重复化**：
+  - `pickRunEventDef()` 接入章节门槛、近期派系去重权重、派系关系权重（白天偏修复/经营，夜晚偏冲突）。
+  - 回退池放宽为 `chapter + 1`，避免门槛导致空池。
+  - `render_game_to_text` 新增 `runEvent.chapter/chapterLabel/factionStanding`。
+- [x] **事件面板可读性加强（含移动端竖屏）**：
+  - 面板新增章节信息、派系倾向行。
+  - 小屏布局进一步收紧：小卡片减少预览行、压缩字体，移除小屏底部提示文案，避免溢出。
+  - 增大移动端点击命中区。
+- [x] **掉落识别新增“首见图例卡”**：
+  - 首次拾取某资源时弹出图例卡（图标+名称+用途），支持自动关闭/点击关闭。
+  - 通过 story flag 记录首见状态：`loot_legend_seen_*`，避免重复打扰。
+  - 新增调试入口：`window.__debug_show_loot_legend(resourceId)`。
+- [x] **每日挑战三路分支防重复**：
+  - `createOrRefreshDayExplorationChallenge()` 生成三张卡时会尽量避开重复地点，避免“3张同点位”体验。
+
+### 本轮验证
+- [x] `npm run -s build` 多轮通过。
+- [x] Playwright 回归：
+  - `node scripts/web_game_playwright_client_mac.js --url http://127.0.0.1:5176 ...`
+  - `output/web-game/errors-0.json` / `errors-1.json` / `errors-2.json` 为空数组。
+- [x] 定向截图留档：
+  - `output/web-game/run-event-day-chapter-faction.png`
+  - `output/web-game/run-event-night-chapter-faction.png`
+  - `output/web-game/run-event-day-mobile-portrait-v4.png`
+  - `output/web-game/loot-legend-energy-core.png`
+
+### 下一步建议
+- [ ] 将“派系关系值”落地为更强的玩法效果（例如影响夜间敌种构成、商人报价、委托奖励池）。
+- [ ] 给掉落图例加“图鉴总览页”（可在仓库/面板查看已解锁资源用途）。
+- [ ] 继续做事件剧情树：按章节解锁专属事件链（前置 -> 分支 -> 结局），并把章节进度接入UI主HUD。
+
+## 最新进展（2026-02-24 续开发：派系夜战/商人报价 + 掉落图鉴页 + 章节链HUD）
+- [x] **派系关系真正影响夜战敌种**：
+  - `WaveSystem.spawnNextEnemy()` 已读取 `GameScene.getNightEnemyFactionWeights()`。
+  - 新增权重映射：根据 `runEventFactionStanding` 动态调整 `runner/heavy/ranged/exploder/healer/stealth/elite` 出场比重。
+- [x] **派系关系影响商人报价（全链路）**：
+  - `ExchangePanel` 已接 `getMerchantFactionQuoteProfile()`，卖出汇率与镜价指数随派系变化。
+  - `GlassesShopPanel` 同步接入派系镜价系数，价格与行情文案统一。
+  - `GameScene` 白天行情提示与商人交互浮字同步展示派系报价系数。
+- [x] **掉落图例升级为可翻阅图鉴页**：
+  - 新增 `src/data/lootCodex.ts`、`src/ui/LootCodexPanel.ts`。
+  - `GameScene` 新增 `getLootCodexSnapshot()`，输出已解锁数、总数、分页条目。
+  - `onLootCollected()` 累加 `lootCodexCollected` 并触发 `loot-codex-updated`。
+  - 首见提示 `loot legend` 已改为复用 `lootCodex` 数据源（图标/名称/用途/颜色统一）。
+- [x] **章节事件链接入主HUD进度条**：
+  - 新增 `RUN_EVENT_CHAIN_STAGES`（前置/分支/结局）。
+  - `UIScene` 顶部已显示 `事件链 <阶段> <进度>` 与进度条，轮询 `GameScene.getRunEventHudProgressSnapshot()`。
+
+### 本轮验证
+- [x] `npm run -s build` 通过。
+- [x] Playwright 基础回归通过（`output/web-game/errors-0.json` 为空）。
+- [x] 定向验证图鉴页可打开（`output/web-game/codex-direct-check.json` 为 `opened: true`，截图：`output/web-game/shot-codex-open-direct.png`）。

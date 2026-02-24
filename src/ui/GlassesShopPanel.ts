@@ -24,6 +24,12 @@ const BRAND_PRICE_FACTOR: Record<string, number> = {
   'magic leap': 1.12,
 };
 
+interface MerchantQuoteProfile {
+  rateMul: number;
+  glassesMul: number;
+  summaryCN: string;
+}
+
 export class GlassesShopPanel {
   private scene: Phaser.Scene;
   private container: Phaser.GameObjects.Container | null = null;
@@ -66,6 +72,21 @@ export class GlassesShopPanel {
     return `${Math.max(min, Math.round(base * boost))}px`;
   }
 
+  private getMerchantQuoteProfile(): MerchantQuoteProfile {
+    const gameScene = this.scene.scene.get('GameScene') as any;
+    const raw = gameScene?.getMerchantFactionQuoteProfile?.();
+    const safeRate = Phaser.Math.Clamp(Number(raw?.rateMul || 1), 0.65, 1.45);
+    const safeGlasses = Phaser.Math.Clamp(Number(raw?.glassesMul || 1), 0.72, 1.35);
+    const summaryCN = typeof raw?.summaryCN === 'string' && raw.summaryCN.length > 0
+      ? raw.summaryCN
+      : '派系议价: 中立';
+    return {
+      rateMul: safeRate,
+      glassesMul: safeGlasses,
+      summaryCN,
+    };
+  }
+
   show(): void {
     if (this.isOpen) return;
     this.isOpen = true;
@@ -105,16 +126,22 @@ export class GlassesShopPanel {
     close.on('pointerdown', () => this.hide());
     this.container.add(close);
 
-    const market = BaseSystem.getDailyGlassesPriceMultiplier();
+    const quoteProfile = this.getMerchantQuoteProfile();
+    const market = BaseSystem.getDailyGlassesPriceMultiplier(gameState.data.currentDay, quoteProfile.glassesMul);
     this.container.add(this.scene.add.text(panelX + 18, panelY + 48,
-      `当前比特币: ₿${gameState.data.resources.bitcoin.toFixed(3)}  |  今日镜价指数 x${market.toFixed(2)}`, {
+      `当前比特币: ₿${gameState.data.resources.bitcoin.toFixed(3)}  |  镜价指数 x${market.toFixed(2)}  |  报价x${quoteProfile.rateMul.toFixed(2)}`, {
       fontSize: this.fs(12, 11),
       color: '#93c5fd',
       fontFamily: uiFont,
     }));
+    this.container.add(this.scene.add.text(panelX + 18, panelY + 64, quoteProfile.summaryCN, {
+      fontSize: this.fs(11, 10),
+      color: '#86efac',
+      fontFamily: uiFont,
+    }));
 
-    let y = panelY + 76;
-    this.list.slice(0, 8).forEach(glass => {
+    let y = panelY + 90;
+    this.list.slice(0, 6).forEach(glass => {
       const rarity = RARITY_INFO[glass.rarity];
       const row = this.scene.add.rectangle(panelX + panelW / 2, y + 31, panelW - 24, 60, rarity.bgColor, 0.35);
       row.setStrokeStyle(1, rarity.color, 0.8);
@@ -136,7 +163,7 @@ export class GlassesShopPanel {
       }));
 
       const owned = gameState.data.collectedGlasses.includes(glass.id);
-      const price = this.getPrice(glass);
+      const price = this.getPrice(glass, quoteProfile.glassesMul);
       const btnLabel = owned ? '已拥有' : `购买 ₿${price.toFixed(2)}`;
       const buyBtn = this.scene.add.text(panelX + panelW - 20, y + 18, btnLabel, {
         fontSize: this.fs(12, 11),
@@ -215,11 +242,11 @@ export class GlassesShopPanel {
     return map[rarity] || 1;
   }
 
-  private getPrice(glass: ARGlassesDef): number {
+  private getPrice(glass: ARGlassesDef, glassesMul: number = 1): number {
     const rarityBase = BASE_PRICE[glass.rarity] || 3;
     const factorKey = Object.keys(BRAND_PRICE_FACTOR).find(k => glass.brand.toLowerCase().includes(k)) || 'inmo';
     const brandFactor = BRAND_PRICE_FACTOR[factorKey] || 1;
-    const marketFactor = BaseSystem.getDailyGlassesPriceMultiplier();
+    const marketFactor = BaseSystem.getDailyGlassesPriceMultiplier(gameState.data.currentDay, glassesMul);
     return Math.round(rarityBase * brandFactor * marketFactor * 100) / 100;
   }
 

@@ -4,6 +4,11 @@ import { BaseSystem } from '../systems/BaseSystem';
 import type { Resources } from '../state/GameState';
 
 type ExchangeResource = Exclude<keyof Resources, 'bitcoin'>;
+interface MerchantQuoteProfile {
+  rateMul: number;
+  glassesMul: number;
+  summaryCN: string;
+}
 
 const PACK_SIZE: Record<ExchangeResource, number> = {
   wood: 30,
@@ -57,6 +62,21 @@ export class ExchangePanel {
     return `${Math.max(min, Math.round(base * boost))}px`;
   }
 
+  private getMerchantQuoteProfile(): MerchantQuoteProfile {
+    const gameScene = this.scene.scene.get('GameScene') as any;
+    const raw = gameScene?.getMerchantFactionQuoteProfile?.();
+    const safeRate = Phaser.Math.Clamp(Number(raw?.rateMul || 1), 0.65, 1.45);
+    const safeGlasses = Phaser.Math.Clamp(Number(raw?.glassesMul || 1), 0.72, 1.35);
+    const summaryCN = typeof raw?.summaryCN === 'string' && raw.summaryCN.length > 0
+      ? raw.summaryCN
+      : '派系议价: 中立';
+    return {
+      rateMul: safeRate,
+      glassesMul: safeGlasses,
+      summaryCN,
+    };
+  }
+
   show(): void {
     if (this.isOpen) return;
     this.isOpen = true;
@@ -96,18 +116,25 @@ export class ExchangePanel {
     this.container.add(close);
 
     const day = gameState.data.currentDay;
-    const rates = BaseSystem.getDailyExchangeRates(day);
-    const market = BaseSystem.getDailyGlassesPriceMultiplier(day);
+    const quoteProfile = this.getMerchantQuoteProfile();
+    const rates = BaseSystem.getDailyExchangeRates(day, quoteProfile.rateMul);
+    const market = BaseSystem.getDailyGlassesPriceMultiplier(day, quoteProfile.glassesMul);
 
     this.container.add(this.scene.add.text(panelX + 16, panelY + 46,
-      `第${day}天行情  |  眼镜指数 x${market.toFixed(2)}  |  当前₿ ${gameState.data.resources.bitcoin.toFixed(3)}`, {
+      `第${day}天行情  |  派系报价 x${quoteProfile.rateMul.toFixed(2)}  |  眼镜指数 x${market.toFixed(2)}  |  当前₿ ${gameState.data.resources.bitcoin.toFixed(3)}`, {
       fontSize: this.fs(12, 11),
       color: '#93c5fd',
       fontFamily: uiFont,
     }));
+    this.container.add(this.scene.add.text(panelX + 16, panelY + 62,
+      quoteProfile.summaryCN, {
+      fontSize: this.fs(11, 10),
+      color: '#86efac',
+      fontFamily: uiFont,
+    }));
 
     const keys = Object.keys(rates) as ExchangeResource[];
-    let y = panelY + 74;
+    let y = panelY + 88;
     keys.forEach((resource, idx) => {
       const rowH = 42;
       const row = this.scene.add.rectangle(panelX + panelW / 2, y + rowH / 2, panelW - 24, rowH, 0x111827, 0.9);
@@ -137,7 +164,7 @@ export class ExchangePanel {
         }).setOrigin(1, 0).setInteractive({ useHandCursor: own >= unit });
       if (own >= unit) {
         sellBtn.on('pointerdown', () => {
-          const result = BaseSystem.exchangeResourceForBitcoin(resource, unit);
+          const result = BaseSystem.exchangeResourceForBitcoin(resource, unit, quoteProfile.rateMul);
           this.flashMessage(result.ok ? result.message : '交易失败', result.ok ? '#4ade80' : '#ef4444');
           this.rebuild();
         });

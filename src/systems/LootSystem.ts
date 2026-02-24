@@ -19,6 +19,36 @@ export class LootSystem {
   private scene: Phaser.Scene;
   private player: Phaser.Physics.Arcade.Sprite;
   private drops: LootDrop[] = [];
+  private readonly resourceAccentColor: Record<string, number> = {
+    wood: 0xb77b45,
+    metal: 0x90a4b7,
+    food: 0xd5a557,
+    water: 0x5aa7d6,
+    scrap: 0x7d8fa4,
+    medical: 0xc46a6a,
+    ammo: 0xcf9154,
+    energyCore: 0x9d84e6,
+  };
+  private readonly resourceShortLabel: Record<string, string> = {
+    wood: '木',
+    metal: '金',
+    food: '食',
+    water: '水',
+    scrap: '件',
+    medical: '医',
+    ammo: '弹',
+    energyCore: '核',
+  };
+  private readonly resourceDisplayLabel: Record<string, string> = {
+    wood: '木材',
+    metal: '金属',
+    food: '食物',
+    water: '净水',
+    scrap: '零件',
+    medical: '医疗',
+    ammo: '弹药',
+    energyCore: '能核',
+  };
 
   constructor(scene: Phaser.Scene, player: Phaser.Physics.Arcade.Sprite) {
     this.scene = scene;
@@ -79,6 +109,7 @@ export class LootSystem {
   ): void {
     if (!lootTable) return;
     const safeGain = Phaser.Math.Clamp(gainMultiplier || 1, 0.45, 2.5);
+    const mergedDrops: Map<string, number> = new Map();
 
     let dropped = false;
     for (const entry of lootTable) {
@@ -87,15 +118,31 @@ export class LootSystem {
       if (amount <= 0) continue;
 
       if (entry.type === 'resource') {
-        this.spawnResourceDrop(x + Phaser.Math.Between(-20, 20), y + Phaser.Math.Between(-20, 20), entry.id, amount);
+        mergedDrops.set(entry.id, (mergedDrops.get(entry.id) || 0) + amount);
         dropped = true;
       }
     }
 
-    // Always drop random resources so building never starves
+    // Merge same-resource drops to reduce on-screen clutter and improve readability.
+    let mergedIndex = 0;
+    mergedDrops.forEach((amount, id) => {
+      this.spawnResourceDrop(
+        x + Phaser.Math.Between(-18, 18) + mergedIndex * 3,
+        y + Phaser.Math.Between(-16, 16) - mergedIndex * 2,
+        id,
+        amount
+      );
+      mergedIndex += 1;
+    });
+
+    // Always drop some random resources so building never starves, but keep count controlled.
     const day = gameState.data.currentDay || 1;
-    const baseDrops = 1 + Math.floor(day / 6) + (gameState.data.isBloodMoon ? 1 : 0) + bonusDrops;
-    const extraDrops = Math.min(7, Math.max(1, Math.round(baseDrops * Math.sqrt(safeGain))));
+    const baseDrops = 1 + Math.floor(day / 8) + (gameState.data.isBloodMoon ? 1 : 0) + bonusDrops;
+    const extraDrops = Phaser.Math.Clamp(
+      Math.round(baseDrops * (0.55 + safeGain * 0.35)),
+      1,
+      4
+    );
     for (let i = 0; i < extraDrops; i++) {
       this.spawnRandomResourceDrop(x, y, safeGain);
     }
@@ -152,12 +199,51 @@ export class LootSystem {
       energyCore: 'loot_core',
     };
     const texture = textureMap[resourceId] || 'loot_scrap';
+    const accentColor = this.resourceAccentColor[resourceId] || 0x7d8fa4;
+
+    const badge = this.scene.add.rectangle(x, y, 26, 26, 0x030712, 0.9)
+      .setStrokeStyle(1, accentColor, 0.9)
+      .setDepth(3.78);
+
+    const glow = this.scene.add.circle(x, y, 8.5, accentColor, 0.11).setDepth(3.8);
+    this.scene.tweens.add({
+      targets: glow,
+      alpha: { from: 0.08, to: 0.18 },
+      duration: 980,
+      yoyo: true,
+      repeat: -1,
+    });
+
     const drop = this.scene.add.sprite(x, y, texture);
     drop.setDepth(4);
-    drop.setScale(0.78);
+    drop.setScale(1.08);
     this.scene.tweens.add({
-      targets: drop, scale: 1, duration: 200, ease: 'Back.easeOut',
+      targets: drop, scale: 1.15, duration: 190, ease: 'Back.easeOut',
     });
+    this.scene.tweens.add({
+      targets: drop,
+      y: drop.y - 1.5,
+      duration: 760,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+
+    const displayName = this.resourceDisplayLabel[resourceId] || this.resourceShortLabel[resourceId] || '资源';
+    const amountText = Math.max(1, Math.round(amount));
+    const tag = this.scene.add.text(
+      x,
+      y + 11,
+      `${displayName} x${amountText}`,
+      {
+        fontSize: '13px',
+        color: '#e2e8f0',
+        fontFamily: 'PingFang SC, "Microsoft YaHei", sans-serif',
+        backgroundColor: '#020712',
+        padding: { left: 5, right: 5, top: 2, bottom: 3 },
+      }
+    ).setOrigin(0.5, 0).setDepth(4.3);
+    tag.setStroke('#000000', 2);
 
     const lootDrop: LootDrop = {
       sprite: drop,
@@ -167,6 +253,9 @@ export class LootSystem {
       collecting: false,
     };
     this.drops.push(lootDrop);
+    (drop as any)._badge = badge;
+    (drop as any)._glow = glow;
+    (drop as any)._tag = tag;
 
     // Auto-collect after brief delay
     this.scene.time.delayedCall(300, () => {
@@ -206,13 +295,32 @@ export class LootSystem {
         const speed = Math.max(5, 300 - dist);
         drop.sprite.x += Math.cos(angle) * speed * 0.016;
         drop.sprite.y += Math.sin(angle) * speed * 0.016;
+        const tag = (drop.sprite as any)._tag as Phaser.GameObjects.Text | undefined;
+        if (tag && tag.active) {
+          tag.x = drop.sprite.x;
+          tag.y = drop.sprite.y + 11;
+        }
+        const badge = (drop.sprite as any)._badge as Phaser.GameObjects.Rectangle | undefined;
+        if (badge && badge.active) {
+          badge.x = drop.sprite.x;
+          badge.y = drop.sprite.y;
+        }
+        const glow = (drop.sprite as any)._glow as Phaser.GameObjects.Arc | undefined;
+        if (glow && glow.active) {
+          glow.x = drop.sprite.x;
+          glow.y = drop.sprite.y;
+        }
 
         // Collect when close enough
         if (dist < 20) {
           this.collectDrop(drop);
           // Cleanup glow if exists
+          const badge = (drop.sprite as any)._badge;
+          if (badge) badge.destroy();
           const glow = (drop.sprite as any)._glow;
           if (glow) glow.destroy();
+          const tag = (drop.sprite as any)._tag;
+          if (tag) tag.destroy();
           drop.sprite.destroy();
           this.drops.splice(i, 1);
         }
@@ -243,8 +351,12 @@ export class LootSystem {
 
   destroy(): void {
     for (const drop of this.drops) {
+      const badge = (drop.sprite as any)?._badge;
+      if (badge && badge.active) badge.destroy();
       const glow = (drop.sprite as any)?._glow;
       if (glow && glow.active) glow.destroy();
+      const tag = (drop.sprite as any)?._tag;
+      if (tag && tag.active) tag.destroy();
       if (drop.sprite && drop.sprite.active) drop.sprite.destroy();
     }
     this.drops = [];

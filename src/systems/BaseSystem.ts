@@ -135,23 +135,25 @@ export class BaseSystem {
     return { production: productionTotals, jobFood, jobMedical: medical, jobScrap: scrap, professionBonus, consumption, deficit };
   }
 
-  static getDailyExchangeRates(day: number = gameState.data.currentDay): Record<ExchangeResource, number> {
+  static getDailyExchangeRates(day: number = gameState.data.currentDay, quoteMul: number = 1): Record<ExchangeResource, number> {
     const rates = {} as Record<ExchangeResource, number>;
     const tradeBuff = gameState.data.storyFlags[this.getDayBuffFlag('trade', day)] ? 1.12 : 1;
+    const safeQuoteMul = Phaser.Math.Clamp(Number.isFinite(quoteMul) ? quoteMul : 1, 0.65, 1.45);
     const keys = Object.keys(this.EXCHANGE_BASE) as ExchangeResource[];
     keys.forEach((key, idx) => {
       const base = this.EXCHANGE_BASE[key];
       const wave = (this.seeded(day, idx + 1) - 0.5) * 0.5;
       const trend = (Math.sin((day + idx) * 0.35) * 0.15);
       const mult = Phaser.Math.Clamp(1 + wave + trend, 0.6, 1.55);
-      rates[key] = Math.round(base * mult * tradeBuff * 1000) / 1000;
+      rates[key] = Math.round(base * mult * tradeBuff * safeQuoteMul * 1000) / 1000;
     });
     return rates;
   }
 
-  static getDailyGlassesPriceMultiplier(day: number = gameState.data.currentDay): number {
+  static getDailyGlassesPriceMultiplier(day: number = gameState.data.currentDay, factionMul: number = 1): number {
     const base = 0.9 + this.seeded(day, 88) * 0.4;
-    return Math.round(base * 100) / 100;
+    const safeFactionMul = Phaser.Math.Clamp(Number.isFinite(factionMul) ? factionMul : 1, 0.72, 1.35);
+    return Math.round(base * safeFactionMul * 100) / 100;
   }
 
   static getResourceShortName(resource: ExchangeResource): string {
@@ -168,7 +170,7 @@ export class BaseSystem {
     return names[resource];
   }
 
-  static exchangeResourceForBitcoin(resource: ExchangeResource, amount: number): {
+  static exchangeResourceForBitcoin(resource: ExchangeResource, amount: number, quoteMul: number = 1): {
     ok: boolean;
     btc: number;
     message: string;
@@ -178,7 +180,7 @@ export class BaseSystem {
     const own = gameState.data.resources[resource] || 0;
     if (own < safeAmount) return { ok: false, btc: 0, message: `${this.getResourceShortName(resource)}不足` };
 
-    const rates = this.getDailyExchangeRates();
+    const rates = this.getDailyExchangeRates(gameState.data.currentDay, quoteMul);
     const rate = rates[resource] || 0;
     const btc = Math.round(rate * safeAmount * 1000) / 1000;
     if (btc <= 0) return { ok: false, btc: 0, message: '今日行情过低，无法成交' };

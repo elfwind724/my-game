@@ -32,6 +32,24 @@ import { GearLootSystem } from '../systems/GearLootSystem';
 import { BASE_POWER_PER_TURRET } from '../data/base';
 import { BUILDING_DEFS } from '../data/buildings';
 import { WEAPON_DEFS } from '../data/weapons';
+import {
+  RUN_EVENT_ARC_LABELS,
+  RUN_EVENT_CHAPTER_LABELS,
+  RUN_EVENT_CHOICE_FACTION_DELTA,
+  RUN_EVENT_CHAIN_STAGES,
+  RUN_EVENT_DEFS,
+  RUN_EVENT_FACTION_LABELS,
+  RUN_EVENT_LORE_SNIPPETS,
+  RUN_EVENT_META_BY_ID,
+  type RunEventArc,
+  type RunEventChainStageId,
+  type RunEventFaction,
+  type RunEventDef,
+  type RunEventChoiceDef,
+  type RunEventLoreSnippet,
+  type RunEventPeriod,
+} from '../data/runEvents';
+import { LOOT_CODEX_BY_ID, LOOT_CODEX_ENTRIES } from '../data/lootCodex';
 import { CompanionConfig } from '../types/SkillTypes';
 import {
   HERO_V2_TEXTURE_KEY,
@@ -309,28 +327,6 @@ interface RunMutatorDef {
   effects: Partial<RunMutatorEffects>;
 }
 
-type RunEventPeriod = 'day' | 'night';
-
-interface RunEventChoiceDef {
-  id: string;
-  titleCN: string;
-  detailCN: string;
-  resources?: Partial<Record<keyof Resources, [number, number]>>;
-  xp?: [number, number];
-  heal?: [number, number];
-  selfDamage?: [number, number];
-  spawnEnemies?: [number, number];
-  bitcoin?: [number, number];
-}
-
-interface RunEventDef {
-  id: string;
-  period: RunEventPeriod;
-  titleCN: string;
-  descCN: string;
-  choices: [RunEventChoiceDef, RunEventChoiceDef];
-}
-
 const AUTO_LEVEL_COLOR_CYCLE: number[] = [
   0x22d3ee, 0x38bdf8, 0x34d399, 0xfacc15,
   0xfb923c, 0xf472b6, 0xa78bfa, 0xf43f5e,
@@ -388,107 +384,6 @@ const RUN_MUTATOR_DEFS: RunMutatorDef[] = [
     nameCN: '炮塔超频',
     descCN: '炮塔输出提高，伙伴输出略降',
     effects: { turretDamageMul: 1.3, companionDamageMul: 0.92, enemyToughnessMul: 1.08 },
-  },
-];
-
-const RUN_EVENT_DEFS: RunEventDef[] = [
-  {
-    id: 'day_caravan_signal',
-    period: 'day',
-    titleCN: '白天事件：流动商队信号',
-    descCN: '一支流动商队靠近基地，通信混乱。你可以交易，也可以强夺。',
-    choices: [
-      {
-        id: 'trade_safe',
-        titleCN: '稳妥交易',
-        detailCN: '低风险，获得基础补给。',
-        resources: { food: [2, 4], water: [1, 3], scrap: [1, 2] },
-        xp: [8, 14],
-      },
-      {
-        id: 'raid_risky',
-        titleCN: '强夺车队',
-        detailCN: '高收益，高风险，可能引来敌袭。',
-        resources: { metal: [4, 8], scrap: [4, 8], ammo: [2, 5], medical: [1, 2] },
-        xp: [14, 24],
-        selfDamage: [5, 11],
-        spawnEnemies: [2, 5],
-      },
-    ],
-  },
-  {
-    id: 'day_abandoned_clinic',
-    period: 'day',
-    titleCN: '白天事件：废弃诊所',
-    descCN: '城区边缘发现一座半坍塌诊所，内部有药械与潜在感染体。',
-    choices: [
-      {
-        id: 'careful_search',
-        titleCN: '谨慎搜集',
-        detailCN: '慢速清点，收益稳定。',
-        resources: { medical: [2, 4], water: [1, 2] },
-        xp: [7, 12],
-      },
-      {
-        id: 'force_entry',
-        titleCN: '暴力破门',
-        detailCN: '高收益但触发骚动。',
-        resources: { medical: [4, 8], scrap: [3, 6], energyCore: [0, 1] },
-        xp: [14, 22],
-        selfDamage: [4, 9],
-        spawnEnemies: [3, 6],
-      },
-    ],
-  },
-  {
-    id: 'night_perimeter_breach',
-    period: 'night',
-    titleCN: '夜间事件：周界破口',
-    descCN: '基地东侧围栏出现破口，需立刻决策。',
-    choices: [
-      {
-        id: 'seal_breach',
-        titleCN: '紧急封堵',
-        detailCN: '降低压力，收益一般。',
-        resources: { wood: [2, 4], ammo: [1, 2] },
-        xp: [10, 16],
-      },
-      {
-        id: 'counter_push',
-        titleCN: '反冲突击',
-        detailCN: '高压反击，收益与风险都更高。',
-        resources: { metal: [4, 7], ammo: [3, 6], energyCore: [0, 1] },
-        xp: [18, 30],
-        selfDamage: [6, 12],
-        spawnEnemies: [4, 8],
-        bitcoin: [0.03, 0.11],
-      },
-    ],
-  },
-  {
-    id: 'night_signal_hunt',
-    period: 'night',
-    titleCN: '夜间事件：异常讯号追踪',
-    descCN: '探测到高能信号源，可能是补给缓存，也可能是敌方诱饵。',
-    choices: [
-      {
-        id: 'jam_signal',
-        titleCN: '干扰屏蔽',
-        detailCN: '保守处理，降低暴露。',
-        resources: { scrap: [2, 4], medical: [1, 2] },
-        xp: [10, 18],
-      },
-      {
-        id: 'trace_source',
-        titleCN: '直扑源头',
-        detailCN: '风险最大，潜在回报最高。',
-        resources: { energyCore: [1, 2], scrap: [3, 6], metal: [3, 6] },
-        xp: [22, 34],
-        selfDamage: [7, 13],
-        spawnEnemies: [5, 9],
-        bitcoin: [0.05, 0.16],
-      },
-    ],
   },
 ];
 
@@ -622,6 +517,12 @@ export default class GameScene extends Phaser.Scene {
   private lastHungerWarning: number = 0;
   private dayActivityUsage: Map<ExplorationActionType, number> = new Map();
   private explorationStatusNextAt: number = 0;
+  private lootToastNextAt: number = 0;
+  private lootLegendQueue: string[] = [];
+  private lootLegendActiveResourceId: string | null = null;
+  private lootLegendContainer: Phaser.GameObjects.Container | null = null;
+  private lootLegendAutoCloseTimer: Phaser.Time.TimerEvent | null = null;
+  private lootCodexCollected: Record<string, number> = {};
   private dayAdventureChain: number = 0;
   private dayAdventureLastAt: number = 0;
   private activeRunMutators: RunMutatorDef[] = [];
@@ -634,6 +535,22 @@ export default class GameScene extends Phaser.Scene {
   private pendingNightWaveStartAfterEvent: boolean = false;
   private pendingDayRunEventAfterChallenge: boolean = false;
   private runEventAutoPickTimer: Phaser.Time.TimerEvent | null = null;
+  private runEventRecentHistory: Array<{ id: string; period: RunEventPeriod; arc: RunEventArc; day: number }> = [];
+  private runEventRecentLorePieces: string[] = [];
+  private runEventActiveLoreSnippet: RunEventLoreSnippet | null = null;
+  private runEventMissStreak: Record<RunEventPeriod, number> = { day: 0, night: 0 };
+  private runEventLastTriggerDay: Record<RunEventPeriod, number> = { day: -99, night: -99 };
+  private runEventLastAnyTriggerDay: number = -99;
+  private runEventLastAnyTriggerPeriod: RunEventPeriod | null = null;
+  private runEventGlobalCooldownUntilDay: number = 1;
+  private runEventCurrentChapter: 1 | 2 | 3 | 4 = 1;
+  private runEventFactionStanding: Record<RunEventFaction, number> = {
+    survivorUnion: 0,
+    tradeRing: 0,
+    citadelAI: 0,
+    labRemnant: 0,
+    mutantSwarm: 0,
+  };
   private dayChallengeSelectionOpen: boolean = false;
   private dayChallengeSelectionContainer: Phaser.GameObjects.Container | null = null;
   private dayChallengePendingChoices: DayExplorationChallenge[] = [];
@@ -641,6 +558,11 @@ export default class GameScene extends Phaser.Scene {
   private dayChallengeDayRewardMul: number = 1;
   private dayChallengeDayDangerMul: number = 1;
   private dayChallengeDayXpMul: number = 1;
+  private dayChallengeBranchRecentActions: Record<DayChallengeBranch, ExplorationActionType[]> = {
+    stable: [],
+    adventure: [],
+    extreme: [],
+  };
   private dayOpsContracts: DayOpsContract[] = [];
   private dayOpsNightPrepStacks: number = 0;
   private nightDirectiveSelectionOpen: boolean = false;
@@ -975,6 +897,29 @@ export default class GameScene extends Phaser.Scene {
     this.runEventAutoPickTimer = null;
     this.runEventContainer?.destroy();
     this.runEventContainer = null;
+    this.runEventRecentHistory = [];
+    this.runEventRecentLorePieces = [];
+    this.runEventActiveLoreSnippet = null;
+    this.runEventMissStreak = { day: 0, night: 0 };
+    this.runEventLastTriggerDay = { day: -99, night: -99 };
+    this.runEventLastAnyTriggerDay = -99;
+    this.runEventLastAnyTriggerPeriod = null;
+    this.runEventGlobalCooldownUntilDay = 1;
+    this.runEventCurrentChapter = 1;
+    this.runEventFactionStanding = {
+      survivorUnion: 0,
+      tradeRing: 0,
+      citadelAI: 0,
+      labRemnant: 0,
+      mutantSwarm: 0,
+    };
+    this.lootLegendQueue = [];
+    this.lootLegendActiveResourceId = null;
+    this.lootLegendAutoCloseTimer?.remove(false);
+    this.lootLegendAutoCloseTimer = null;
+    this.lootLegendContainer?.destroy();
+    this.lootLegendContainer = null;
+    this.lootCodexCollected = {};
     this.pendingDayRunEventAfterChallenge = false;
     this.dayChallengeSelectionOpen = false;
     this.dayChallengeSelectionContainer?.destroy();
@@ -984,6 +929,7 @@ export default class GameScene extends Phaser.Scene {
     this.dayChallengeDayRewardMul = 1;
     this.dayChallengeDayDangerMul = 1;
     this.dayChallengeDayXpMul = 1;
+    this.dayChallengeBranchRecentActions = { stable: [], adventure: [], extreme: [] };
     this.dayOpsContracts = [];
     this.dayOpsNightPrepStacks = 0;
     this.nightDirectiveSelectionOpen = false;
@@ -1235,6 +1181,7 @@ export default class GameScene extends Phaser.Scene {
     this.scavengeDurabilityPenaltyStartAt = 0;
     this.scavengeDurabilityPenaltyDurationMs = 0;
     this.explorationStatusNextAt = 0;
+    this.lootToastNextAt = 0;
     this.dayAdventureChain = 0;
     this.dayAdventureLastAt = 0;
     this.clearResidentAssistTask();
@@ -1442,14 +1389,22 @@ export default class GameScene extends Phaser.Scene {
     };
     (window as any).__debug_trigger_run_event = (period: RunEventPeriod = 'day') => {
       if (this.runEventOpen) return { ok: false, reason: 'already_open' };
-      const pool = RUN_EVENT_DEFS.filter((def) => def.period === period);
-      if (pool.length <= 0) return { ok: false, reason: 'no_event_pool' };
-      const picked = Phaser.Utils.Array.GetRandom(pool);
+      const picked = this.pickRunEventDef(period);
+      if (!picked) return { ok: false, reason: 'no_event_pool' };
       this.showRunEventPanel(picked);
       if (period === 'night') {
         this.pendingNightWaveStartAfterEvent = true;
       }
       return { ok: true, period, id: picked.id };
+    };
+    (window as any).__debug_show_loot_legend = (resourceId: string = 'scrap') => {
+      this.enqueueLootLegend(resourceId);
+      return {
+        ok: true,
+        resourceId,
+        queued: [...this.lootLegendQueue],
+        active: this.lootLegendActiveResourceId,
+      };
     };
     (window as any).__debug_open_cave_raid = () => {
       if (this.dayChallengeSelectionOpen) {
@@ -1653,6 +1608,9 @@ export default class GameScene extends Phaser.Scene {
         },
         runEvent: {
           open: this.runEventOpen,
+          chapter: this.runEventCurrentChapter,
+          chapterLabel: RUN_EVENT_CHAPTER_LABELS[this.runEventCurrentChapter] || '',
+          factionStanding: { ...this.runEventFactionStanding },
           pendingNightWaveStart: this.pendingNightWaveStartAfterEvent,
         },
         exploration,
@@ -1752,14 +1710,419 @@ export default class GameScene extends Phaser.Scene {
     return Phaser.Math.Clamp(danger * phase, 0.75, 2.8);
   }
 
+  private getRunEventMeta(eventId: string): { chapter: 1 | 2 | 3 | 4; factions: RunEventFaction[] } {
+    return RUN_EVENT_META_BY_ID[eventId] || { chapter: 1, factions: [] };
+  }
+
+  private getRunEventStoryChapter(): 1 | 2 | 3 | 4 {
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    const unlockedPieces = this.getUnlockedRunEventLorePieceCount();
+    const chapterByDay = day >= 10 ? 4 : day >= 7 ? 3 : day >= 4 ? 2 : 1;
+    const chapterByLore = unlockedPieces >= 22 ? 4 : unlockedPieces >= 12 ? 3 : unlockedPieces >= 5 ? 2 : 1;
+    const chapter = Math.max(chapterByDay, chapterByLore);
+    return Phaser.Math.Clamp(chapter, 1, 4) as 1 | 2 | 3 | 4;
+  }
+
+  private getRunEventFactionDelta(choiceId: string): Partial<Record<RunEventFaction, number>> {
+    return RUN_EVENT_CHOICE_FACTION_DELTA[choiceId] || {};
+  }
+
+  private applyRunEventFactionStanding(choiceId: string): string[] {
+    const changes = this.getRunEventFactionDelta(choiceId);
+    const notices: string[] = [];
+    (Object.keys(changes) as RunEventFaction[]).forEach((faction) => {
+      const delta = changes[faction];
+      if (!delta) return;
+      const next = Phaser.Math.Clamp((this.runEventFactionStanding[faction] || 0) + delta, -8, 8);
+      this.runEventFactionStanding[faction] = next;
+      const label = RUN_EVENT_FACTION_LABELS[faction] || faction;
+      notices.push(`${label}${delta > 0 ? '+' : ''}${delta}`);
+    });
+    return notices;
+  }
+
+  private getRunEventFactionSummary(eventDef: RunEventDef): string {
+    const factions = this.getRunEventMeta(eventDef.id).factions;
+    if (factions.length <= 0) return '派系：未判定';
+    const parts = factions.map((faction) => {
+      const standing = this.runEventFactionStanding[faction] || 0;
+      const sign = standing > 0 ? '+' : '';
+      return `${RUN_EVENT_FACTION_LABELS[faction]} ${sign}${standing}`;
+    });
+    return `派系倾向：${parts.join('  ·  ')}`;
+  }
+
+  private getFactionHostility(faction: RunEventFaction): number {
+    return Math.max(0, -(this.runEventFactionStanding[faction] || 0));
+  }
+
+  public getNightEnemyFactionWeights(): Record<string, number> {
+    const allySurvivor = Math.max(0, this.runEventFactionStanding.survivorUnion || 0);
+    const allyTrade = Math.max(0, this.runEventFactionStanding.tradeRing || 0);
+    const hostileTrade = this.getFactionHostility('tradeRing');
+    const hostileAI = this.getFactionHostility('citadelAI');
+    const hostileLab = this.getFactionHostility('labRemnant');
+    const hostileMutant = this.getFactionHostility('mutantSwarm');
+    const pressureSuppression = Math.max(0.75, 1 - allySurvivor * 0.03);
+
+    const applySuppression = (value: number): number => Phaser.Math.Clamp(value * pressureSuppression, 0.18, 2.8);
+    return {
+      controlled: Phaser.Math.Clamp(1 + allySurvivor * 0.06 - (hostileMutant + hostileAI) * 0.03, 0.35, 1.9),
+      runner: applySuppression(1 + hostileMutant * 0.09 + hostileTrade * 0.02),
+      heavy: applySuppression(1 + hostileMutant * 0.05 + hostileAI * 0.08 + hostileLab * 0.03),
+      ranged: applySuppression(1 + hostileAI * 0.12 + hostileTrade * 0.04 - allyTrade * 0.02),
+      exploder: applySuppression(1 + hostileMutant * 0.11 + hostileLab * 0.05),
+      healer: applySuppression(1 + hostileLab * 0.11 + hostileAI * 0.04),
+      stealth: applySuppression(1 + hostileTrade * 0.1 + hostileLab * 0.06 + hostileAI * 0.03),
+      elite: applySuppression(1 + (hostileAI + hostileMutant + hostileLab + hostileTrade) * 0.035),
+    };
+  }
+
+  public getMerchantFactionQuoteProfile(): { rateMul: number; glassesMul: number; summaryCN: string } {
+    const trade = this.runEventFactionStanding.tradeRing || 0;
+    const survivor = this.runEventFactionStanding.survivorUnion || 0;
+    const aiHostility = this.getFactionHostility('citadelAI');
+    const mutantHostility = this.getFactionHostility('mutantSwarm');
+    const labHostility = this.getFactionHostility('labRemnant');
+    const hostilePressure = (aiHostility + mutantHostility + labHostility) / 12;
+    const rateMul = Phaser.Math.Clamp(1 + trade * 0.055 + survivor * 0.02 - hostilePressure * 0.08, 0.65, 1.45);
+    const glassesMul = Phaser.Math.Clamp(1 - trade * 0.035 - survivor * 0.012 + hostilePressure * 0.14, 0.72, 1.35);
+    const summaryCN = `派系议价: 商环${trade >= 0 ? '+' : ''}${trade} · 同盟${survivor >= 0 ? '+' : ''}${survivor} · 压力${hostilePressure.toFixed(2)}`;
+    return {
+      rateMul: Number(rateMul.toFixed(3)),
+      glassesMul: Number(glassesMul.toFixed(3)),
+      summaryCN,
+    };
+  }
+
+  private getRunEventChapterProgressRatio(chapter: 1 | 2 | 3 | 4): number {
+    const lore = this.getUnlockedRunEventLorePieceCount();
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    const loreThresholds = [0, 5, 12, 22, this.getRunEventLorePieceTotalCount()];
+    const dayThresholds = [1, 4, 7, 10, 14];
+    const idx = Math.max(1, Math.min(4, chapter));
+    const loreStart = loreThresholds[idx - 1];
+    const loreEnd = loreThresholds[Math.min(4, idx)];
+    const dayStart = dayThresholds[idx - 1];
+    const dayEnd = dayThresholds[Math.min(4, idx)];
+    const loreRatio = loreEnd > loreStart ? (lore - loreStart) / (loreEnd - loreStart) : 1;
+    const dayRatio = dayEnd > dayStart ? (day - dayStart) / (dayEnd - dayStart) : 1;
+    return Phaser.Math.Clamp(Math.max(loreRatio, dayRatio), 0, 1);
+  }
+
+  public getRunEventHudProgressSnapshot(): {
+    chapter: 1 | 2 | 3 | 4;
+    chapterLabel: string;
+    chapterProgress: number;
+    chainRatio: number;
+    stageId: RunEventChainStageId;
+    stageLabel: string;
+    stageDesc: string;
+    stageProgress: number;
+    stageTarget: number;
+  } {
+    const chapter = this.getRunEventStoryChapter();
+    const stageStates = RUN_EVENT_CHAIN_STAGES.map((stage) => {
+      const done = stage.flags.reduce((sum, flag) => sum + (this.hasRunEventStoryFlag(flag) ? 1 : 0), 0);
+      return {
+        ...stage,
+        progress: Math.min(stage.target, done),
+      };
+    });
+    let stageIndex = stageStates.findIndex((stage) => stage.progress < stage.target);
+    if (stageIndex < 0) stageIndex = stageStates.length - 1;
+    const active = stageStates[Math.max(0, stageIndex)];
+    const totalProgress = stageStates.reduce((sum, stage) => sum + stage.progress, 0);
+    const totalTarget = stageStates.reduce((sum, stage) => sum + stage.target, 0);
+    return {
+      chapter,
+      chapterLabel: RUN_EVENT_CHAPTER_LABELS[chapter] || `章节${chapter}`,
+      chapterProgress: this.getRunEventChapterProgressRatio(chapter),
+      chainRatio: totalTarget > 0 ? Phaser.Math.Clamp(totalProgress / totalTarget, 0, 1) : 0,
+      stageId: active.id,
+      stageLabel: active.labelCN,
+      stageDesc: active.descCN,
+      stageProgress: active.progress,
+      stageTarget: active.target,
+    };
+  }
+
+  public getLootCodexSnapshot(): {
+    unlocked: number;
+    total: number;
+    entries: Array<{
+      id: string;
+      nameCN: string;
+      iconKey: string;
+      accentColor: number;
+      accentText: string;
+      usageCN: string;
+      sourceCN: string;
+      loreCN: string;
+      discovered: boolean;
+      collected: number;
+    }>;
+  } {
+    const entries = LOOT_CODEX_ENTRIES.map((entry) => {
+      const collected = Math.max(0, Math.floor(this.lootCodexCollected[entry.id] || 0));
+      const discovered = collected > 0 || !!gameState.data.storyFlags[this.getLootLegendSeenFlagKey(entry.id)];
+      return {
+        ...entry,
+        discovered,
+        collected,
+      };
+    });
+    const unlocked = entries.reduce((sum, entry) => sum + (entry.discovered ? 1 : 0), 0);
+    return {
+      unlocked,
+      total: entries.length,
+      entries,
+    };
+  }
+
+  private getRunEventStoryFlagKey(flag: string): string {
+    return `run_event_flag_${flag}`;
+  }
+
+  private hasRunEventStoryFlag(flag: string): boolean {
+    return !!gameState.data.storyFlags[this.getRunEventStoryFlagKey(flag)];
+  }
+
+  private unlockRunEventStoryFlags(flags?: string[]): void {
+    if (!flags || flags.length <= 0) return;
+    flags.forEach((flag) => {
+      if (!flag) return;
+      gameState.data.storyFlags[this.getRunEventStoryFlagKey(flag)] = true;
+    });
+  }
+
+  private getRunEventSeenFlagKey(eventId: string): string {
+    return `run_event_seen_${eventId}`;
+  }
+
+  private hasSeenRunEvent(eventId: string): boolean {
+    return !!gameState.data.storyFlags[this.getRunEventSeenFlagKey(eventId)];
+  }
+
+  private markRunEventSeen(eventId: string): boolean {
+    const key = this.getRunEventSeenFlagKey(eventId);
+    if (gameState.data.storyFlags[key]) return false;
+    gameState.data.storyFlags[key] = true;
+    return true;
+  }
+
+  private getRunEventLoreFlagKey(loreKey: string): string {
+    return `run_event_lore_${loreKey}`;
+  }
+
+  private hasUnlockedRunEventLore(loreKey: string): boolean {
+    return !!gameState.data.storyFlags[this.getRunEventLoreFlagKey(loreKey)];
+  }
+
+  private unlockRunEventLore(eventDef: RunEventDef): boolean {
+    const key = this.getRunEventLoreFlagKey(eventDef.loreKey || eventDef.id);
+    if (gameState.data.storyFlags[key]) return false;
+    gameState.data.storyFlags[key] = true;
+    this.unlockRunEventStoryFlags([`arc_${eventDef.arc}`]);
+    return true;
+  }
+
+  private getRunEventLorePieceFlagKey(arc: RunEventArc, pieceId: string): string {
+    return `run_event_lore_piece_${arc}_${pieceId}`;
+  }
+
+  private hasUnlockedRunEventLorePiece(arc: RunEventArc, pieceId: string): boolean {
+    return !!gameState.data.storyFlags[this.getRunEventLorePieceFlagKey(arc, pieceId)];
+  }
+
+  private unlockRunEventLorePiece(eventDef: RunEventDef, piece: RunEventLoreSnippet): boolean {
+    if (!piece?.id) return false;
+    const key = this.getRunEventLorePieceFlagKey(eventDef.arc, piece.id);
+    if (gameState.data.storyFlags[key]) return false;
+    gameState.data.storyFlags[key] = true;
+    const rememberKey = `${eventDef.arc}:${piece.id}`;
+    this.runEventRecentLorePieces.push(rememberKey);
+    if (this.runEventRecentLorePieces.length > 24) {
+      this.runEventRecentLorePieces.splice(0, this.runEventRecentLorePieces.length - 24);
+    }
+    return true;
+  }
+
+  private getUnlockedRunEventLorePieceCount(): number {
+    let count = 0;
+    (Object.keys(RUN_EVENT_LORE_SNIPPETS) as RunEventArc[]).forEach((arc) => {
+      RUN_EVENT_LORE_SNIPPETS[arc].forEach((piece) => {
+        if (this.hasUnlockedRunEventLorePiece(arc, piece.id)) count += 1;
+      });
+    });
+    return count;
+  }
+
+  private getRunEventLorePieceTotalCount(): number {
+    return (Object.keys(RUN_EVENT_LORE_SNIPPETS) as RunEventArc[])
+      .reduce((sum, arc) => sum + RUN_EVENT_LORE_SNIPPETS[arc].length, 0);
+  }
+
+  private pickRunEventLoreSnippet(eventDef: RunEventDef): RunEventLoreSnippet | null {
+    const pieces = RUN_EVENT_LORE_SNIPPETS[eventDef.arc] || [];
+    if (pieces.length <= 0) return null;
+    const recentSet = new Set(this.runEventRecentLorePieces.slice(-6));
+    const unseen = pieces.filter((piece) => !this.hasUnlockedRunEventLorePiece(eventDef.arc, piece.id));
+    let pool = unseen.length > 0 ? unseen : pieces;
+    if (pool.length > 1) {
+      const filtered = pool.filter((piece) => !recentSet.has(`${eventDef.arc}:${piece.id}`));
+      if (filtered.length > 0) pool = filtered;
+    }
+    return Phaser.Utils.Array.GetRandom(pool);
+  }
+
+  private getUnlockedRunEventLoreCount(): number {
+    return RUN_EVENT_DEFS.reduce((count, def) => (
+      this.hasUnlockedRunEventLore(def.loreKey || def.id) ? count + 1 : count
+    ), 0);
+  }
+
+  private getLatestRunEventDay(eventId: string): number {
+    for (let i = this.runEventRecentHistory.length - 1; i >= 0; i -= 1) {
+      const record = this.runEventRecentHistory[i];
+      if (record.id === eventId) return record.day;
+    }
+    return -999;
+  }
+
+  private pickRunEventDef(period: RunEventPeriod): RunEventDef | null {
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    const chapter = this.getRunEventStoryChapter();
+    const recentIds = new Set(this.runEventRecentHistory.slice(-6).map((record) => record.id));
+    const recentArcs = new Set(this.runEventRecentHistory.slice(-5).map((record) => record.arc));
+    const recentFactions = new Set(
+      this.runEventRecentHistory
+        .slice(-4)
+        .flatMap((record) => this.getRunEventMeta(record.id).factions)
+    );
+    const candidates: Array<{ def: RunEventDef; weight: number }> = [];
+
+    for (const def of RUN_EVENT_DEFS) {
+      if (def.period !== period) continue;
+      if (def.minDay && day < def.minDay) continue;
+      if (def.maxDay && day > def.maxDay) continue;
+      const meta = this.getRunEventMeta(def.id);
+      if (meta.chapter > chapter) continue;
+      if (def.requiresFlags?.some((flag) => !this.hasRunEventStoryFlag(flag))) continue;
+
+      const seen = this.hasSeenRunEvent(def.id);
+      if (def.unique && seen) continue;
+
+      const cooldown = Math.max(1, def.cooldownDays || 2);
+      const latest = this.getLatestRunEventDay(def.id);
+      if (day - latest < cooldown) continue;
+
+      let weight = Math.max(0.05, def.weight || 1);
+      if (seen) weight *= 0.28;
+      if (recentIds.has(def.id)) weight *= 0.2;
+      if (recentArcs.has(def.arc)) weight *= 0.58;
+      if (meta.factions.length > 0) {
+        const recentFactionOverlap = meta.factions.filter((faction) => recentFactions.has(faction)).length;
+        if (recentFactionOverlap >= meta.factions.length) {
+          weight *= 0.72;
+        } else if (recentFactionOverlap === 0) {
+          weight *= 1.18;
+        }
+        meta.factions.forEach((faction) => {
+          const standing = this.runEventFactionStanding[faction] || 0;
+          if (period === 'day') {
+            // Day events倾向于给关系修复/经营回合。
+            weight *= standing < -3 ? 1.22 : standing > 3 ? 0.88 : 1;
+          } else {
+            // Night events在敌对关系高时更容易触发冲突事件。
+            weight *= standing < -2 ? 1.16 : standing > 4 ? 0.9 : 1;
+          }
+        });
+      }
+      if (!this.hasRunEventStoryFlag(`arc_${def.arc}`)) weight *= 1.28;
+      if (!this.hasUnlockedRunEventLore(def.loreKey || def.id)) weight *= 1.18;
+      candidates.push({ def, weight });
+    }
+
+    const pool = candidates.length > 0
+      ? candidates
+      : RUN_EVENT_DEFS
+        .filter((def) => {
+          if (def.period !== period) return false;
+          if (def.minDay && day < def.minDay) return false;
+          if (def.maxDay && day > def.maxDay) return false;
+          const meta = this.getRunEventMeta(def.id);
+          return meta.chapter <= Math.min(4, chapter + 1);
+        })
+        .map((def) => ({ def, weight: Math.max(0.1, def.weight || 1) }));
+
+    if (pool.length <= 0) return null;
+    const totalWeight = pool.reduce((sum, entry) => sum + entry.weight, 0);
+    let roll = Math.random() * totalWeight;
+    for (const entry of pool) {
+      roll -= entry.weight;
+      if (roll <= 0) return entry.def;
+    }
+    return pool[pool.length - 1].def;
+  }
+
   private maybeTriggerRunEvent(period: RunEventPeriod): boolean {
     if (this.isGameOver || this.runEventOpen || this.dayChallengeSelectionOpen) return false;
-    const pool = RUN_EVENT_DEFS.filter((def) => def.period === period);
-    if (pool.length <= 0) return false;
-    const baseChance = period === 'night' ? 0.82 : 0.68;
-    const mutatorFactor = Math.min(0.18, this.activeRunMutators.length * 0.05);
-    if (Math.random() > Math.min(0.98, baseChance + mutatorFactor)) return false;
-    const picked = Phaser.Utils.Array.GetRandom(pool);
+    const day = Math.max(1, gameState.data.currentDay || 1);
+    this.runEventCurrentChapter = this.getRunEventStoryChapter();
+    if (day === this.runEventLastAnyTriggerDay) return false;
+    if (day < this.runEventGlobalCooldownUntilDay) return false;
+    const daysSinceAnyTrigger = day - this.runEventLastAnyTriggerDay;
+    const baseChance = period === 'night' ? 0.21 : 0.16;
+    const chapterFactor = Math.min(0.08, (this.runEventCurrentChapter - 1) * 0.025);
+    const mutatorFactor = Math.min(0.14, this.activeRunMutators.length * 0.03);
+    const streakBonus = Math.min(0.24, this.runEventMissStreak[period] * 0.065);
+    const dayGrowth = Math.min(0.12, Math.max(0, day - 4) * 0.012);
+    const immediateRepeatPenalty = day - this.runEventLastTriggerDay[period] <= 1 ? 0.18 : 0;
+    const globalRecentPenalty = daysSinceAnyTrigger <= 1 ? 0.24 : daysSinceAnyTrigger <= 2 ? 0.12 : 0;
+    const samePeriodPenalty = this.runEventLastAnyTriggerPeriod === period && daysSinceAnyTrigger <= 3 ? 0.12 : 0;
+    const dryDayBonus = daysSinceAnyTrigger >= 3 ? Math.min(0.16, (daysSinceAnyTrigger - 2) * 0.04) : 0;
+    const jitter = Phaser.Math.FloatBetween(-0.08, 0.08);
+    const triggerChance = Phaser.Math.Clamp(
+      baseChance
+      + chapterFactor
+      + mutatorFactor
+      + streakBonus
+      + dayGrowth
+      + dryDayBonus
+      - immediateRepeatPenalty
+      - globalRecentPenalty
+      - samePeriodPenalty
+      + jitter,
+      0.05,
+      0.72
+    );
+
+    if (Math.random() > triggerChance) {
+      this.runEventMissStreak[period] = Math.min(8, this.runEventMissStreak[period] + 1);
+      return false;
+    }
+
+    const picked = this.pickRunEventDef(period);
+    if (!picked) {
+      this.runEventMissStreak[period] = Math.min(8, this.runEventMissStreak[period] + 1);
+      return false;
+    }
+
+    this.runEventMissStreak[period] = 0;
+    this.runEventLastTriggerDay[period] = day;
+    this.runEventLastAnyTriggerDay = day;
+    this.runEventLastAnyTriggerPeriod = period;
+    const cooldownDays = day <= 3
+      ? Phaser.Math.Between(2, 3)
+      : day <= 8
+        ? Phaser.Math.Between(1, 3)
+        : Phaser.Math.Between(1, 2);
+    this.runEventGlobalCooldownUntilDay = day + cooldownDays;
+    this.runEventRecentHistory.push({ id: picked.id, period, arc: picked.arc, day });
+    if (this.runEventRecentHistory.length > 28) {
+      this.runEventRecentHistory.splice(0, this.runEventRecentHistory.length - 28);
+    }
     this.showRunEventPanel(picked);
     return true;
   }
@@ -1779,83 +2142,157 @@ export default class GameScene extends Phaser.Scene {
 
     const rewardMul = this.getRunEventRewardMultiplier(eventDef.period);
     const riskMul = this.getRunEventRiskMultiplier(eventDef.period);
+    const loreSnippet = this.pickRunEventLoreSnippet(eventDef);
+    this.runEventActiveLoreSnippet = loreSnippet;
+    const loreTitle = loreSnippet?.titleCN || '线索摘要';
+    const loreText = loreSnippet?.textCN || eventDef.loreTextCN;
 
     const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.7)
       .setScrollFactor(0);
     container.add(overlay);
 
-    const panelW = Math.min(920, w - 70);
-    const panelH = Math.min(440, h - 80);
+    const compactLayout = (this.mobileViewport && h > w * 0.95) || w <= 620;
+    const panelW = compactLayout ? Math.min(760, w - 24) : Math.min(980, w - 60);
+    const panelH = compactLayout ? Math.min(760, h - 28) : Math.min(590, h - 44);
+    const tinyCompactLayout = compactLayout && panelH < 690;
     const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, 0x0f172a, 0.96)
       .setScrollFactor(0)
       .setStrokeStyle(2, eventDef.period === 'night' ? 0xf97316 : 0x0ea5e9, 0.85);
     container.add(panel);
 
-    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 24, eventDef.titleCN, {
-      fontSize: '24px',
+    this.runEventCurrentChapter = this.getRunEventStoryChapter();
+    const chapterLabel = RUN_EVENT_CHAPTER_LABELS[this.runEventCurrentChapter] || `章节${this.runEventCurrentChapter}`;
+    const factionSummary = this.getRunEventFactionSummary(eventDef);
+    const titleFont = compactLayout ? (tinyCompactLayout ? '32px' : '36px') : '44px';
+    const descFont = compactLayout ? (tinyCompactLayout ? '17px' : '19px') : '22px';
+    const metaFont = compactLayout ? (tinyCompactLayout ? '15px' : '17px') : '20px';
+    const storyFont = compactLayout ? (tinyCompactLayout ? '16px' : '18px') : '21px';
+    const knownLore = this.getUnlockedRunEventLoreCount();
+    const unlockedPieces = this.getUnlockedRunEventLorePieceCount();
+    const totalPieces = this.getRunEventLorePieceTotalCount();
+    const arcName = RUN_EVENT_ARC_LABELS[eventDef.arc] || '未知线';
+    const topY = h / 2 - panelH / 2 + (compactLayout ? 14 : 20);
+
+    container.add(this.add.text(w / 2, topY, eventDef.titleCN, {
+      fontSize: titleFont,
       color: eventDef.period === 'night' ? '#fdba74' : '#7dd3fc',
       fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
     }).setOrigin(0.5, 0));
 
-    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 64, eventDef.descCN, {
-      fontSize: '14px',
+    container.add(this.add.text(w / 2, topY + (compactLayout ? 42 : 52), eventDef.descCN, {
+      fontSize: descFont,
       color: '#cbd5e1',
       fontFamily: this.getUIFontFamily(),
       align: 'center',
-      wordWrap: { width: panelW - 42 },
+      lineSpacing: compactLayout ? 4 : 6,
+      wordWrap: { width: panelW - 40 },
     }).setOrigin(0.5, 0));
 
-    container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 108, `词缀联动：奖励 x${rewardMul.toFixed(2)} · 风险 x${riskMul.toFixed(2)}`, {
-      fontSize: '12px',
+    container.add(this.add.text(w / 2, topY + (compactLayout ? 84 : 108), `章节 ${this.runEventCurrentChapter}·${chapterLabel}  |  故事线 ${arcName}  |  线索 ${knownLore}/${RUN_EVENT_DEFS.length}  |  碎片 ${unlockedPieces}/${totalPieces}`, {
+      fontSize: metaFont,
+      color: '#67e8f9',
+      fontFamily: this.getUIFontFamily(),
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0));
+
+    container.add(this.add.text(w / 2, topY + (compactLayout ? 110 : 136), `线索[${loreTitle}]：${loreText}`, {
+      fontSize: storyFont,
+      color: '#c4b5fd',
+      fontFamily: this.getUIFontFamily(),
+      align: 'center',
+      lineSpacing: compactLayout ? 2 : 4,
+      wordWrap: { width: panelW - 56 },
+    }).setOrigin(0.5, 0));
+
+    container.add(this.add.text(w / 2, topY + (compactLayout ? 142 : 176), factionSummary, {
+      fontSize: compactLayout ? (tinyCompactLayout ? '14px' : '15px') : '17px',
+      color: '#86efac',
+      fontFamily: this.getUIFontFamily(),
+      align: 'center',
+      wordWrap: { width: panelW - 52 },
+    }).setOrigin(0.5, 0));
+
+    container.add(this.add.text(w / 2, topY + (compactLayout ? 168 : 202), `词缀联动：奖励 x${rewardMul.toFixed(2)} · 风险 x${riskMul.toFixed(2)}`, {
+      fontSize: metaFont,
       color: '#fbbf24',
       fontFamily: this.getUIFontFamily(),
       fontStyle: 'bold',
     }).setOrigin(0.5, 0));
 
-    const btnY = h / 2 + 35;
-    const leftX = w / 2 - panelW * 0.25;
-    const rightX = w / 2 + panelW * 0.25;
-    const buttonW = Math.max(260, panelW * 0.42);
-    const buttonH = 190;
+    container.add(this.add.text(w / 2, topY + (compactLayout ? 194 : 230), '12秒无操作将自动随机决策', {
+      fontSize: compactLayout ? '14px' : '16px',
+      color: '#94a3b8',
+      fontFamily: this.getUIFontFamily(),
+    }).setOrigin(0.5, 0));
+
+    const buttonW = compactLayout ? panelW - 34 : Math.max(340, panelW * 0.42);
+    const cardGap = compactLayout ? 16 : 22;
+    const buttonH = compactLayout
+      ? Math.round(Phaser.Math.Clamp((panelH - 278 - cardGap) / 2, 106, 194))
+      : 244;
+    const cardStartY = topY + (compactLayout ? 208 : 238);
+    const compactTinyCard = compactLayout && buttonH <= 120;
+    const choiceTitleFont = compactLayout ? (buttonH <= 120 ? '20px' : '31px') : '33px';
+    const choiceBodyFont = compactLayout ? (buttonH <= 120 ? '13px' : '17px') : '18px';
+    const choicePreviewFont = compactLayout ? (buttonH <= 120 ? '12px' : '15px') : '16px';
+    const choiceHintFont = compactLayout ? (buttonH <= 120 ? '12px' : '16px') : '16px';
+    const buttonPositions = compactLayout
+      ? [
+        { x: w / 2, y: cardStartY + buttonH / 2 },
+        { x: w / 2, y: cardStartY + buttonH / 2 + buttonH + cardGap },
+      ]
+      : [
+        { x: w / 2 - panelW * 0.25, y: cardStartY + buttonH / 2 },
+        { x: w / 2 + panelW * 0.25, y: cardStartY + buttonH / 2 },
+      ];
 
     eventDef.choices.forEach((choice, index) => {
-      const cx = index === 0 ? leftX : rightX;
+      const cx = buttonPositions[index].x;
+      const cy = buttonPositions[index].y;
       const accent = index === 0 ? 0x22c55e : 0xf97316;
-      const card = this.add.rectangle(cx, btnY, buttonW, buttonH, 0x111827, 0.92)
+      const card = this.add.rectangle(cx, cy, buttonW, buttonH, 0x111827, 0.92)
         .setScrollFactor(0)
         .setStrokeStyle(2, accent, 0.9);
       container.add(card);
 
-      const preview = this.describeRunEventChoice(choice, eventDef.period);
-      container.add(this.add.text(cx, btnY - 78, choice.titleCN, {
-        fontSize: '18px',
+      const previewLimit = compactTinyCard ? 1 : compactLayout ? 3 : 4;
+      const preview = this.describeRunEventChoice(choice, eventDef.period, previewLimit);
+      container.add(this.add.text(cx, cy - buttonH / 2 + (compactTinyCard ? 8 : 18), choice.titleCN, {
+        fontSize: choiceTitleFont,
         color: '#e2e8f0',
         fontFamily: this.getUIFontFamily(),
         fontStyle: 'bold',
       }).setOrigin(0.5, 0));
-      container.add(this.add.text(cx, btnY - 48, choice.detailCN, {
-        fontSize: '12px',
+      container.add(this.add.text(cx, cy - buttonH / 2 + (compactTinyCard ? 28 : 62), choice.detailCN, {
+        fontSize: choiceBodyFont,
         color: '#94a3b8',
         fontFamily: this.getUIFontFamily(),
         align: 'center',
-        wordWrap: { width: buttonW - 20 },
+        wordWrap: { width: buttonW - 28 },
       }).setOrigin(0.5, 0));
-      container.add(this.add.text(cx, btnY - 6, preview, {
-        fontSize: '12px',
+      container.add(this.add.text(cx, cy - buttonH / 2 + (compactTinyCard ? 44 : 100), preview, {
+        fontSize: choicePreviewFont,
         color: '#cbd5e1',
         fontFamily: this.getUIFontFamily(),
         align: 'center',
-        wordWrap: { width: buttonW - 24 },
-        lineSpacing: 4,
+        wordWrap: { width: buttonW - 32 },
+        lineSpacing: compactLayout ? 3 : 4,
       }).setOrigin(0.5, 0));
-      container.add(this.add.text(cx, btnY + buttonH / 2 - 24, '点击选择', {
-        fontSize: '11px',
-        color: '#64748b',
-        fontFamily: this.getUIFontFamily(),
-      }).setOrigin(0.5, 0.5));
+      if (!compactLayout) {
+        container.add(this.add.text(cx, cy + buttonH / 2 - 24, '点击选择', {
+          fontSize: choiceHintFont,
+          color: '#64748b',
+          fontFamily: this.getUIFontFamily(),
+        }).setOrigin(0.5, 0.5));
+      }
 
-      const clickZone = this.add.zone(cx, btnY, buttonW, buttonH)
+      const clickZone = this.add.zone(
+        cx,
+        cy,
+        buttonW + (this.mobileViewport ? 14 : 0),
+        buttonH + (this.mobileViewport ? 10 : 0)
+      )
         .setScrollFactor(0)
         .setInteractive({ useHandCursor: true });
       container.add(clickZone);
@@ -1882,7 +2319,7 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  private describeRunEventChoice(choice: RunEventChoiceDef, period: RunEventPeriod): string {
+  private describeRunEventChoice(choice: RunEventChoiceDef, period: RunEventPeriod, maxEntries: number = 4): string {
     const rewardMul = this.getRunEventRewardMultiplier(period);
     const riskMul = this.getRunEventRiskMultiplier(period);
     const previewParts: string[] = [];
@@ -1926,13 +2363,26 @@ export default class GameScene extends Phaser.Scene {
       const avgBtc = (choice.bitcoin[0] + choice.bitcoin[1]) / 2;
       previewParts.push(`+₿${(avgBtc * rewardMul).toFixed(2)}`);
     }
-    return previewParts.join('\n');
+    if (previewParts.length > maxEntries) {
+      const hidden = previewParts.length - maxEntries;
+      const compact = previewParts.slice(0, maxEntries);
+      compact.push(`其余${hidden}项变化`);
+      return compact.map((line) => `• ${line}`).join('\n');
+    }
+    return previewParts.map((line) => `• ${line}`).join('\n');
   }
 
   private resolveRunEventChoice(eventDef: RunEventDef, choice: RunEventChoiceDef): void {
     const rewardMul = this.getRunEventRewardMultiplier(eventDef.period);
     const riskMul = this.getRunEventRiskMultiplier(eventDef.period);
     const rewardParts: string[] = [];
+    const loreSnippet = this.runEventActiveLoreSnippet;
+    this.markRunEventSeen(eventDef.id);
+    this.unlockRunEventStoryFlags(eventDef.setFlags);
+    this.unlockRunEventStoryFlags(choice.setFlags);
+    const newlyUnlockedLore = this.unlockRunEventLore(eventDef);
+    const newlyUnlockedLorePiece = loreSnippet ? this.unlockRunEventLorePiece(eventDef, loreSnippet) : false;
+    const arcName = RUN_EVENT_ARC_LABELS[eventDef.arc] || '未知线';
     const labels: Record<keyof Resources, string> = {
       wood: '木',
       metal: '金',
@@ -2003,6 +2453,8 @@ export default class GameScene extends Phaser.Scene {
       rewardParts.push(`敌袭+${count}`);
     }
 
+    const factionNotices = this.applyRunEventFactionStanding(choice.id);
+
     events.emit('update-resources', gameState.data.resources);
     const summary = rewardParts.length > 0 ? rewardParts.join(' ') : '无变化';
     this.showFloatingText(this.cameras.main.width / 2, 126, `${choice.titleCN}: ${summary}`, '#fbbf24', true);
@@ -2013,6 +2465,25 @@ export default class GameScene extends Phaser.Scene {
       '#93c5fd',
       true
     );
+    if (factionNotices.length > 0) {
+      this.showFloatingText(
+        this.cameras.main.width / 2,
+        172,
+        `派系关系变动：${factionNotices.join(' · ')}`,
+        '#86efac',
+        true
+      );
+    }
+    if (newlyUnlockedLore || newlyUnlockedLorePiece) {
+      this.showFloatingText(
+        this.cameras.main.width / 2,
+        factionNotices.length > 0 ? 196 : 174,
+        `线索解锁[${arcName}]：${loreSnippet?.textCN || eventDef.loreTextCN}`,
+        '#a78bfa',
+        true
+      );
+    }
+    this.runEventCurrentChapter = this.getRunEventStoryChapter();
 
     this.runEventOpen = false;
     this.setUISceneInputEnabled(true);
@@ -2020,6 +2491,7 @@ export default class GameScene extends Phaser.Scene {
     this.runEventAutoPickTimer = null;
     this.runEventContainer?.destroy();
     this.runEventContainer = null;
+    this.runEventActiveLoreSnippet = null;
 
     if (this.pendingNightWaveStartAfterEvent) {
       this.pendingNightWaveStartAfterEvent = false;
@@ -2114,14 +2586,14 @@ export default class GameScene extends Phaser.Scene {
       .setStrokeStyle(2, 0xf59e0b, 0.85);
     container.add(panel);
     container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 16, '夜间战术线 · 指令选择', {
-      fontSize: this.worldFs(compactLayout ? 23 : 24, compactLayout ? 20 : 21),
+      fontSize: this.worldFs(compactLayout ? 28 : 30, compactLayout ? 24 : 25),
       color: '#f8fafc',
       fontFamily: uiFont,
       fontStyle: 'bold',
     }).setOrigin(0.5, 0));
     if (this.mobileViewport) {
       container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 42, '手机端：直接点击下方大按钮执行指令', {
-        fontSize: this.worldFs(12, 11),
+        fontSize: this.worldFs(14, 12),
         color: '#93c5fd',
         fontFamily: uiFont,
       }).setOrigin(0.5, 0));
@@ -2131,7 +2603,7 @@ export default class GameScene extends Phaser.Scene {
       ? `白天筹备层数 ${this.dayOpsNightPrepStacks}/${prepCap}（夜战加成 x${(1 + Math.min(0.24, this.dayOpsNightPrepStacks * 0.04)).toFixed(2)}）`
       : '白天筹备层数 0（先完成白天委托可强化夜战）';
     container.add(this.add.text(w / 2, h / 2 - panelH / 2 + (this.mobileViewport ? 60 : 52), prepBonus, {
-      fontSize: this.worldFs(13, 12),
+      fontSize: this.worldFs(16, 13),
       color: '#fbbf24',
       fontFamily: uiFont,
     }).setOrigin(0.5, 0));
@@ -2155,20 +2627,20 @@ export default class GameScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true });
       const texts = [
         this.add.text(x, y - cardH / 2 + 14, def.nameCN, {
-          fontSize: this.worldFs(compactLayout ? 19 : 21, compactLayout ? 16 : 17),
+          fontSize: this.worldFs(compactLayout ? 24 : 26, compactLayout ? 19 : 20),
           color: '#e2e8f0',
           fontFamily: uiFont,
           fontStyle: 'bold',
         }).setOrigin(0.5, 0),
         this.add.text(x, y - cardH / 2 + 40, def.summaryCN, {
-          fontSize: this.worldFs(13, 11),
+          fontSize: this.worldFs(16, 13),
           color: '#94a3b8',
           fontFamily: uiFont,
           align: 'center',
           wordWrap: { width: cardW - 64, useAdvancedWrap: true },
         }).setOrigin(0.5, 0),
         this.add.text(x + (compactLayout ? 6 : 0), y + 4, `伤害x${def.effects.playerDamageMul.toFixed(2)} · 掉落x${def.effects.lootMul.toFixed(2)}\n压力x${def.effects.enemyPressureMul.toFixed(2)} · 经验x${def.effects.xpMul.toFixed(2)}`, {
-          fontSize: this.worldFs(12, 10),
+          fontSize: this.worldFs(14, 12),
           color: '#93c5fd',
           fontFamily: uiFont,
           align: 'center',
@@ -2185,7 +2657,7 @@ export default class GameScene extends Phaser.Scene {
         0.2
       ).setScrollFactor(0).setStrokeStyle(1, def.color, 0.95).setInteractive({ useHandCursor: true });
       const actionText = this.add.text(x, y + cardH / 2 - 20, compactLayout ? '触控执行指令' : '点击执行', {
-          fontSize: this.worldFs(compactLayout ? 13 : 12, compactLayout ? 11 : 10),
+          fontSize: this.worldFs(compactLayout ? 15 : 14, compactLayout ? 12 : 11),
           color: '#64748b',
           fontFamily: uiFont,
         }).setOrigin(0.5);
@@ -3820,14 +4292,31 @@ export default class GameScene extends Phaser.Scene {
     return '山洞区域';
   }
 
-  private buildDayChallengeForBranch(day: number, branch: DayChallengeBranch): DayExplorationChallenge {
+  private buildDayChallengeForBranch(
+    day: number,
+    branch: DayChallengeBranch,
+    blockedActions?: Set<ExplorationActionType>
+  ): DayExplorationChallenge {
     const pacing = this.getRunPacingProfile(day);
     const actionPool: ExplorationActionType[] = branch === 'stable'
       ? ['fish', 'swim', 'scavenge']
       : branch === 'adventure'
         ? ['hunt', 'scavenge', 'fish', 'swim']
         : ['cave_explore', 'hunt', 'scavenge'];
-    const actionType = Phaser.Utils.Array.GetRandom(actionPool);
+    const branchHistory = this.dayChallengeBranchRecentActions[branch] || [];
+    const recentActionSet = new Set(branchHistory.slice(-2));
+    let actionCandidates = actionPool.filter((actionType) => (
+      !recentActionSet.has(actionType)
+      && !(blockedActions?.has(actionType))
+    ));
+    if (actionCandidates.length <= 0 && blockedActions && blockedActions.size > 0) {
+      actionCandidates = actionPool.filter((actionType) => !blockedActions.has(actionType));
+    }
+    if (actionCandidates.length <= 0) actionCandidates = [...actionPool];
+    const actionType = Phaser.Utils.Array.GetRandom(actionCandidates);
+    branchHistory.push(actionType);
+    if (branchHistory.length > 8) branchHistory.splice(0, branchHistory.length - 8);
+    this.dayChallengeBranchRecentActions[branch] = branchHistory;
     const targetQuality: 'good' | 'perfect' = branch === 'stable'
       ? 'good'
       : branch === 'adventure'
@@ -3983,20 +4472,20 @@ export default class GameScene extends Phaser.Scene {
 
     const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x020617, 0.78).setScrollFactor(0);
     container.add(overlay);
-    const panelW = Math.min(760, w - 48);
-    const panelH = Math.min(430, h - 70);
+    const panelW = Math.min(860, w - 34);
+    const panelH = Math.min(500, h - 46);
     const panel = this.add.rectangle(w / 2, h / 2, panelW, panelH, 0x0f172a, 0.96)
       .setScrollFactor(0)
       .setStrokeStyle(2, 0x38bdf8, 0.85);
     container.add(panel);
     container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 18, '每日挑战 · 三路分支', {
-      fontSize: this.worldFs(26, 22),
+      fontSize: this.worldFs(32, 26),
       color: '#e2e8f0',
       fontFamily: uiFont,
       fontStyle: 'bold',
     }).setOrigin(0.5, 0));
     container.add(this.add.text(w / 2, h / 2 - panelH / 2 + 54, '选择今日白天策略：稳妥 / 冒险 / 极限（将影响今日收益风险，并累积永久精通）', {
-      fontSize: this.worldFs(14, 13),
+      fontSize: this.worldFs(18, 15),
       color: '#94a3b8',
       fontFamily: uiFont,
       align: 'center',
@@ -4038,55 +4527,55 @@ export default class GameScene extends Phaser.Scene {
 
       const texts = [
         this.add.text(x, startY - cardH / 2 + 16, choice.branchNameCN, {
-          fontSize: this.worldFs(21, 18),
+          fontSize: this.worldFs(26, 21),
           color: '#f8fafc',
           fontFamily: uiFont,
           fontStyle: 'bold',
         }).setOrigin(0.5, 0),
         this.add.text(x, startY - cardH / 2 + 48, `精通 Lv.${masteryLv}`, {
-          fontSize: this.worldFs(13, 12),
+          fontSize: this.worldFs(15, 13),
           color: '#67e8f9',
           fontFamily: uiFont,
         }).setOrigin(0.5, 0),
         this.add.text(x, startY - cardH / 2 + 74, choice.title, {
-          fontSize: this.worldFs(15, 13),
+          fontSize: this.worldFs(18, 15),
           color: '#cbd5e1',
           fontFamily: uiFont,
           align: 'center',
           wordWrap: { width: cardW - 20, useAdvancedWrap: true },
         }).setOrigin(0.5, 0),
         this.add.text(x, startY - cardH / 2 + 128, `${spotName} · ${qualityText} ${choice.required}次`, {
-          fontSize: this.worldFs(13, 12),
+          fontSize: this.worldFs(16, 14),
           color: '#fbbf24',
           fontFamily: uiFont,
           align: 'center',
         }).setOrigin(0.5, 0),
         this.add.text(x, startY - cardH / 2 + 154, choice.dailyEffect, {
-          fontSize: this.worldFs(12, 11),
+          fontSize: this.worldFs(15, 12),
           color: '#93c5fd',
           fontFamily: uiFont,
           align: 'center',
           wordWrap: { width: cardW - 24, useAdvancedWrap: true },
         }).setOrigin(0.5, 0),
         this.add.text(x, startY + cardH / 2 - 82, `完成奖励 ${rewardPreview.join(' · ')}`, {
-          fontSize: this.worldFs(12, 11),
+          fontSize: this.worldFs(15, 12),
           color: '#86efac',
           fontFamily: uiFont,
           align: 'center',
           wordWrap: { width: cardW - 24, useAdvancedWrap: true },
         }).setOrigin(0.5, 0),
         this.add.text(x, startY + cardH / 2 - 54, `+XP${choice.reward.xp} · 永久精通+${choice.masteryGain}`, {
-          fontSize: this.worldFs(12, 11),
+          fontSize: this.worldFs(15, 12),
           color: '#fda4af',
           fontFamily: uiFont,
           align: 'center',
         }).setOrigin(0.5, 0),
       ];
-      const pickBtn = this.add.rectangle(x, startY + cardH / 2 - 20, cardW - 30, 34, 0x13233a, 0.98)
+      const pickBtn = this.add.rectangle(x, startY + cardH / 2 - 22, cardW - 30, 40, 0x13233a, 0.98)
         .setStrokeStyle(1, branchColor, 0.95)
         .setInteractive({ useHandCursor: true });
-      const pickText = this.add.text(x, startY + cardH / 2 - 20, `选择${choice.branchNameCN}`, {
-        fontSize: this.worldFs(15, 13),
+      const pickText = this.add.text(x, startY + cardH / 2 - 22, `选择${choice.branchNameCN}`, {
+        fontSize: this.worldFs(17, 14),
         color: '#e2e8f0',
         fontFamily: uiFont,
         fontStyle: 'bold',
@@ -4105,11 +4594,13 @@ export default class GameScene extends Phaser.Scene {
     this.dayChallengeDayRewardMul = 1;
     this.dayChallengeDayDangerMul = 1;
     this.dayChallengeDayXpMul = 1;
-    const choices: DayExplorationChallenge[] = [
-      this.buildDayChallengeForBranch(day, 'stable'),
-      this.buildDayChallengeForBranch(day, 'adventure'),
-      this.buildDayChallengeForBranch(day, 'extreme'),
-    ];
+    const pickedActions = new Set<ExplorationActionType>();
+    const stable = this.buildDayChallengeForBranch(day, 'stable', pickedActions);
+    pickedActions.add(stable.actionType);
+    const adventure = this.buildDayChallengeForBranch(day, 'adventure', pickedActions);
+    pickedActions.add(adventure.actionType);
+    const extreme = this.buildDayChallengeForBranch(day, 'extreme', pickedActions);
+    const choices: DayExplorationChallenge[] = [stable, adventure, extreme];
     if (!showAnnouncement) {
       this.selectDayExplorationChallenge(choices[0]);
       return;
@@ -4365,7 +4856,16 @@ export default class GameScene extends Phaser.Scene {
     const key = this.getMiniGameObjectAtlasKey(theme);
     if (!this.textures.exists(key)) return null;
     const texture = this.textures.get(key);
-    const useFrame = texture.has(frame) ? frame : (texture.has('hint') ? 'hint' : '__BASE');
+    let useFrame: string = frame;
+    if (!texture.has(useFrame)) {
+      if (texture.has('hint')) {
+        useFrame = 'hint';
+      } else {
+        const fallbackFrames = texture.getFrameNames();
+        if (!fallbackFrames || fallbackFrames.length <= 0) return null;
+        useFrame = fallbackFrames[0];
+      }
+    }
     const icon = this.add.image(x, y, key, useFrame)
       .setDisplaySize(size, size)
       .setAlpha(alpha)
@@ -8282,6 +8782,10 @@ export default class GameScene extends Phaser.Scene {
       if (this.currentFacility) return;
       events.emit('toggle-collection');
     });
+    this.input.keyboard!.on('keydown-J', () => {
+      if (this.currentFacility) return;
+      events.emit('toggle-loot-codex');
+    });
     this.input.keyboard!.on('keydown-T', () => {
       if (this.currentFacility) return;
       if (this.scene.isActive('UIScene')) return;
@@ -11555,7 +12059,15 @@ export default class GameScene extends Phaser.Scene {
 
   private showMerchantUI(): void {
     events.emit('toggle-exchange');
-    this.showFloatingText(this.player.x, this.player.y - 44, '打开数据交易所', '#fbbf24', false);
+    const quote = this.getMerchantFactionQuoteProfile();
+    this.showFloatingText(this.player.x, this.player.y - 58, '打开数据交易所', '#fbbf24', false);
+    this.showFloatingText(
+      this.player.x,
+      this.player.y - 36,
+      `报价x${quote.rateMul.toFixed(2)} · 镜价x${quote.glassesMul.toFixed(2)}`,
+      '#67e8f9',
+      false
+    );
   }
 
   private showCommanderUI(): void {
@@ -13765,14 +14277,21 @@ export default class GameScene extends Phaser.Scene {
         this.showFloatingText(w / 2, y, `⚠ 缺粮 ${totalFoodDeficit}`, '#ef4444', true);
       }
 
-      const rates = BaseSystem.getDailyExchangeRates();
+      const quote = this.getMerchantFactionQuoteProfile();
+      const rates = BaseSystem.getDailyExchangeRates(gameState.data.currentDay, quote.rateMul);
       const topRates = (Object.keys(rates) as Array<keyof typeof rates>)
         .sort((a, b) => rates[b] - rates[a])
         .slice(0, 2)
         .map(key => `${BaseSystem.getResourceShortName(key)} ${rates[key].toFixed(3)}₿`)
         .join(' | ');
-      const glassesIndex = BaseSystem.getDailyGlassesPriceMultiplier();
-      this.showFloatingText(w / 2, y + 30, `行情: ${topRates}  ·  镜价指数 x${glassesIndex.toFixed(2)}`, '#38bdf8', true);
+      const glassesIndex = BaseSystem.getDailyGlassesPriceMultiplier(gameState.data.currentDay, quote.glassesMul);
+      this.showFloatingText(
+        w / 2,
+        y + 30,
+        `行情: ${topRates}  ·  镜价指数 x${glassesIndex.toFixed(2)}  ·  派系报价 x${quote.rateMul.toFixed(2)}`,
+        '#38bdf8',
+        true
+      );
       this.showFloatingText(w / 2, y + 60, '白天日常开启：伙伴将持续产出与触发协助事件', '#93c5fd', true);
       this.showFloatingText(w / 2, y + 90, '白天探索升级：地点可手动触发高风险高收益连携事件', '#22d3ee', true);
       if (this.dayExplorationChallenge && !this.dayExplorationChallenge.completed) {
@@ -13886,9 +14405,127 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  private getLootLegendSeenFlagKey(resourceId: string): string {
+    return `loot_legend_seen_${resourceId}`;
+  }
+
+  private enqueueLootLegend(resourceId: string): void {
+    const codex = LOOT_CODEX_BY_ID[resourceId];
+    if (!codex) return;
+    const seenFlag = this.getLootLegendSeenFlagKey(resourceId);
+    if (gameState.data.storyFlags[seenFlag]) return;
+    gameState.data.storyFlags[seenFlag] = true;
+    if (this.lootLegendActiveResourceId === resourceId || this.lootLegendQueue.includes(resourceId)) return;
+    this.lootLegendQueue.push(resourceId);
+    this.tryShowLootLegend();
+  }
+
+  private tryShowLootLegend(): void {
+    if (this.lootLegendContainer || this.lootLegendQueue.length <= 0) return;
+    const resourceId = this.lootLegendQueue.shift();
+    if (!resourceId) return;
+    this.lootLegendActiveResourceId = resourceId;
+    this.lootLegendAutoCloseTimer?.remove(false);
+    this.lootLegendAutoCloseTimer = null;
+
+    const codex = LOOT_CODEX_BY_ID[resourceId];
+    const iconKey = codex?.iconKey || 'loot_scrap';
+    const style = codex ? {
+      name: codex.nameCN,
+      desc: codex.usageCN,
+      color: codex.accentColor,
+      colorText: codex.accentText,
+    } : {
+      name: resourceId,
+      desc: '资源图例已解锁',
+      color: 0x67e8f9,
+      colorText: '#67e8f9',
+    };
+
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const x = w - 186;
+    const y = h - (this.mobileViewport ? 190 : 166);
+    const container = this.add.container(0, 0).setDepth(3430).setScrollFactor(0).setAlpha(0);
+    this.lootLegendContainer = container;
+
+    const bg = this.add.rectangle(x, y, 320, 94, 0x020617, 0.94)
+      .setStrokeStyle(2, style.color, 0.9)
+      .setInteractive({ useHandCursor: true });
+    const iconPlate = this.add.rectangle(x - 126, y, 54, 54, 0x0b1220, 0.96)
+      .setStrokeStyle(1, style.color, 0.85);
+    const icon = this.textures.exists(iconKey)
+      ? this.add.image(x - 126, y, iconKey).setScale(1.35)
+      : this.add.image(x - 126, y, 'loot_scrap').setScale(1.35);
+    const title = this.add.text(x - 92, y - 32, `图例解锁 · ${style.name}`, {
+      fontSize: this.worldFs(16, 13),
+      color: style.colorText,
+      fontFamily: this.getUIFontFamily(),
+      fontStyle: 'bold',
+    }).setOrigin(0, 0);
+    const desc = this.add.text(x - 92, y - 8, style.desc, {
+      fontSize: this.worldFs(14, 12),
+      color: '#cbd5e1',
+      fontFamily: this.getUIFontFamily(),
+      wordWrap: { width: 215 },
+    }).setOrigin(0, 0);
+    const tip = this.add.text(x + 134, y + 30, '点击关闭', {
+      fontSize: this.worldFs(12, 10),
+      color: '#64748b',
+      fontFamily: this.getUIFontFamily(),
+    }).setOrigin(1, 1);
+    container.add([bg, iconPlate, icon, title, desc, tip]);
+
+    const closeLegend = () => {
+      this.lootLegendAutoCloseTimer?.remove(false);
+      this.lootLegendAutoCloseTimer = null;
+      this.tweens.add({
+        targets: container,
+        alpha: 0,
+        y: '-=8',
+        duration: 180,
+        onComplete: () => {
+          container.destroy();
+          if (this.lootLegendContainer === container) {
+            this.lootLegendContainer = null;
+          }
+          this.lootLegendActiveResourceId = null;
+          if (this.lootLegendQueue.length > 0) {
+            this.time.delayedCall(120, () => this.tryShowLootLegend());
+          }
+        },
+      });
+    };
+    bg.on('pointerdown', closeLegend);
+    this.tweens.add({ targets: container, alpha: 1, duration: 180 });
+    this.lootLegendAutoCloseTimer = this.time.delayedCall(3600, closeLegend);
+  }
+
   private onLootCollected(data: { type: string; amount: number }): void {
     if (!data || !data.type) return;
-    QuestSystem.updateProgress('collect', data.type, Math.max(1, data.amount || 1));
+    const amount = Math.max(1, data.amount || 1);
+    this.lootCodexCollected[data.type] = (this.lootCodexCollected[data.type] || 0) + amount;
+    this.enqueueLootLegend(data.type);
+    events.emit('loot-codex-updated');
+    QuestSystem.updateProgress('collect', data.type, amount);
+
+    const now = this.time.now;
+    const isRare = data.type === 'energyCore' || data.type === 'medical' || data.type === 'ammo';
+    if (!isRare && amount < 2 && now < this.lootToastNextAt) return;
+
+    const names: Record<string, { label: string; color: string }> = {
+      wood: { label: '木材', color: '#f59e0b' },
+      metal: { label: '金属', color: '#93c5fd' },
+      food: { label: '食物', color: '#fbbf24' },
+      water: { label: '净水', color: '#38bdf8' },
+      scrap: { label: '零件', color: '#cbd5e1' },
+      medical: { label: '医疗', color: '#f87171' },
+      ammo: { label: '弹药', color: '#fb923c' },
+      energyCore: { label: '能量核', color: '#c4b5fd' },
+    };
+    const entry = names[data.type] || { label: data.type, color: '#e2e8f0' };
+    this.showFloatingText(this.player.x, this.player.y - 58, `+${entry.label} ${amount}`, entry.color, false);
+    this.lootToastNextAt = now + 180;
   }
 
   private onCompanionStatusChanged(data: { id: string; status: 'party' | 'base' }): void {
@@ -14213,6 +14850,22 @@ export default class GameScene extends Phaser.Scene {
     this.runEventContainer?.destroy();
     this.runEventContainer = null;
     this.runEventOpen = false;
+    this.runEventRecentHistory = [];
+    this.runEventRecentLorePieces = [];
+    this.runEventActiveLoreSnippet = null;
+    this.runEventMissStreak = { day: 0, night: 0 };
+    this.runEventLastTriggerDay = { day: -99, night: -99 };
+    this.runEventLastAnyTriggerDay = -99;
+    this.runEventLastAnyTriggerPeriod = null;
+    this.runEventGlobalCooldownUntilDay = 1;
+    this.runEventCurrentChapter = 1;
+    this.runEventFactionStanding = {
+      survivorUnion: 0,
+      tradeRing: 0,
+      citadelAI: 0,
+      labRemnant: 0,
+      mutantSwarm: 0,
+    };
     this.nightDirectiveAutoPickTimer?.remove(false);
     this.nightDirectiveAutoPickTimer = null;
     this.nightDirectiveSelectionContainer?.destroy();
@@ -14221,6 +14874,7 @@ export default class GameScene extends Phaser.Scene {
     this.nightDirectiveId = null;
     this.dayOpsContracts = [];
     this.dayOpsNightPrepStacks = 0;
+    this.dayChallengeBranchRecentActions = { stable: [], adventure: [], extreme: [] };
     this.battleMomentum = 0;
     this.battleMomentumBoostUntil = 0;
     this.battleMomentumPulseAt = 0;
@@ -14247,6 +14901,7 @@ export default class GameScene extends Phaser.Scene {
     this.playerSystem?.setVirtualDirection(0, 0);
     (window as any).__force_bloodmoon_test = undefined;
     (window as any).__debug_trigger_run_event = undefined;
+    (window as any).__debug_show_loot_legend = undefined;
     (window as any).__debug_open_cave_raid = undefined;
     (window as any).__debug_open_forest_hunt = undefined;
     (window as any).__debug_open_city_scavenge = undefined;

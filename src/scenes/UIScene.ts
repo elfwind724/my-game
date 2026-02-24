@@ -19,6 +19,7 @@ import { ExchangePanel } from '../ui/ExchangePanel';
 import { GlassesShopPanel } from '../ui/GlassesShopPanel';
 import { EvolutionSystem } from '../systems/EvolutionSystem';
 import { GearVaultPanel } from '../ui/GearVaultPanel';
+import { LootCodexPanel } from '../ui/LootCodexPanel';
 
 export default class UIScene extends Phaser.Scene {
   // Top bar
@@ -58,6 +59,10 @@ export default class UIScene extends Phaser.Scene {
   private waveText!: Phaser.GameObjects.Text;
   private bloodMoonIndicator!: Phaser.GameObjects.Text;
   private questHudText!: Phaser.GameObjects.Text;
+  private storyChainText!: Phaser.GameObjects.Text;
+  private storyChainBarBg!: Phaser.GameObjects.Rectangle;
+  private storyChainBarFill!: Phaser.GameObjects.Rectangle;
+  private storyChainUpdateAt: number = 0;
 
   // Grade
   private gradeText!: Phaser.GameObjects.Text;
@@ -91,6 +96,7 @@ export default class UIScene extends Phaser.Scene {
   private exchangePanel!: ExchangePanel;
   private glassesShopPanel!: GlassesShopPanel;
   private gearVaultPanel!: GearVaultPanel;
+  private lootCodexPanel!: LootCodexPanel;
   private brandTreeText!: Phaser.GameObjects.Text;
   private mobileViewport: boolean = false;
   private mobileControls: Phaser.GameObjects.Container | null = null;
@@ -145,6 +151,7 @@ export default class UIScene extends Phaser.Scene {
     this.exchangePanel = new ExchangePanel(this);
     this.glassesShopPanel = new GlassesShopPanel(this);
     this.gearVaultPanel = new GearVaultPanel(this);
+    this.lootCodexPanel = new LootCodexPanel(this);
     this.input.setTopOnly(true);
 
     // ========================================
@@ -164,9 +171,24 @@ export default class UIScene extends Phaser.Scene {
     this.timeBar = this.add.graphics().setDepth(1001);
 
     // Blood moon indicator
-    this.bloodMoonIndicator = this.add.text(w / 2, 36, '', {
+    this.bloodMoonIndicator = this.add.text(w / 2, 56, '', {
       fontSize: this.hudFs(12, 11), color: '#ef4444', fontFamily: this.uiFontFamily, fontStyle: 'bold',
     }).setOrigin(0.5, 0).setDepth(1001);
+    this.storyChainText = this.add.text(w / 2, 36, '事件链: 前置 0/2', {
+      fontSize: this.hudFs(12, 11),
+      color: '#67e8f9',
+      fontFamily: this.uiFontFamily,
+      fontStyle: 'bold',
+    }).setOrigin(0.5, 0).setDepth(1001);
+    this.storyChainBarBg = this.add.rectangle(w / 2, 50, 248, 4, 0x1e293b, 0.9)
+      .setDepth(1001)
+      .setScrollFactor(0)
+      .setOrigin(0.5, 0.5)
+      .setStrokeStyle(1, 0x334155, 0.8);
+    this.storyChainBarFill = this.add.rectangle(w / 2 - 124, 50, 2, 4, 0x22d3ee, 0.96)
+      .setDepth(1002)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0);
 
     // Level + XP (top right)
     this.levelText = this.add.text(w - 15, 5, 'Lv.1', {
@@ -345,6 +367,7 @@ export default class UIScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.levelUpPanel?.getIsOpen()) return;
       if (this.gearVaultPanel?.getIsOpen()) { this.gearVaultPanel.toggle(); return; }
+      if (this.lootCodexPanel?.getIsOpen()) { this.lootCodexPanel.toggle(); return; }
       if (this.glassesShopPanel?.getIsOpen()) { this.glassesShopPanel.toggle(); return; }
       if (this.exchangePanel?.getIsOpen()) { this.exchangePanel.toggle(); return; }
       if (this.basePanel?.getIsOpen()) { this.basePanel.toggle(); return; }
@@ -366,6 +389,10 @@ export default class UIScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-V', () => {
       if (this.levelUpPanel?.getIsOpen()) return;
       this.gearVaultPanel.toggle();
+    });
+    this.input.keyboard?.on('keydown-J', () => {
+      if (this.levelUpPanel?.getIsOpen()) return;
+      this.lootCodexPanel.toggle();
     });
   }
 
@@ -626,6 +653,8 @@ export default class UIScene extends Phaser.Scene {
     events.on('open-glasses-shop', () => this.glassesShopPanel.toggle());
     events.on('toggle-gear-vault', () => this.gearVaultPanel.toggle());
     events.on('gear-stash-updated', () => this.gearVaultPanel.refresh());
+    events.on('toggle-loot-codex', () => this.lootCodexPanel.toggle());
+    events.on('loot-codex-updated', () => this.lootCodexPanel.refresh());
 
     events.on('show-levelup-panel', () => {
       this.levelUpPanel.show((choice) => {
@@ -683,6 +712,7 @@ export default class UIScene extends Phaser.Scene {
     if (this.levelUpPanel?.getIsOpen()) return;
     if (this.buildModeActive) { events.emit('mobile-toggle-build'); return; }
     if (this.gearVaultPanel?.getIsOpen()) { this.gearVaultPanel.toggle(); return; }
+    if (this.lootCodexPanel?.getIsOpen()) { this.lootCodexPanel.toggle(); return; }
     if (this.glassesShopPanel?.getIsOpen()) { this.glassesShopPanel.toggle(); return; }
     if (this.exchangePanel?.getIsOpen()) { this.exchangePanel.toggle(); return; }
     if (this.basePanel?.getIsOpen()) { this.basePanel.toggle(); return; }
@@ -880,6 +910,10 @@ export default class UIScene extends Phaser.Scene {
     this.updateMinimap();
     this.updateWeaponSlots();
     this.updateDurabilityDebuffHud();
+    if (time >= this.storyChainUpdateAt) {
+      this.storyChainUpdateAt = time + 180;
+      this.updateStoryChainHud();
+    }
     if (this.mobileViewport && time >= this.mobileUiRefreshAt) {
       this.mobileUiRefreshAt = time + 120;
       this.refreshMobileActionButtons();
@@ -960,6 +994,34 @@ export default class UIScene extends Phaser.Scene {
     const ratio = max > 0 ? Math.min(1, current / max) : 0;
     this.expBar.fillStyle(0x8b5cf6, 1);
     this.expBar.fillRoundedRect(x, y, barW * ratio, barH, 2);
+  }
+
+  private updateStoryChainHud(): void {
+    const gameScene = this.scene.get('GameScene') as any;
+    const snapshot = gameScene?.getRunEventHudProgressSnapshot?.();
+    if (!snapshot || typeof snapshot.chainRatio !== 'number') {
+      this.storyChainText?.setText('事件链: 前置 0/2');
+      this.storyChainBarFill?.setSize(2, 4);
+      return;
+    }
+    const chainRatio = Phaser.Math.Clamp(Number(snapshot.chainRatio || 0), 0, 1);
+    const chapter = Number(snapshot.chapter || 1);
+    const chapterLabel = snapshot.chapterLabel || `章节${chapter}`;
+    const stageLabel = snapshot.stageLabel || '前置';
+    const stageProgress = Math.max(0, Math.floor(snapshot.stageProgress || 0));
+    const stageTarget = Math.max(1, Math.floor(snapshot.stageTarget || 1));
+    const chapterProgress = Phaser.Math.Clamp(Number(snapshot.chapterProgress || 0), 0, 1);
+    const progressColor = chainRatio >= 0.9 ? '#f59e0b' : chainRatio >= 0.5 ? '#22d3ee' : '#67e8f9';
+    this.storyChainText.setText(`事件链 ${stageLabel} ${stageProgress}/${stageTarget} · 章节${chapter} ${chapterLabel}`);
+    this.storyChainText.setColor(progressColor);
+    this.storyChainBarFill.setSize(Math.max(2, Math.round(248 * chainRatio)), 4);
+    const fillColor = chainRatio >= 0.9
+      ? 0xf59e0b
+      : chapterProgress >= 0.66
+        ? 0x22d3ee
+        : 0x38bdf8;
+    this.storyChainBarBg.setFillStyle(chainRatio >= 0.9 ? 0x3f2a12 : 0x1e293b, 0.9);
+    this.storyChainBarFill.setFillStyle(fillColor, 0.96);
   }
 
   private updateTimeBar(timeOfDay: number = 0, isNight: boolean = false, isBloodMoon: boolean = false): void {
@@ -1326,6 +1388,8 @@ export default class UIScene extends Phaser.Scene {
     events.off('open-glasses-shop');
     events.off('toggle-gear-vault');
     events.off('gear-stash-updated');
+    events.off('toggle-loot-codex');
+    events.off('loot-codex-updated');
     events.off(GameEvents.BASE_UPDATED);
     events.off('quest-completed');
     events.off('show-levelup-panel');
@@ -1363,5 +1427,6 @@ export default class UIScene extends Phaser.Scene {
     this.exchangePanel?.destroy();
     this.glassesShopPanel?.destroy();
     this.gearVaultPanel?.destroy();
+    this.lootCodexPanel?.destroy();
   }
 }
