@@ -5,9 +5,9 @@
 import Phaser from 'phaser';
 import { gameState, type CompanionData, type CompanionProfile } from '../state/GameState';
 import { QuestSystem } from '../systems/QuestSystem';
-import { BaseSystem } from '../systems/BaseSystem';
+import { BaseSystem, type BuildChainStatus } from '../systems/BaseSystem';
 import { CompanionPersonalitySystem } from '../systems/CompanionPersonalitySystem';
-import { BUILDING_DEFS, BUILD_CATEGORIES } from '../data/buildings';
+import { BUILDING_DEFS, BUILD_CATEGORIES, getBuildingUpgradeHint } from '../data/buildings';
 import type { BuildingFilterCategory } from '../data/buildings';
 import type { BuildingDef } from '../data/buildings';
 import { events, GameEvents } from '../utils/EventBus';
@@ -104,6 +104,7 @@ class SlidePanel {
 export class CraftingPanel extends SlidePanel {
   private selectedBuildCategory: BuildingFilterCategory = 'all';
   private buildOnlyMode: boolean = true;
+  private buildCardPage: number = 0;
 
   constructor(scene: Phaser.Scene) {
     super(scene, 350, 'right');
@@ -134,6 +135,9 @@ export class CraftingPanel extends SlidePanel {
   openCategory(category: string, options?: { buildOnly?: boolean }): void {
     if (options?.buildOnly != null) this.buildOnlyMode = !!options.buildOnly;
     if (category && BUILD_CATEGORIES.some(c => c.id === category)) {
+      if (this.selectedBuildCategory !== (category as BuildingFilterCategory)) {
+        this.buildCardPage = 0;
+      }
       this.selectedBuildCategory = category as BuildingFilterCategory;
     }
     if (!this.isOpen) {
@@ -146,6 +150,9 @@ export class CraftingPanel extends SlidePanel {
   togglePanel(options?: { buildOnly?: boolean; category?: string }): void {
     if (options?.buildOnly != null) this.buildOnlyMode = !!options.buildOnly;
     if (options?.category && BUILD_CATEGORIES.some(c => c.id === options.category)) {
+      if (this.selectedBuildCategory !== (options.category as BuildingFilterCategory)) {
+        this.buildCardPage = 0;
+      }
       this.selectedBuildCategory = options.category as BuildingFilterCategory;
     }
     this.toggle();
@@ -178,7 +185,7 @@ export class CraftingPanel extends SlidePanel {
     const container = this.createBase();
     const fontBoost = this.getFontBoost();
     const layoutBoost = Phaser.Math.Clamp(fontBoost * 0.72, 1, 1.6);
-    const fs = (base: number, min: number = mobilePortrait ? 14 : 12) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const fs = (base: number, min: number = mobilePortrait ? 16 : 13) => `${Math.max(min, Math.round(base * fontBoost))}px`;
     const unit = (value: number) => Math.round(value * layoutBoost);
     const uiFont = this.getUIFontFamily();
 
@@ -248,6 +255,7 @@ export class CraftingPanel extends SlidePanel {
       if (tab.input) (tab.input as any).priorityID = 4;
       tab.on('pointerdown', () => {
         this.selectedBuildCategory = cat.id;
+        this.buildCardPage = 0;
         this.rebuild();
       });
       container.add(tab);
@@ -267,11 +275,23 @@ export class CraftingPanel extends SlidePanel {
       energyCore: '核',
     };
 
-    const cardH = mobilePortrait ? unit(108) : unit(90);
-    let y = unit(138);
-    for (const def of defs) {
-      if (y > h - unit(120)) break;
-      const canBuild = gameState.canAfford(def.cost as any);
+    const cardH = mobilePortrait ? unit(152) : unit(126);
+    const cardGap = unit(8);
+    const listTop = unit(138);
+    const listBottom = h - unit(120);
+    const availableHeight = Math.max(cardH, listBottom - listTop);
+    const cardsPerPage = Math.max(1, Math.floor((availableHeight + cardGap) / (cardH + cardGap)));
+    const totalPages = Math.max(1, Math.ceil(defs.length / cardsPerPage));
+    this.buildCardPage = Phaser.Math.Clamp(this.buildCardPage, 0, totalPages - 1);
+    const startIndex = this.buildCardPage * cardsPerPage;
+    const endIndex = Math.min(defs.length, startIndex + cardsPerPage);
+    const shownDefs = defs.slice(startIndex, endIndex);
+
+    let y = listTop;
+    for (const def of shownDefs) {
+      const canAfford = gameState.canAfford(def.cost as any);
+      const chainStatus = BaseSystem.getBuildChainStatus(def.id);
+      const canBuild = canAfford && chainStatus.canConstruct;
 
       const card = this.scene.add.rectangle(this.panelWidth / 2, y + cardH / 2, this.panelWidth - unit(20), cardH,
         canBuild ? 0x1e293b : 0x0b1220, 0.92);
@@ -299,8 +319,19 @@ export class CraftingPanel extends SlidePanel {
       container.add(this.scene.add.text(unit(42), y + unit(64), this.getBuildingPurposeLine(def), {
         fontSize: fs(11), color: '#cbd5e1', fontFamily: uiFont,
       }));
+      container.add(this.scene.add.text(unit(42), y + unit(78), this.getBuildChainLine(chainStatus), {
+        fontSize: fs(10), color: chainStatus.canConstruct ? '#67e8f9' : '#fb7185', fontFamily: uiFont,
+        wordWrap: { width: this.panelWidth - unit(190) },
+      }));
+      container.add(this.scene.add.text(unit(42), y + unit(92), getBuildingUpgradeHint(def.id), {
+        fontSize: fs(10), color: '#93c5fd', fontFamily: uiFont,
+        wordWrap: { width: this.panelWidth - unit(190) },
+      }));
 
-      const btn = this.scene.add.text(this.panelWidth - unit(20), y + unit(24), canBuild ? '选中建造' : '缺资源', {
+      const btnLabel = canBuild
+        ? '选中建造'
+        : (!chainStatus.canConstruct ? '链路未解锁' : '缺资源');
+      const btn = this.scene.add.text(this.panelWidth - unit(20), y + unit(24), btnLabel, {
         fontSize: fs(12),
         color: canBuild ? '#0ea5e9' : '#64748b',
         fontFamily: uiFont,
@@ -317,7 +348,50 @@ export class CraftingPanel extends SlidePanel {
         });
       }
       container.add(btn);
-      y += cardH + unit(8);
+      y += cardH + cardGap;
+    }
+
+    const pagerY = h - unit(84);
+    const pagerHint = `${startIndex + 1}-${endIndex}/${defs.length}`;
+    const pagerText = this.scene.add.text(this.panelWidth / 2, pagerY, `第 ${this.buildCardPage + 1}/${totalPages} 页  ·  ${pagerHint}`, {
+      fontSize: fs(11),
+      color: '#93c5fd',
+      fontFamily: uiFont,
+    }).setOrigin(0.5, 0);
+    container.add(pagerText);
+
+    if (totalPages > 1) {
+      const prevBtn = this.scene.add.text(unit(18), pagerY, '◀ 上一页', {
+        fontSize: fs(11),
+        color: this.buildCardPage > 0 ? '#0ea5e9' : '#475569',
+        fontFamily: uiFont,
+        backgroundColor: '#0b1220',
+        padding: { x: unit(4), y: unit(2) },
+      }).setInteractive({ useHandCursor: this.buildCardPage > 0 });
+      if (prevBtn.input) (prevBtn.input as any).priorityID = 5;
+      if (this.buildCardPage > 0) {
+        prevBtn.on('pointerdown', () => {
+          this.buildCardPage -= 1;
+          this.rebuild();
+        });
+      }
+      container.add(prevBtn);
+
+      const nextBtn = this.scene.add.text(this.panelWidth - unit(18), pagerY, '下一页 ▶', {
+        fontSize: fs(11),
+        color: this.buildCardPage < totalPages - 1 ? '#0ea5e9' : '#475569',
+        fontFamily: uiFont,
+        backgroundColor: '#0b1220',
+        padding: { x: unit(4), y: unit(2) },
+      }).setOrigin(1, 0).setInteractive({ useHandCursor: this.buildCardPage < totalPages - 1 });
+      if (nextBtn.input) (nextBtn.input as any).priorityID = 5;
+      if (this.buildCardPage < totalPages - 1) {
+        nextBtn.on('pointerdown', () => {
+          this.buildCardPage += 1;
+          this.rebuild();
+        });
+      }
+      container.add(nextBtn);
     }
   }
 
@@ -351,6 +425,13 @@ export class CraftingPanel extends SlidePanel {
       special: '用途: 战术特殊功能',
     };
     return byCategory[def.category] || '用途: 基础建造';
+  }
+
+  private getBuildChainLine(chainStatus: BuildChainStatus): string {
+    if (!chainStatus.canConstruct) {
+      return `链路阻塞: ${(chainStatus.blockedReasons || []).slice(0, 1).join('；') || '需前置建筑'}`;
+    }
+    return `链路: ${chainStatus.roleCN} · 分区:${chainStatus.zoneLabelCN}`;
   }
 
   private getBuildingEffectSummary(def: BuildingDef): string {
@@ -609,9 +690,9 @@ export class BasePanel extends SlidePanel {
     const displayW = Math.max(1, Math.min(scaleDisplayW, canvasDisplayW));
     let boost = gameW / displayW;
     if (this.isMobileViewport() && this.isPortraitViewport()) {
-      boost = Math.max(boost, 2.25);
+      boost = Math.max(boost, 2.75);
     }
-    return Phaser.Math.Clamp(boost, 1.2, 2.85);
+    return Phaser.Math.Clamp(boost, 1.85, 3.8);
   }
 
   private cleanupScroll(): void {
@@ -681,19 +762,25 @@ export class BasePanel extends SlidePanel {
     const mobilePortrait = mobileViewport && this.isPortraitViewport();
     const uiFont = this.getUIFontFamily();
     this.panelWidth = mobileViewport
-      ? Math.min(w - 6, Math.max(520, Math.round(w * 0.95)))
-      : 440;
+      ? Math.min(w - 6, Math.max(600, Math.round(w * 0.98)))
+      : Math.min(760, Math.max(620, Math.round(w * 0.52)));
     const fontBoost = this.getFontBoost();
-    const layoutBoost = Phaser.Math.Clamp(fontBoost * 0.78, 1, 1.72);
-    const fs = (base: number, min: number = mobilePortrait ? 14 : 12) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const layoutBoost = Phaser.Math.Clamp(fontBoost * 0.92, 1.15, 2.1);
+    const fs = (base: number, min: number = mobilePortrait ? 23 : 19) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const fsMeta = (base: number, min: number = mobilePortrait ? 20 : 16) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const fsTiny = (base: number, min: number = mobilePortrait ? 18 : 14) => `${Math.max(min, Math.round(base * fontBoost))}px`;
     const unit = (value: number) => Math.round(value * layoutBoost);
 
     BaseSystem.refreshBaseState();
+    if (gameState.data.autoBuild.autoAssignDuties) {
+      BaseSystem.autoAssignBaseCompanions();
+      BaseSystem.refreshBaseState();
+    }
     const container = this.createBase();
 
     // ─── Title ─────────────────────────────────────────────
     container.add(this.scene.add.text(unit(20), unit(12), '🏠 基地管理', {
-      fontSize: fs(20), color: '#38bdf8', fontFamily: uiFont, fontStyle: 'bold',
+      fontSize: fs(22), color: '#38bdf8', fontFamily: uiFont, fontStyle: 'bold',
     }));
 
     // Close button
@@ -715,6 +802,7 @@ export class BasePanel extends SlidePanel {
     const base = gameState.data.base;
     const res = gameState.data.resources;
     const companions = gameState.data.companions;
+    const autoBuild = gameState.data.autoBuild;
     const compCount = companions.length;
     const popCap = BaseSystem.getPopulationCapacity();
     const partyCount = companions.filter(c => c.status === 'party').length;
@@ -724,32 +812,123 @@ export class BasePanel extends SlidePanel {
     const foodColor = base.foodDeficit > 0 ? '#ef4444' : '#e2e8f0';
     container.add(this.scene.add.text(unit(16), sy,
       `🍖 ${res.food}(+${base.foodProduction}/-${base.foodConsumption}/日)  ⚡ ${base.powerUsed}/${base.powerCapacity}`, {
-      fontSize: fs(11), color: foodColor, fontFamily: uiFont,
+      fontSize: fsMeta(13), color: foodColor, fontFamily: uiFont,
     }));
-    sy += unit(16);
+    sy += unit(18);
     const popColor = compCount >= popCap ? '#ef4444' : '#94a3b8';
     container.add(this.scene.add.text(unit(16), sy,
       `👥 ${compCount}/${popCap}人  出战${partyCount} · 驻守${baseCount}`, {
-      fontSize: fs(11), color: popColor, fontFamily: uiFont,
+      fontSize: fsMeta(13), color: popColor, fontFamily: uiFont,
     }));
+    sy += unit(18);
+    const ecoPct = Math.round((base.ecologyIntegrity || 0) * 100);
+    const upkeepPct = Math.round((base.ecologyUpkeepRatio || 0) * 100);
+    const prodPct = Math.round((base.ecologyProductionRatio || 0) * 100);
+    const ecoColor = ecoPct >= 80 ? '#4ade80' : ecoPct >= 60 ? '#fbbf24' : '#fb7185';
+    container.add(this.scene.add.text(unit(16), sy,
+      `生态链${ecoPct}% · 维护${upkeepPct}% · 产能${prodPct}% · 评分${base.ecologyTotalScore || 0}`, {
+      fontSize: fsMeta(13), color: ecoColor, fontFamily: uiFont,
+    }));
+    if ((base.ecologyWarnings || []).length > 0) {
+      sy += unit(16);
+      container.add(this.scene.add.text(unit(16), sy, `⚠ ${(base.ecologyWarnings || []).slice(0, 1).join('')}`, {
+        fontSize: fsMeta(12), color: '#fca5a5', fontFamily: uiFont,
+        wordWrap: { width: this.panelWidth - unit(180) },
+      }));
+    }
+    sy += unit(16);
+    const defensePct = Math.round((base.structureIntegrity || 0) * 100);
+    const coveragePct = Math.round((base.structureCoverage || 0) * 100);
+    const defenseColor = base.structureBreachOpen ? '#fb7185' : defensePct >= 80 ? '#4ade80' : '#fbbf24';
+    container.add(this.scene.add.text(
+      unit(16),
+      sy,
+      `防线闭环${coveragePct}% · 完整度${defensePct}%${base.structureBreachOpen ? ' · 破口打开' : ''}`,
+      {
+        fontSize: fsMeta(13),
+        color: defenseColor,
+        fontFamily: uiFont,
+      }
+    ));
+    sy += unit(18);
+    const dutyCounts = BaseSystem.getBaseDutyCounts();
+    const dutyPanelH = unit(mobilePortrait ? 76 : 64);
+    const dutyPanel = this.scene.add.rectangle(
+      this.panelWidth / 2,
+      sy + dutyPanelH / 2 - unit(5),
+      this.panelWidth - unit(24),
+      dutyPanelH,
+      0x0c1628,
+      0.85
+    ).setStrokeStyle(1, 0x1f3a5f, 0.9);
+    container.add(dutyPanel);
+    container.add(this.scene.add.text(
+      unit(16),
+      sy,
+      `自动分工: 建筑工${dutyCounts.builder} / 拾荒者${dutyCounts.scavenger} / 防御者${dutyCounts.defender} / 后勤${dutyCounts.support}`,
+      {
+        fontSize: fsMeta(13),
+        color: '#67e8f9',
+        fontFamily: uiFont,
+        fontStyle: 'bold',
+      }
+    ));
+    sy += unit(18);
+    const dutyBehaviors = BaseSystem.getAutoDutyBehaviorSummary();
+    dutyBehaviors.slice(0, 2).forEach((line) => {
+      container.add(this.scene.add.text(unit(16), sy, line, {
+        fontSize: fsTiny(11),
+        color: '#93c5fd',
+        fontFamily: uiFont,
+      }));
+      sy += unit(15);
+    });
+    container.add(this.scene.add.text(unit(16), sy, '自动派职开启后：空闲伙伴会自动分配职责并参与基地作业', {
+      fontSize: fsTiny(11),
+      color: '#a5f3fc',
+      fontFamily: uiFont,
+    }));
+    sy += unit(14);
+    container.add(this.scene.add.text(unit(16), sy, '金来源：河流淘金 / 山洞挖矿 / 城区搜刮 / 夜战掉落', {
+      fontSize: fsTiny(11),
+      color: '#fbbf24',
+      fontFamily: uiFont,
+    }));
+    sy += unit(5);
 
     // ─── Action buttons ────────────────────────────────────
-    const btnY = unit(38);
+    const btnY = sy + unit(2);
     const assignBtn = this.scene.add.text(this.panelWidth - unit(14), btnY, '分配岗位', {
-      fontSize: fs(11), color: '#38bdf8', fontFamily: uiFont, fontStyle: 'bold',
+      fontSize: fsMeta(11), color: '#38bdf8', fontFamily: uiFont, fontStyle: 'bold',
       backgroundColor: '#0f1d32', padding: { x: unit(6), y: unit(3) },
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     if (assignBtn.input) (assignBtn.input as any).priorityID = 3;
     assignBtn.on('pointerdown', () => {
-      BaseSystem.autoAssignBaseCompanions();
+      const assignedResult = BaseSystem.autoAssignBaseCompanions();
       events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
       events.emit('update-resources', gameState.data.resources);
+      this.scene.time.delayedCall(20, () => {
+        const tip = this.scene.add.text(this.scene.cameras.main.width - this.panelWidth + unit(16), unit(170), assignedResult.message, {
+          fontSize: fs(11),
+          color: '#67e8f9',
+          fontFamily: uiFont,
+          backgroundColor: '#0b1220',
+          padding: { x: unit(6), y: unit(3) },
+        }).setDepth(3000);
+        this.scene.tweens.add({
+          targets: tip,
+          alpha: 0,
+          y: tip.y - 14,
+          duration: 680,
+          onComplete: () => tip.destroy(),
+        });
+      });
       this.refresh();
     });
     container.add(assignBtn);
 
     const garrisonBtn = this.scene.add.text(this.panelWidth - unit(14), btnY + unit(24), '一键驻守', {
-      fontSize: fs(11), color: '#fbbf24', fontFamily: uiFont, fontStyle: 'bold',
+      fontSize: fsMeta(11), color: '#fbbf24', fontFamily: uiFont, fontStyle: 'bold',
       backgroundColor: '#0f1d32', padding: { x: unit(6), y: unit(3) },
     }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
     if (garrisonBtn.input) (garrisonBtn.input as any).priorityID = 3;
@@ -759,6 +938,54 @@ export class BasePanel extends SlidePanel {
       this.refresh();
     });
     container.add(garrisonBtn);
+
+    const dutyAutoBtn = this.scene.add.text(
+      this.panelWidth - unit(14),
+      btnY + unit(48),
+      autoBuild.autoAssignDuties ? '自动派职: 开' : '自动派职: 关',
+      {
+        fontSize: fsMeta(11),
+        color: autoBuild.autoAssignDuties ? '#4ade80' : '#94a3b8',
+        fontFamily: uiFont,
+        fontStyle: 'bold',
+        backgroundColor: '#0f1d32',
+        padding: { x: unit(6), y: unit(3) },
+      }
+    ).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    if (dutyAutoBtn.input) (dutyAutoBtn.input as any).priorityID = 3;
+    dutyAutoBtn.on('pointerdown', () => {
+      gameState.data.autoBuild.autoAssignDuties = !gameState.data.autoBuild.autoAssignDuties;
+      if (gameState.data.autoBuild.autoAssignDuties) {
+        gameState.data.autoBuild.enabled = true;
+        gameState.data.autoBuild.autoAssignBuilders = true;
+        const assignedResult = BaseSystem.autoAssignBaseCompanions();
+        events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+        events.emit('update-resources', gameState.data.resources);
+        events.emit('base-autobuild-updated', {
+          enabled: gameState.data.autoBuild.enabled,
+          ruleCount: gameState.data.autoBuild.rules.filter((rule) => rule.enabled && rule.targetCount > 0).length,
+          builders: Math.max(0, Math.floor(gameState.data.autoBuild.desiredBuilderCount || 0)),
+        });
+        this.scene.time.delayedCall(20, () => {
+          const tip = this.scene.add.text(this.scene.cameras.main.width - this.panelWidth + unit(16), unit(170), assignedResult.message, {
+            fontSize: fs(11),
+            color: '#67e8f9',
+            fontFamily: uiFont,
+            backgroundColor: '#0b1220',
+            padding: { x: unit(6), y: unit(3) },
+          }).setDepth(3000);
+          this.scene.tweens.add({
+            targets: tip,
+            alpha: 0,
+            y: tip.y - 14,
+            duration: 680,
+            onComplete: () => tip.destroy(),
+          });
+        });
+      }
+      this.refresh();
+    });
+    container.add(dutyAutoBtn);
 
     // ─── Job slot summary bar ──────────────────────────────
     sy += unit(18);
@@ -772,12 +999,281 @@ export class BasePanel extends SlidePanel {
     });
     if (slotParts.length > 0) {
       container.add(this.scene.add.text(unit(16), sy, slotParts.join(' · '), {
-        fontSize: fs(10), color: '#64748b', fontFamily: uiFont,
+        fontSize: fsMeta(11), color: '#64748b', fontFamily: uiFont,
       }));
-      sy += unit(14);
+      sy += unit(16);
     }
 
-    sy += unit(4);
+    const constructionTasks = (gameState.data.constructionTasks || []).filter(
+      (task) => task && task.status !== 'done' && task.status !== 'failed'
+    );
+    const commitAutoBuildConfig = (tip?: string) => {
+      events.emit('base-autobuild-updated', {
+        enabled: gameState.data.autoBuild.enabled,
+        ruleCount: gameState.data.autoBuild.rules.filter((rule) => rule.enabled && rule.targetCount > 0).length,
+        builders: Math.max(0, Math.floor(gameState.data.autoBuild.desiredBuilderCount || 0)),
+      });
+      if (tip) {
+        this.scene.time.delayedCall(20, () => {
+          const posX = this.scene.cameras.main.width - this.panelWidth + unit(160);
+          const posY = unit(170);
+          const text = this.scene.add.text(posX, posY, tip, {
+            fontSize: fs(10),
+            color: '#38bdf8',
+            fontFamily: uiFont,
+            backgroundColor: '#0b1220',
+            padding: { x: unit(6), y: unit(3) },
+          }).setDepth(3000);
+          this.scene.tweens.add({
+            targets: text,
+            alpha: 0,
+            y: posY - 16,
+            duration: 520,
+            onComplete: () => text.destroy(),
+          });
+        });
+      }
+      this.refresh();
+    };
+
+    sy += unit(6);
+    container.add(this.scene.add.text(unit(16), sy, '自动建造策略', {
+      fontSize: fs(12), color: '#67e8f9', fontFamily: uiFont, fontStyle: 'bold',
+    }));
+    const activeTasks = constructionTasks.filter((task) => task.status === 'active').length;
+    const queueTasks = Math.max(0, constructionTasks.length - activeTasks);
+    container.add(this.scene.add.text(unit(136), sy + unit(1), `施工 ${activeTasks}/${autoBuild.maxConcurrent}  队列${queueTasks}`, {
+      fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont,
+    }));
+    sy += unit(17);
+    container.add(this.scene.add.text(unit(16), sy, `工坊岗位 ${base.jobAssigned.workshop || 0}/${base.jobSlots.workshop || 0} · 施工目标 ${autoBuild.desiredBuilderCount}`, {
+      fontSize: fsMeta(11), color: '#64748b', fontFamily: uiFont,
+    }));
+    sy += unit(13);
+
+    const autoMainBtn = this.scene.add.text(unit(16), sy, autoBuild.enabled ? '自动建造: 开' : '自动建造: 关', {
+      fontSize: fsTiny(10),
+      color: autoBuild.enabled ? '#4ade80' : '#94a3b8',
+      fontFamily: uiFont,
+      backgroundColor: '#0b1a2f',
+      padding: { x: unit(6), y: unit(3) },
+    }).setInteractive({ useHandCursor: true });
+    if (autoMainBtn.input) (autoMainBtn.input as any).priorityID = 3;
+    autoMainBtn.on('pointerdown', () => {
+      gameState.data.autoBuild.enabled = !gameState.data.autoBuild.enabled;
+      commitAutoBuildConfig(gameState.data.autoBuild.enabled ? '自动建造已开启' : '自动建造已关闭');
+    });
+    container.add(autoMainBtn);
+
+    const nightBtn = this.scene.add.text(unit(120), sy, autoBuild.pauseAtNight ? '夜晚暂停' : '夜晚施工', {
+      fontSize: fsTiny(10),
+      color: autoBuild.pauseAtNight ? '#fbbf24' : '#38bdf8',
+      fontFamily: uiFont,
+      backgroundColor: '#0b1a2f',
+      padding: { x: unit(6), y: unit(3) },
+    }).setInteractive({ useHandCursor: true });
+    if (nightBtn.input) (nightBtn.input as any).priorityID = 3;
+    nightBtn.on('pointerdown', () => {
+      gameState.data.autoBuild.pauseAtNight = !gameState.data.autoBuild.pauseAtNight;
+      commitAutoBuildConfig(gameState.data.autoBuild.pauseAtNight ? '夜晚自动施工已暂停' : '夜晚自动施工已启用');
+    });
+    container.add(nightBtn);
+
+    const minusConcurrent = this.scene.add.text(unit(206), sy, '－', {
+      fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont,
+      backgroundColor: '#10223d', padding: { x: unit(6), y: unit(3) },
+    }).setInteractive({ useHandCursor: true });
+    const plusConcurrent = this.scene.add.text(unit(236), sy, '＋', {
+      fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont,
+      backgroundColor: '#10223d', padding: { x: unit(6), y: unit(3) },
+    }).setInteractive({ useHandCursor: true });
+    if (minusConcurrent.input) (minusConcurrent.input as any).priorityID = 3;
+    if (plusConcurrent.input) (plusConcurrent.input as any).priorityID = 3;
+    minusConcurrent.on('pointerdown', () => {
+      gameState.data.autoBuild.maxConcurrent = Math.max(1, gameState.data.autoBuild.maxConcurrent - 1);
+      commitAutoBuildConfig(`并发施工 ${gameState.data.autoBuild.maxConcurrent}`);
+    });
+    plusConcurrent.on('pointerdown', () => {
+      gameState.data.autoBuild.maxConcurrent = Math.min(4, gameState.data.autoBuild.maxConcurrent + 1);
+      commitAutoBuildConfig(`并发施工 ${gameState.data.autoBuild.maxConcurrent}`);
+    });
+    container.add(minusConcurrent);
+    container.add(plusConcurrent);
+    sy += unit(20);
+
+    const queueLabel = this.scene.add.text(unit(16), sy, `队列上限 ${autoBuild.queueCap}`, {
+      fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont,
+    });
+    container.add(queueLabel);
+    const queueMinus = this.scene.add.text(unit(84), sy - unit(1), '－', {
+      fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
+    }).setInteractive({ useHandCursor: true });
+    const queuePlus = this.scene.add.text(unit(102), sy - unit(1), '＋', {
+      fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
+    }).setInteractive({ useHandCursor: true });
+    if (queueMinus.input) (queueMinus.input as any).priorityID = 3;
+    if (queuePlus.input) (queuePlus.input as any).priorityID = 3;
+    queueMinus.on('pointerdown', () => {
+      gameState.data.autoBuild.queueCap = Math.max(2, gameState.data.autoBuild.queueCap - 1);
+      commitAutoBuildConfig(`施工队列上限 ${gameState.data.autoBuild.queueCap}`);
+    });
+    queuePlus.on('pointerdown', () => {
+      gameState.data.autoBuild.queueCap = Math.min(24, gameState.data.autoBuild.queueCap + 1);
+      commitAutoBuildConfig(`施工队列上限 ${gameState.data.autoBuild.queueCap}`);
+    });
+    container.add(queueMinus);
+    container.add(queuePlus);
+
+    const assignCrewBtn = this.scene.add.text(unit(136), sy, autoBuild.autoAssignBuilders ? '自动派工' : '手动派工', {
+      fontSize: fsTiny(10),
+      color: autoBuild.autoAssignBuilders ? '#4ade80' : '#94a3b8',
+      fontFamily: uiFont,
+      backgroundColor: '#0b1a2f',
+      padding: { x: unit(5), y: unit(2) },
+    }).setInteractive({ useHandCursor: true });
+    if (assignCrewBtn.input) (assignCrewBtn.input as any).priorityID = 3;
+    assignCrewBtn.on('pointerdown', () => {
+      gameState.data.autoBuild.autoAssignBuilders = !gameState.data.autoBuild.autoAssignBuilders;
+      commitAutoBuildConfig(gameState.data.autoBuild.autoAssignBuilders ? '施工自动派工已开启' : '施工自动派工已关闭');
+    });
+    container.add(assignCrewBtn);
+    sy += unit(16);
+
+    const crewModeBtn = this.scene.add.text(unit(16), sy, autoBuild.crewMode === 'workshop_only' ? '施工来源: 工坊专职' : '施工来源: 工坊+空闲', {
+      fontSize: fsTiny(10),
+      color: '#67e8f9',
+      fontFamily: uiFont,
+      backgroundColor: '#0b1a2f',
+      padding: { x: unit(5), y: unit(2) },
+    }).setInteractive({ useHandCursor: true });
+    if (crewModeBtn.input) (crewModeBtn.input as any).priorityID = 3;
+    crewModeBtn.on('pointerdown', () => {
+      gameState.data.autoBuild.crewMode = gameState.data.autoBuild.crewMode === 'workshop_only' ? 'workshop_idle' : 'workshop_only';
+      commitAutoBuildConfig(gameState.data.autoBuild.crewMode === 'workshop_only' ? '施工仅工坊岗位参与' : '施工允许空闲伙伴参与');
+    });
+    container.add(crewModeBtn);
+    const desiredCrewText = this.scene.add.text(unit(156), sy, `目标施工 ${autoBuild.desiredBuilderCount}`, {
+      fontSize: fsMeta(11), color: '#cbd5e1', fontFamily: uiFont,
+    });
+    container.add(desiredCrewText);
+    const crewMinus = this.scene.add.text(unit(224), sy - unit(1), '－', {
+      fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
+    }).setInteractive({ useHandCursor: true });
+    const crewPlus = this.scene.add.text(unit(240), sy - unit(1), '＋', {
+      fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
+    }).setInteractive({ useHandCursor: true });
+    if (crewMinus.input) (crewMinus.input as any).priorityID = 3;
+    if (crewPlus.input) (crewPlus.input as any).priorityID = 3;
+    crewMinus.on('pointerdown', () => {
+      gameState.data.autoBuild.desiredBuilderCount = Math.max(0, gameState.data.autoBuild.desiredBuilderCount - 1);
+      commitAutoBuildConfig(`施工岗位目标 ${gameState.data.autoBuild.desiredBuilderCount}`);
+    });
+    crewPlus.on('pointerdown', () => {
+      gameState.data.autoBuild.desiredBuilderCount = Math.min(12, gameState.data.autoBuild.desiredBuilderCount + 1);
+      commitAutoBuildConfig(`施工岗位目标 ${gameState.data.autoBuild.desiredBuilderCount}`);
+    });
+    container.add(crewMinus);
+    container.add(crewPlus);
+    sy += unit(20);
+
+    const focusRuleIds = ['wall', 'turret', 'generator', 'farm', 'storage', 'medical_station', 'room_quarters'];
+    const displayedRules = autoBuild.rules
+      .filter((rule) => focusRuleIds.includes(rule.buildingId))
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, mobilePortrait ? 4 : 6);
+    displayedRules.forEach((rule) => {
+      const ruleBuilding = BUILDING_DEFS[rule.buildingId];
+      if (!ruleBuilding) return;
+      const currentCount = gameState.data.buildings.filter((b) => b.id === rule.buildingId).length;
+      const pendingCount = constructionTasks.filter((task) => task.buildingId === rule.buildingId).length;
+      const rowY = sy;
+        const enabledFlag = rule.enabled ? '✓' : '□';
+        const rowColor = rule.enabled ? '#38bdf8' : '#64748b';
+        const toggleBtn = this.scene.add.text(unit(16), rowY, enabledFlag, {
+        fontSize: fsMeta(11), color: rowColor, fontFamily: uiFont,
+      }).setInteractive({ useHandCursor: true });
+      if (toggleBtn.input) (toggleBtn.input as any).priorityID = 3;
+      toggleBtn.on('pointerdown', () => {
+        rule.enabled = !rule.enabled;
+        commitAutoBuildConfig(`${ruleBuilding.nameCN}${rule.enabled ? '启用' : '停用'}自动建造`);
+      });
+      container.add(toggleBtn);
+
+      container.add(this.scene.add.text(unit(30), rowY, `${ruleBuilding.nameCN} ${currentCount}/${rule.targetCount}`, {
+        fontSize: fsMeta(11), color: rowColor, fontFamily: uiFont,
+      }));
+      if (pendingCount > 0) {
+        container.add(this.scene.add.text(unit(128), rowY, `在建${pendingCount}`, {
+          fontSize: fsTiny(10), color: '#fbbf24', fontFamily: uiFont,
+        }));
+      }
+      container.add(this.scene.add.text(unit(164), rowY, `T${rule.maxTier}`, {
+        fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
+      }));
+
+      const minusBtn = this.scene.add.text(unit(188), rowY - unit(1), '－', {
+        fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
+      }).setInteractive({ useHandCursor: true });
+      const plusBtn = this.scene.add.text(unit(204), rowY - unit(1), '＋', {
+        fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
+      }).setInteractive({ useHandCursor: true });
+      if (minusBtn.input) (minusBtn.input as any).priorityID = 3;
+      if (plusBtn.input) (plusBtn.input as any).priorityID = 3;
+      minusBtn.on('pointerdown', () => {
+        rule.targetCount = Math.max(0, rule.targetCount - 1);
+        commitAutoBuildConfig(`${ruleBuilding.nameCN}目标 ${rule.targetCount}`);
+      });
+      plusBtn.on('pointerdown', () => {
+        rule.targetCount = Math.min(40, rule.targetCount + 1);
+        commitAutoBuildConfig(`${ruleBuilding.nameCN}目标 ${rule.targetCount}`);
+      });
+      container.add(minusBtn);
+      container.add(plusBtn);
+      sy += unit(14);
+    });
+
+    sy += unit(3);
+    container.add(this.scene.add.text(unit(16), sy, '施工队列', {
+      fontSize: fsTiny(10),
+      color: '#67e8f9',
+      fontFamily: uiFont,
+    }));
+    sy += unit(12);
+    const taskPreviewList = [...constructionTasks]
+      .sort((a, b) => {
+        if (a.status === b.status) return (a.queuedAt || 0) - (b.queuedAt || 0);
+        return a.status === 'active' ? -1 : 1;
+      })
+      .slice(0, mobilePortrait ? 2 : 3);
+    if (taskPreviewList.length <= 0) {
+      container.add(this.scene.add.text(unit(16), sy, '暂无施工任务', {
+        fontSize: fsTiny(9),
+        color: '#64748b',
+        fontFamily: uiFont,
+      }));
+      sy += unit(12);
+    } else {
+      taskPreviewList.forEach((task) => {
+        const buildingName = BUILDING_DEFS[task.buildingId]?.nameCN || task.buildingId;
+        const remainMs = Math.max(0, Number(task.durationMs || 0) - Number(task.progressMs || 0));
+        const remainSec = Math.ceil(remainMs / 1000);
+        const statusLabel = task.status === 'active' ? '施工中' : '排队中';
+        const statusColor = task.status === 'active' ? '#4ade80' : '#94a3b8';
+        container.add(this.scene.add.text(unit(16), sy, `${buildingName} · ${statusLabel}`, {
+          fontSize: fsTiny(9),
+          color: statusColor,
+          fontFamily: uiFont,
+        }));
+        container.add(this.scene.add.text(unit(156), sy, `剩余${remainSec}s`, {
+          fontSize: fsTiny(9),
+          color: '#cbd5e1',
+          fontFamily: uiFont,
+        }));
+        sy += unit(11);
+      });
+    }
+
+    sy += unit(2);
     container.add(this.scene.add.rectangle(this.panelWidth / 2, sy, this.panelWidth - unit(24), 1, 0x1e3a5f, 0.8));
     sy += unit(6);
 
@@ -825,7 +1321,7 @@ export class BasePanel extends SlidePanel {
     container.add(scrollCont);
     this.scrollContent = scrollCont;
 
-    const CARD_H = mobilePortrait ? unit(188) : unit(148);
+    const CARD_H = mobilePortrait ? unit(220) : unit(176);
     const CARD_GAP = unit(10);
     const CARD_W = this.panelWidth - unit(26);
     const rows: Phaser.GameObjects.Container[] = [];
@@ -869,12 +1365,12 @@ export class BasePanel extends SlidePanel {
       const genderIcon = profile.gender === '女' ? '♀' : '♂';
       const genderColor = profile.gender === '女' ? '#f472b6' : '#60a5fa';
       row.add(this.scene.add.text(infoX, unit(8), companionName, {
-        fontSize: fs(mobilePortrait ? 18 : 15), color: '#f1f5f9', fontFamily: uiFont, fontStyle: 'bold',
+        fontSize: fs(mobilePortrait ? 20 : 17), color: '#f1f5f9', fontFamily: uiFont, fontStyle: 'bold',
       }));
 
       const classTag = c.advancedClass ? ` · ${c.advancedClass}` : '';
       row.add(this.scene.add.text(infoX, unit(31), `${profile.profession}${classTag}`, {
-        fontSize: fs(mobilePortrait ? 12 : 11), color: '#94a3b8', fontFamily: uiFont,
+        fontSize: fs(mobilePortrait ? 13 : 12), color: '#94a3b8', fontFamily: uiFont,
       }));
 
       const barX = infoX;
@@ -910,12 +1406,18 @@ export class BasePanel extends SlidePanel {
 
       if (c.status === 'base') {
         const recJob = BaseSystem.recommendJobForCompanion(c);
-        row.add(this.scene.add.text(infoX, mobilePortrait ? unit(104) : 74, `岗位: ${BASE_JOB_LABELS[c.job]}  推荐: ${BASE_JOB_LABELS[recJob]}`, {
-          fontSize: fs(mobilePortrait ? 11 : 10), color: '#4ade80', fontFamily: uiFont,
+        const duty = c.autoDuty || BaseSystem.getCompanionAutoDuty(c);
+        const dutyLabel = BaseSystem.getCompanionAutoDutyLabel(duty);
+        const jobLineY = mobilePortrait ? unit(118) : unit(94);
+        row.add(this.scene.add.text(infoX, jobLineY, `岗位: ${BASE_JOB_LABELS[c.job]}  推荐: ${BASE_JOB_LABELS[recJob]}`, {
+          fontSize: fs(mobilePortrait ? 12 : 11), color: '#4ade80', fontFamily: uiFont,
+        }));
+        row.add(this.scene.add.text(infoX, jobLineY + unit(12), `职责: ${dutyLabel}`, {
+          fontSize: fs(mobilePortrait ? 12 : 11), color: '#67e8f9', fontFamily: uiFont,
         }));
       } else {
-        row.add(this.scene.add.text(infoX, mobilePortrait ? unit(104) : 74, `签名: ${profile.signatureSkill}${c.advancedClass ? ` · ${c.advancedClass}` : ''}`, {
-          fontSize: fs(mobilePortrait ? 11 : 10), color: '#93c5fd', fontFamily: uiFont,
+        row.add(this.scene.add.text(infoX, mobilePortrait ? unit(118) : unit(94), `签名: ${profile.signatureSkill}${c.advancedClass ? ` · ${c.advancedClass}` : ''}`, {
+          fontSize: fs(mobilePortrait ? 12 : 11), color: '#93c5fd', fontFamily: uiFont,
         }));
       }
       const combatSummary = BaseSystem.getCompanionCombatSummary(c)
@@ -924,8 +1426,8 @@ export class BasePanel extends SlidePanel {
         .replace('生命', '血')
         .replace('射程', '程')
         .replace('频率', '速');
-      row.add(this.scene.add.text(infoX, mobilePortrait ? unit(124) : 89, combatSummary, {
-        fontSize: fs(mobilePortrait ? 11 : 9), color: '#67e8f9', fontFamily: uiFont,
+      row.add(this.scene.add.text(infoX, mobilePortrait ? unit(142) : unit(122), combatSummary, {
+        fontSize: fs(mobilePortrait ? 12 : 10), color: '#67e8f9', fontFamily: uiFont,
       }));
 
       const btnX = this.panelWidth - (mobilePortrait ? unit(20) : unit(18));
@@ -933,7 +1435,7 @@ export class BasePanel extends SlidePanel {
       const statusBgColor = c.status === 'party' ? '#0c2d48' : '#2d2506';
       const statusLabel = c.status === 'party' ? '⚔ 出战' : '🏠 驻守';
       const statusBtn = this.scene.add.text(btnX, mobilePortrait ? unit(14) : 12, statusLabel, {
-        fontSize: fs(mobilePortrait ? 12 : 11), color: statusColor, fontFamily: uiFont, fontStyle: 'bold',
+        fontSize: fs(mobilePortrait ? 13 : 12), color: statusColor, fontFamily: uiFont, fontStyle: 'bold',
         backgroundColor: statusBgColor, padding: { x: unit(6), y: unit(mobilePortrait ? 4 : 3) },
       }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
       if (statusBtn.input) (statusBtn.input as any).priorityID = 4;
@@ -947,7 +1449,7 @@ export class BasePanel extends SlidePanel {
 
       if (c.status === 'base') {
         const jobBtn = this.scene.add.text(btnX, mobilePortrait ? unit(44) : 36, `📋 ${BASE_JOB_LABELS[c.job]}`, {
-          fontSize: fs(mobilePortrait ? 11 : 10), color: '#a78bfa', fontFamily: uiFont,
+          fontSize: fs(mobilePortrait ? 12 : 11), color: '#a78bfa', fontFamily: uiFont,
           backgroundColor: '#1a1a2e', padding: { x: unit(5), y: unit(mobilePortrait ? 3 : 2) },
         }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
         if (jobBtn.input) (jobBtn.input as any).priorityID = 4;
@@ -973,18 +1475,18 @@ export class BasePanel extends SlidePanel {
       row.add(this.scene.add.text(
         btnX - unit(2),
         mobilePortrait ? unit(76) : 11,
-        `${genderIcon}${profile.age}`,
-        {
-          fontSize: fs(mobilePortrait ? 11 : 10),
-          color: genderColor,
-          fontFamily: uiFont,
-          backgroundColor: '#1a1a2e',
+          `${genderIcon}${profile.age}`,
+          {
+            fontSize: fs(mobilePortrait ? 12 : 11),
+            color: genderColor,
+            fontFamily: uiFont,
+            backgroundColor: '#1a1a2e',
           padding: { x: unit(4), y: unit(2) },
         }
       ).setOrigin(1, 0));
 
       const arrow = this.scene.add.text(btnX, CARD_H - unit(22), '▸ 详情', {
-        fontSize: fs(mobilePortrait ? 11 : 10), color: '#94a3b8', fontFamily: uiFont,
+        fontSize: fs(mobilePortrait ? 12 : 11), color: '#94a3b8', fontFamily: uiFont,
       }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
       if (arrow.input) (arrow.input as any).priorityID = 4;
       arrow.on('pointerdown', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, ev: Phaser.Types.Input.EventData) => {
@@ -1054,7 +1556,7 @@ export class BasePanel extends SlidePanel {
 
     container.add(this.scene.add.text(this.panelWidth - unit(16), this.scrollAreaTop - unit(14),
       this.maxScrollY > 0 ? '滚轮/拖动滚动' : '名单已完整显示', {
-        fontSize: fs(10), color: '#64748b', fontFamily: uiFont,
+        fontSize: fsTiny(10), color: '#64748b', fontFamily: uiFont,
       }).setOrigin(1, 0));
 
     this.applyScroll();
