@@ -2,6 +2,11 @@ import Phaser from 'phaser';
 import { events, GameEvents } from '../utils/EventBus';
 import { EvolutionSystem } from './EvolutionSystem';
 import { HERO_V2_TEXTURE_KEY } from '../data/v2SpriteAnims';
+import {
+    customHeroTextureKey,
+    hasCustomHeroDirectionalTextures,
+    type CustomHeroDirection,
+} from '../data/customHero';
 
 export class PlayerSystem {
     private scene: Phaser.Scene;
@@ -89,7 +94,18 @@ export class PlayerSystem {
             moveY /= length;
         }
         body.setVelocity(moveX * moveSpeed, moveY * moveSpeed);
-        if (this.player.texture?.key !== HERO_V2_TEXTURE_KEY) {
+        if (this.player.texture?.key === HERO_V2_TEXTURE_KEY) {
+            // V2 animation set is handled by GameScene.
+        } else if (hasCustomHeroDirectionalTextures(this.scene)) {
+            const prev = (this.player.getData('customFacingDir') as CustomHeroDirection | undefined) || 's';
+            const dir = this.resolveCardinalDirection(body.velocity.x, body.velocity.y, prev);
+            const nextKey = customHeroTextureKey(dir);
+            this.player.setData('customFacingDir', dir);
+            if (this.scene.textures.exists(nextKey) && this.player.texture?.key !== nextKey) {
+                this.player.setTexture(nextKey);
+            }
+            this.player.setFlipX(false);
+        } else {
             if (moveX < -0.05) this.player.setFlipX(true);
             else if (moveX > 0.05) this.player.setFlipX(false);
         }
@@ -188,5 +204,15 @@ export class PlayerSystem {
         this.maxHealth = nextMax;
         this.currentHealth = Phaser.Math.Clamp(Math.round(this.maxHealth * ratio), 1, this.maxHealth);
         events.emit(GameEvents.PLAYER_HEALTH_CHANGE, { current: this.currentHealth, max: this.maxHealth });
+    }
+
+    private resolveCardinalDirection(moveX: number, moveY: number, fallback: CustomHeroDirection): CustomHeroDirection {
+        if (Math.abs(moveX) < 0.02 && Math.abs(moveY) < 0.02) return fallback;
+
+        // Horizontal is preferred once player has clear lateral input,
+        // so side-walking doesn't flicker into up/down during diagonal motion.
+        if (Math.abs(moveX) >= 0.12) return moveX >= 0 ? 'e' : 'w';
+        if (Math.abs(moveX) >= Math.abs(moveY) * 0.75) return moveX >= 0 ? 'e' : 'w';
+        return moveY >= 0 ? 's' : 'n';
     }
 }

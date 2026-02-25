@@ -15,10 +15,17 @@ interface LootDrop {
   collecting: boolean;
 }
 
+interface LootCollectorTarget {
+  x: number;
+  y: number;
+  radius: number;
+}
+
 export class LootSystem {
   private scene: Phaser.Scene;
   private player: Phaser.Physics.Arcade.Sprite;
   private drops: LootDrop[] = [];
+  private companionCollectors: LootCollectorTarget[] = [];
   private readonly resourceAccentColor: Record<string, number> = {
     wood: 0xb77b45,
     metal: 0x90a4b7,
@@ -53,6 +60,16 @@ export class LootSystem {
   constructor(scene: Phaser.Scene, player: Phaser.Physics.Arcade.Sprite) {
     this.scene = scene;
     this.player = player;
+  }
+
+  setCompanionCollectors(collectors: LootCollectorTarget[]): void {
+    this.companionCollectors = collectors
+      .filter((item) => Number.isFinite(item?.x) && Number.isFinite(item?.y))
+      .map((item) => ({
+        x: item.x,
+        y: item.y,
+        radius: Math.max(36, Math.floor(item.radius || 72)),
+      }));
   }
 
   /**
@@ -201,11 +218,11 @@ export class LootSystem {
     const texture = textureMap[resourceId] || 'loot_scrap';
     const accentColor = this.resourceAccentColor[resourceId] || 0x7d8fa4;
 
-    const badge = this.scene.add.rectangle(x, y, 26, 26, 0x030712, 0.9)
+    const badge = this.scene.add.rectangle(x, y, 28, 28, 0x030712, 0.92)
       .setStrokeStyle(1, accentColor, 0.9)
       .setDepth(3.78);
 
-    const glow = this.scene.add.circle(x, y, 8.5, accentColor, 0.11).setDepth(3.8);
+    const glow = this.scene.add.circle(x, y, 10, accentColor, 0.11).setDepth(3.8);
     this.scene.tweens.add({
       targets: glow,
       alpha: { from: 0.08, to: 0.18 },
@@ -216,9 +233,9 @@ export class LootSystem {
 
     const drop = this.scene.add.sprite(x, y, texture);
     drop.setDepth(4);
-    drop.setScale(1.08);
+    drop.setScale(1.2);
     this.scene.tweens.add({
-      targets: drop, scale: 1.15, duration: 190, ease: 'Back.easeOut',
+      targets: drop, scale: 1.26, duration: 190, ease: 'Back.easeOut',
     });
     this.scene.tweens.add({
       targets: drop,
@@ -229,21 +246,23 @@ export class LootSystem {
       ease: 'Sine.easeInOut',
     });
 
-    const displayName = this.resourceDisplayLabel[resourceId] || this.resourceShortLabel[resourceId] || '资源';
+    const displayName = this.resourceShortLabel[resourceId] || this.resourceDisplayLabel[resourceId] || '资';
     const amountText = Math.max(1, Math.round(amount));
     const tag = this.scene.add.text(
       x,
-      y + 11,
-      `${displayName} x${amountText}`,
+      y + 13,
+      `${displayName}x${amountText}`,
       {
-        fontSize: '13px',
+        fontSize: '14px',
         color: '#e2e8f0',
         fontFamily: 'PingFang SC, "Microsoft YaHei", sans-serif',
-        backgroundColor: '#020712',
-        padding: { left: 5, right: 5, top: 2, bottom: 3 },
+        backgroundColor: '#020712cc',
+        padding: { left: 4, right: 4, top: 2, bottom: 2 },
       }
     ).setOrigin(0.5, 0).setDepth(4.3);
-    tag.setStroke('#000000', 2);
+    tag.setStroke('#000000', 3);
+    tag.setVisible(false);
+    tag.setAlpha(0);
 
     const lootDrop: LootDrop = {
       sprite: drop,
@@ -268,6 +287,36 @@ export class LootSystem {
    */
   update(): void {
     const pickupRadius = gameState.getComputedStats().pickupRadius;
+    const tagRevealRadius = Math.min(115, Math.max(58, pickupRadius * 0.85));
+    const maxVisibleTags = this.scene.scale.width <= 540
+      ? 2
+      : this.scene.scale.width <= 960
+        ? 3
+        : 5;
+    const tagCandidates: Array<{ drop: LootDrop; distance: number }> = [];
+    const getNearestCollector = (
+      x: number,
+      y: number
+    ): { x: number; y: number; radius: number; distance: number } => {
+      let nearest = {
+        x: this.player.x,
+        y: this.player.y,
+        radius: pickupRadius,
+        distance: Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y),
+      };
+      for (const collector of this.companionCollectors) {
+        const distance = Phaser.Math.Distance.Between(x, y, collector.x, collector.y);
+        if (distance < nearest.distance) {
+          nearest = {
+            x: collector.x,
+            y: collector.y,
+            radius: collector.radius,
+            distance,
+          };
+        }
+      }
+      return nearest;
+    };
 
     for (let i = this.drops.length - 1; i >= 0; i--) {
       const drop = this.drops[i];
@@ -276,13 +325,16 @@ export class LootSystem {
         continue;
       }
 
-      const dist = Phaser.Math.Distance.Between(
-        drop.sprite.x, drop.sprite.y,
-        this.player.x, this.player.y
-      );
+      const nearestCollector = getNearestCollector(drop.sprite.x, drop.sprite.y);
+      const dist = nearestCollector.distance;
+      const tag = (drop.sprite as any)._tag as Phaser.GameObjects.Text | undefined;
+      const shouldRevealTag = drop.type === 'resource' && (dist <= tagRevealRadius || drop.collecting);
+      if (shouldRevealTag && tag && tag.active) {
+        tagCandidates.push({ drop, distance: dist });
+      }
 
       // Start collecting if within pickup radius
-      if (!drop.collecting && dist < pickupRadius) {
+      if (!drop.collecting && dist < nearestCollector.radius) {
         drop.collecting = true;
       }
 
@@ -290,16 +342,11 @@ export class LootSystem {
         // Move toward player
         const angle = Phaser.Math.Angle.Between(
           drop.sprite.x, drop.sprite.y,
-          this.player.x, this.player.y
+          nearestCollector.x, nearestCollector.y
         );
         const speed = Math.max(5, 300 - dist);
         drop.sprite.x += Math.cos(angle) * speed * 0.016;
         drop.sprite.y += Math.sin(angle) * speed * 0.016;
-        const tag = (drop.sprite as any)._tag as Phaser.GameObjects.Text | undefined;
-        if (tag && tag.active) {
-          tag.x = drop.sprite.x;
-          tag.y = drop.sprite.y + 11;
-        }
         const badge = (drop.sprite as any)._badge as Phaser.GameObjects.Rectangle | undefined;
         if (badge && badge.active) {
           badge.x = drop.sprite.x;
@@ -323,6 +370,30 @@ export class LootSystem {
           if (tag) tag.destroy();
           drop.sprite.destroy();
           this.drops.splice(i, 1);
+        }
+      }
+    }
+
+    // Reduce text clutter: only the nearest few resource labels are visible at once.
+    tagCandidates.sort((a, b) => a.distance - b.distance);
+    const visibleDrops = new Set<LootDrop>(
+      tagCandidates.slice(0, maxVisibleTags).map((entry) => entry.drop)
+    );
+
+    for (let i = 0; i < this.drops.length; i++) {
+      const drop = this.drops[i];
+      if (!drop?.sprite?.active) continue;
+      const tag = (drop.sprite as any)._tag as Phaser.GameObjects.Text | undefined;
+      if (!tag || !tag.active) continue;
+      if (visibleDrops.has(drop)) {
+        tag.setVisible(true);
+        tag.x = drop.sprite.x;
+        tag.y = drop.sprite.y + 13;
+        tag.alpha = Math.min(1, tag.alpha + 0.22);
+      } else {
+        tag.alpha = Math.max(0, tag.alpha - 0.2);
+        if (tag.alpha <= 0.04) {
+          tag.setVisible(false);
         }
       }
     }

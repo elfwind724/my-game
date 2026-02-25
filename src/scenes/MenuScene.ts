@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { CollectionPanel } from '../ui/CollectionPanel';
+import { resolvePreferredHeroPortraitTexture } from '../data/customHero';
 
 export default class MenuScene extends Phaser.Scene {
   constructor() {
@@ -19,6 +20,7 @@ export default class MenuScene extends Phaser.Scene {
 
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
+    const heroPortraitTexture = resolvePreferredHeroPortraitTexture(this);
     const mobileViewport = this.isMobileViewport();
     const portraitLayout = mobileViewport && h > w * 1.2;
     const uiScale = Phaser.Math.Clamp(w / 1280, 0.62, 1);
@@ -133,7 +135,7 @@ export default class MenuScene extends Phaser.Scene {
       });
 
       const lineupY = h * 0.79;
-      this.add.image(w * 0.15, lineupY, 'player').setScale(1.9).setDepth(2);
+      this.add.image(w * 0.15, lineupY, heroPortraitTexture).setScale(1.9).setDepth(2);
       this.add.image(w * 0.32, lineupY, this.textures.exists('companion_tank') ? 'companion_tank' : 'companion').setScale(1.82).setDepth(2);
       this.add.image(w * 0.41, lineupY, this.textures.exists('companion_medic') ? 'companion_medic' : 'companion').setScale(1.82).setDepth(2);
       this.add.image(w * 0.5, lineupY, 'zombie').setScale(1.82).setDepth(2);
@@ -246,7 +248,7 @@ export default class MenuScene extends Phaser.Scene {
     });
 
     const lineupY = h - 112;
-    this.add.image(w * 0.18, lineupY, 'player').setScale(2.25).setDepth(2);
+    this.add.image(w * 0.18, lineupY, heroPortraitTexture).setScale(2.25).setDepth(2);
     this.add.image(w * 0.34, lineupY, this.textures.exists('companion_tank') ? 'companion_tank' : 'companion').setScale(2.2).setDepth(2);
     this.add.image(w * 0.48, lineupY, this.textures.exists('companion_sniper') ? 'companion_sniper' : 'companion').setScale(2.2).setDepth(2);
     this.add.image(w * 0.62, lineupY, 'zombie').setScale(2.2).setDepth(2);

@@ -18,6 +18,16 @@ import {
   heroAnimKey,
   V2_FRAME_SIZE,
 } from '../data/v2SpriteAnims';
+import {
+  CUSTOM_HERO_KEYS,
+  CUSTOM_HERO_RAW_KEYS,
+  CUSTOM_HERO_RAW_PATHS,
+  type CustomHeroDirection,
+} from '../data/customHero';
+
+const KENNEY_RPG_SHEET_KEY = 'kenney_rpg_sheet';
+const KENNEY_RPG_SHEET_PATH = '/assets/kenney_roguelike-rpg-pack/Spritesheet/roguelikeSheet_transparent.png';
+const KENNEY_RPG_THEME_ENABLED = true;
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -42,7 +52,9 @@ export default class BootScene extends Phaser.Scene {
     });
 
     this.preloadAssetOverrides();
+    this.preloadKenneyRpgSheet();
     this.preloadV2SpriteSheets();
+    this.preloadCustomHeroRawSprites();
   }
 
   create(): void {
@@ -53,6 +65,8 @@ export default class BootScene extends Phaser.Scene {
   }
 
   private generateAssets(): void {
+    this.applyKenneyRpgThemeAssets();
+    this.generateCustomHeroDirectionalSprites();
     this.generatePlayerSprite();
     this.generateEnemySprites();
     this.generateCompanionSprite();
@@ -105,6 +119,271 @@ export default class BootScene extends Phaser.Scene {
       loadedKeys.add(override.key);
       this.load.image(override.key, override.path);
     }
+  }
+
+  private preloadKenneyRpgSheet(): void {
+    if (!KENNEY_RPG_THEME_ENABLED) return;
+    if (this.textures.exists(KENNEY_RPG_SHEET_KEY)) return;
+    this.load.spritesheet(KENNEY_RPG_SHEET_KEY, KENNEY_RPG_SHEET_PATH, {
+      frameWidth: 16,
+      frameHeight: 16,
+      spacing: 1,
+      margin: 0,
+    });
+  }
+
+  private preloadCustomHeroRawSprites(): void {
+    (Object.keys(CUSTOM_HERO_RAW_KEYS) as CustomHeroDirection[]).forEach((dir) => {
+      const key = CUSTOM_HERO_RAW_KEYS[dir];
+      const path = CUSTOM_HERO_RAW_PATHS[dir];
+      if (!key || !path) return;
+      if (this.textures.exists(key)) return;
+      this.load.image(key, path);
+    });
+  }
+
+  private generateCustomHeroDirectionalSprites(): void {
+    (Object.keys(CUSTOM_HERO_KEYS) as CustomHeroDirection[]).forEach((dir) => {
+      const rawKey = CUSTOM_HERO_RAW_KEYS[dir];
+      const outKey = CUSTOM_HERO_KEYS[dir];
+      this.buildCustomHeroDirectionTexture(rawKey, outKey);
+    });
+  }
+
+  private buildCustomHeroDirectionTexture(rawKey: string, outKey: string): void {
+    const source = this.getSourceImage(rawKey);
+    if (!source) return;
+
+    const srcW = Math.max(1, Math.floor((source as any).width || 0));
+    const srcH = Math.max(1, Math.floor((source as any).height || 0));
+    if (srcW < 8 || srcH < 8) return;
+
+    const workCanvas = document.createElement('canvas');
+    workCanvas.width = srcW;
+    workCanvas.height = srcH;
+    const workCtx = workCanvas.getContext('2d');
+    if (!workCtx) return;
+    workCtx.clearRect(0, 0, srcW, srcH);
+    workCtx.drawImage(source, 0, 0, srcW, srcH);
+
+    let imageData: ImageData;
+    try {
+      imageData = workCtx.getImageData(0, 0, srcW, srcH);
+    } catch {
+      return;
+    }
+
+    const data = imageData.data;
+    const isBackground = new Uint8Array(srcW * srcH);
+    const refColors = this.pickEdgeReferenceColors(data, srcW, srcH);
+    if (refColors.length === 0) return;
+    const matchTol = 34;
+
+    const queue = new Uint32Array(srcW * srcH);
+    let qHead = 0;
+    let qTail = 0;
+    const tryPush = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= srcW || y >= srcH) return;
+      const idx = y * srcW + x;
+      if (isBackground[idx]) return;
+      const di = idx * 4;
+      const a = data[di + 3];
+      if (a <= 6) return;
+      const r = data[di];
+      const g = data[di + 1];
+      const b = data[di + 2];
+      if (!this.matchesBackgroundColor(r, g, b, refColors, matchTol)) return;
+      isBackground[idx] = 1;
+      queue[qTail++] = idx;
+    };
+
+    for (let x = 0; x < srcW; x++) {
+      tryPush(x, 0);
+      tryPush(x, srcH - 1);
+    }
+    for (let y = 0; y < srcH; y++) {
+      tryPush(0, y);
+      tryPush(srcW - 1, y);
+    }
+
+    while (qHead < qTail) {
+      const idx = queue[qHead++];
+      const x = idx % srcW;
+      const y = (idx / srcW) | 0;
+      tryPush(x + 1, y);
+      tryPush(x - 1, y);
+      tryPush(x, y + 1);
+      tryPush(x, y - 1);
+    }
+
+    for (let i = 0; i < isBackground.length; i++) {
+      if (!isBackground[i]) continue;
+      data[i * 4 + 3] = 0;
+    }
+    workCtx.putImageData(imageData, 0, 0);
+
+    const bbox = this.findAlphaBounds(data, srcW, srcH, 8);
+    if (!bbox) return;
+    const pad = 8;
+    const sx = Math.max(0, bbox.x - pad);
+    const sy = Math.max(0, bbox.y - pad);
+    const sw = Math.min(srcW - sx, bbox.w + pad * 2);
+    const sh = Math.min(srcH - sy, bbox.h + pad * 2);
+    if (sw < 4 || sh < 4) return;
+
+    if (this.textures.exists(outKey)) this.textures.remove(outKey);
+    const outCanvas = this.textures.createCanvas(outKey, 32, 32);
+    if (!outCanvas) return;
+    const outCtx = outCanvas.getContext();
+    outCtx.clearRect(0, 0, 32, 32);
+    outCtx.imageSmoothingEnabled = true;
+    const maxW = 30;
+    const maxH = 30;
+    const scale = Math.min(maxW / sw, maxH / sh);
+    const drawW = sw * scale;
+    const drawH = sh * scale;
+    const dx = Math.round((32 - drawW) * 0.5);
+    const dy = Math.round(32 - drawH);
+    outCtx.drawImage(workCanvas, sx, sy, sw, sh, dx, dy, drawW, drawH);
+    outCanvas.refresh();
+  }
+
+  private getSourceImage(textureKey: string): CanvasImageSource | null {
+    if (!this.textures.exists(textureKey)) return null;
+    const texture = this.textures.get(textureKey);
+    const frame = texture?.get('__BASE') || texture?.get(0);
+    const source = frame?.source?.image as CanvasImageSource | undefined;
+    return source || null;
+  }
+
+  private pickEdgeReferenceColors(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number
+  ): Array<{ r: number; g: number; b: number }> {
+    const counts = new Map<string, { r: number; g: number; b: number; n: number }>();
+    const sample = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= width || y >= height) return;
+      const i = (y * width + x) * 4;
+      const a = data[i + 3];
+      if (a <= 12) return;
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const k = `${r},${g},${b}`;
+      const hit = counts.get(k);
+      if (hit) hit.n += 1;
+      else counts.set(k, { r, g, b, n: 1 });
+    };
+
+    const stride = Math.max(1, Math.floor(Math.min(width, height) / 96));
+    for (let x = 0; x < width; x += stride) {
+      sample(x, 0);
+      sample(x, height - 1);
+    }
+    for (let y = 0; y < height; y += stride) {
+      sample(0, y);
+      sample(width - 1, y);
+    }
+
+    return [...counts.values()]
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 8)
+      .map((c) => ({ r: c.r, g: c.g, b: c.b }));
+  }
+
+  private matchesBackgroundColor(
+    r: number,
+    g: number,
+    b: number,
+    refs: Array<{ r: number; g: number; b: number }>,
+    tol: number
+  ): boolean {
+    for (let i = 0; i < refs.length; i++) {
+      const rr = refs[i].r - r;
+      const gg = refs[i].g - g;
+      const bb = refs[i].b - b;
+      if (Math.sqrt(rr * rr + gg * gg + bb * bb) <= tol) return true;
+    }
+    return false;
+  }
+
+  private findAlphaBounds(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number,
+    alphaMin: number
+  ): { x: number; y: number; w: number; h: number } | null {
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const a = data[(y * width + x) * 4 + 3];
+        if (a < alphaMin) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < minX || maxY < minY) return null;
+    return {
+      x: minX,
+      y: minY,
+      w: maxX - minX + 1,
+      h: maxY - minY + 1,
+    };
+  }
+
+  private applyKenneyRpgThemeAssets(): void {
+    if (!KENNEY_RPG_THEME_ENABLED) return;
+    if (!this.textures.exists(KENNEY_RPG_SHEET_KEY)) return;
+
+    const tile = (key: string, frame: number, size = 32) => this.aliasKenneyTileTexture(key, frame, size, size);
+
+    // UI icon set
+    tile('build_icon_kenney', 959, 24);
+    tile('turret_icon_kenney', 1124, 24);
+    tile('icon_wood', 520, 18);
+    tile('icon_metal', 673, 18);
+    tile('icon_food', 345, 18);
+    tile('icon_water', 286, 18);
+    tile('icon_scrap', 1059, 18);
+    tile('icon_medical', 449, 18);
+    tile('icon_ammo', 740, 18);
+    tile('icon_energyCore', 451, 18);
+    tile('icon_protocol', 452, 18);
+
+    // NOTE:
+    // This pack is a tileset and requires proper autotile/map composition.
+    // We intentionally do NOT override world/buildings/characters here to avoid broken assembly.
+  }
+
+  private aliasKenneyTileTexture(key: string, frameIndex: number, width: number, height: number): void {
+    const sheet = this.textures.get(KENNEY_RPG_SHEET_KEY);
+    const frame = sheet?.get(frameIndex);
+    const source = frame?.source?.image as CanvasImageSource | undefined;
+    if (!frame || !source) return;
+    if (this.textures.exists(key)) this.textures.remove(key);
+    const canvas = this.textures.createCanvas(key, width, height);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    ctx.clearRect(0, 0, width, height);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      source,
+      frame.cutX,
+      frame.cutY,
+      frame.cutWidth,
+      frame.cutHeight,
+      0,
+      0,
+      width,
+      height
+    );
+    canvas.refresh();
   }
 
   private preloadV2SpriteSheets(): void {
@@ -640,44 +919,63 @@ export default class BootScene extends Phaser.Scene {
   }
 
   private generateProjectileSprites(): void {
+    // Always use handcrafted pixel-magic bullets.
+    // We intentionally override any pack-provided projectile tiles to keep readability consistent.
+    const projectileKeys = [
+      'bullet',
+      'bullet_scatter',
+      'bullet_pulse',
+      'bullet_flame',
+      'bullet_pierce',
+      'bullet_cannon',
+      'bullet_frost',
+      'bullet_chain',
+    ];
+    projectileKeys.forEach((key) => {
+      if (this.textures.exists(key)) this.textures.remove(key);
+    });
+
     this.drawTexture('bullet', 16, 16, (g) => {
-      g.fillStyle(0x0b1220);
-      g.fillRect(5, 1, 6, 14);
-      g.fillStyle(0x0ea5e9);
-      g.fillRect(6, 3, 4, 10);
-      g.fillStyle(0xe0f2fe);
-      g.fillRect(7, 1, 2, 9);
-      g.fillStyle(0x38bdf8);
-      g.fillRect(5, 12, 6, 2);
+      g.fillStyle(0x071022);
+      g.fillRect(4, 4, 8, 8);
+      g.fillStyle(0x22d3ee);
+      g.fillRect(5, 5, 6, 6);
+      g.fillStyle(0xe0f9ff);
+      g.fillRect(7, 3, 2, 10);
+      g.fillRect(3, 7, 10, 2);
+      g.fillStyle(0x67e8f9);
+      g.fillRect(6, 6, 4, 4);
     });
 
     this.drawTexture('bullet_scatter', 16, 16, (g) => {
-      g.fillStyle(0x0f172a);
-      g.fillRect(5, 3, 6, 10);
+      g.fillStyle(0x0b1220);
+      g.fillRect(2, 6, 12, 4);
       g.fillStyle(0x38bdf8);
-      g.fillRect(6, 4, 4, 8);
+      g.fillRect(3, 7, 10, 2);
       g.fillStyle(0xe0f2fe);
-      g.fillRect(7, 6, 2, 4);
-      g.fillStyle(0x93c5fd);
-      g.fillRect(4, 6, 1, 2);
-      g.fillRect(11, 6, 1, 2);
+      g.fillRect(1, 6, 2, 4);
+      g.fillRect(13, 6, 2, 4);
+      g.fillRect(6, 4, 4, 8);
     });
 
     this.drawTexture('bullet_pulse', 16, 16, (g) => {
-      g.fillStyle(0x05202d);
-      g.fillRect(3, 2, 10, 12);
-      g.fillStyle(0x06b6d4);
+      g.fillStyle(0x091525);
+      g.fillRect(3, 3, 10, 10);
+      g.fillStyle(0x3b82f6);
       g.fillRect(4, 4, 8, 8);
-      g.fillStyle(0x67e8f9);
-      g.fillRect(5, 6, 6, 4);
-      g.fillStyle(0xe0fbff);
-      g.fillRect(6, 7, 4, 2);
+      g.fillStyle(0x93c5fd);
+      g.fillRect(5, 5, 6, 6);
+      g.fillStyle(0xe0f2fe);
+      g.fillRect(6, 6, 4, 4);
+      g.fillStyle(0x22d3ee);
+      g.fillRect(7, 2, 2, 12);
+      g.fillRect(2, 7, 12, 2);
     });
 
     this.drawTexture('bullet_flame', 16, 16, (g) => {
-      g.fillStyle(0x4a1a06);
-      g.fillRect(6, 1, 4, 13);
-      g.fillStyle(0xea580c);
+      g.fillStyle(0x2e1065);
+      g.fillRect(6, 1, 4, 14);
+      g.fillStyle(0xfb7185);
       g.fillRect(6, 3, 4, 9);
       g.fillStyle(0xfb923c);
       g.fillRect(7, 1, 2, 6);
@@ -685,28 +983,34 @@ export default class BootScene extends Phaser.Scene {
       g.fillRect(7, 2, 2, 3);
       g.fillStyle(0xfffbeb);
       g.fillRect(7, 2, 1, 1);
+      g.fillStyle(0xf472b6);
+      g.fillRect(5, 11, 6, 2);
     });
 
     this.drawTexture('bullet_pierce', 16, 16, (g) => {
-      g.fillStyle(0x082f49);
+      g.fillStyle(0x0f172a);
       g.fillRect(7, 1, 2, 14);
-      g.fillStyle(0x0ea5e9);
-      g.fillRect(7, 3, 2, 10);
+      g.fillStyle(0x7dd3fc);
+      g.fillRect(7, 2, 2, 12);
       g.fillStyle(0xe0f7ff);
       g.fillRect(7, 1, 1, 6);
-      g.fillStyle(0x67e8f9);
       g.fillRect(6, 12, 4, 2);
+      g.fillStyle(0x38bdf8);
+      g.fillRect(5, 9, 6, 1);
     });
 
     this.drawTexture('bullet_cannon', 16, 16, (g) => {
-      g.fillStyle(0x2e1065);
-      g.fillRect(4, 2, 8, 12);
-      g.fillStyle(0x9333ea);
-      g.fillRect(5, 3, 6, 10);
-      g.fillStyle(0xe9d5ff);
-      g.fillRect(6, 5, 4, 5);
-      g.fillStyle(0xc084fc);
-      g.fillRect(5, 11, 6, 2);
+      g.fillStyle(0x140a2f);
+      g.fillRect(3, 3, 10, 10);
+      g.fillStyle(0xa855f7);
+      g.fillRect(4, 4, 8, 8);
+      g.fillStyle(0xd8b4fe);
+      g.fillRect(5, 5, 6, 6);
+      g.fillStyle(0xf5d0fe);
+      g.fillRect(6, 6, 4, 4);
+      g.fillStyle(0x7e22ce);
+      g.fillRect(7, 1, 2, 2);
+      g.fillRect(7, 13, 2, 2);
     });
 
     this.drawTexture('bullet_frost', 16, 16, (g) => {
@@ -719,6 +1023,9 @@ export default class BootScene extends Phaser.Scene {
       g.fillStyle(0xf0f9ff);
       g.fillRect(7, 5, 2, 6);
       g.fillRect(5, 7, 6, 2);
+      g.fillStyle(0x67e8f9);
+      g.fillRect(6, 1, 4, 1);
+      g.fillRect(6, 14, 4, 1);
     });
 
     this.drawTexture('bullet_chain', 16, 16, (g) => {
@@ -727,10 +1034,14 @@ export default class BootScene extends Phaser.Scene {
       g.fillStyle(0xa855f7);
       g.fillRect(6, 3, 4, 10);
       g.fillStyle(0xf0abfc);
-      g.fillRect(5, 5, 2, 2);
-      g.fillRect(9, 7, 2, 2);
-      g.fillRect(5, 9, 2, 2);
-      g.fillRect(9, 11, 2, 2);
+      g.fillRect(5, 4, 2, 2);
+      g.fillRect(9, 6, 2, 2);
+      g.fillRect(5, 8, 2, 2);
+      g.fillRect(9, 10, 2, 2);
+      g.fillRect(5, 12, 2, 2);
+      g.fillStyle(0xffffff);
+      g.fillRect(8, 5, 1, 1);
+      g.fillRect(7, 9, 1, 1);
     });
   }
 
@@ -1784,108 +2095,185 @@ export default class BootScene extends Phaser.Scene {
   }
 
   private generateLootSprites(): void {
-    const drawToken = (
-      key: string,
-      accent: number,
-      iconPainter: (g: Phaser.GameObjects.Graphics) => void
-    ) => {
-      this.drawTexture(key, 28, 28, (g) => {
-        g.fillStyle(0x020712);
-        g.fillRect(1, 1, 26, 26);
-        g.fillStyle(0x0b1425);
-        g.fillRect(2, 2, 24, 24);
-        g.fillStyle(accent);
-        g.fillRect(2, 2, 24, 2);
-        g.fillStyle(0x0a1222);
-        g.fillRect(4, 6, 20, 18);
-        iconPainter(g);
+    const keys = ['loot_wood', 'loot_metal', 'loot_food', 'loot_water', 'loot_scrap', 'loot_medical', 'loot_ammo', 'loot_core'];
+    keys.forEach((key) => {
+      if (this.textures.exists(key)) this.textures.remove(key);
+    });
+
+    const drawToken = (key: string, palette: Record<string, string>, rows: string[]): void => {
+      this.drawCanvasTexture(key, 24, 24, (ctx, w, h) => {
+        const scale = 2;
+        const spriteW = rows[0].length * scale;
+        const spriteH = rows.length * scale;
+        const offsetX = Math.floor((w - spriteW) / 2);
+        const offsetY = Math.floor((h - spriteH) / 2);
+        ctx.clearRect(0, 0, w, h);
+        ctx.imageSmoothingEnabled = false;
+
+        rows.forEach((row, y) => {
+          for (let x = 0; x < row.length; x++) {
+            const code = row[x];
+            if (code === '.') continue;
+            const color = palette[code];
+            if (!color) continue;
+            ctx.fillStyle = color;
+            ctx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+          }
+        });
       });
     };
 
-    drawToken('loot_wood', 0xb77b45, (g) => {
-      g.fillStyle(0x8a5a33);
-      g.fillRect(7, 12, 14, 3);
-      g.fillRect(8, 16, 12, 3);
-      g.fillStyle(0xc9955f);
-      g.fillRect(8, 12, 2, 3);
-      g.fillRect(17, 16, 2, 3);
-    });
+    drawToken(
+      'loot_wood',
+      { x: '#2a1b12', b: '#8d5c34', h: '#c99a64', s: '#d3b27c' },
+      [
+        '............',
+        '..xxxxxxxx..',
+        '.xbbbssbbbx.',
+        '.xbbbbbbbbx.',
+        '.xhhhsshhhx.',
+        '.xbbbssbbbx.',
+        '.xbbbssbbbx.',
+        '.xhhhsshhhx.',
+        '.xbbbbbbbbx.',
+        '.xbbbssbbbx.',
+        '..xxxxxxxx..',
+        '............',
+      ]
+    );
 
-    drawToken('loot_metal', 0x90a4b7, (g) => {
-      g.fillStyle(0x7b8ea1);
-      g.fillRect(7, 11, 14, 9);
-      g.fillStyle(0xc0cedc);
-      g.fillRect(8, 12, 12, 2);
-      g.fillStyle(0x5f6f80);
-      g.fillRect(9, 15, 10, 3);
-    });
+    drawToken(
+      'loot_metal',
+      { x: '#263446', m: '#71859a', h: '#c9d7e4', d: '#4e6071' },
+      [
+        '............',
+        '...xxxxxx...',
+        '..xmmmmmmx..',
+        '.xmmhhhhmmx.',
+        '.xmmhhhhmmx.',
+        '.xmmmmmmmmx.',
+        '..xmmmmmmx..',
+        '...xddddx...',
+        '...xddddx...',
+        '...xxxxxx...',
+        '............',
+        '............',
+      ]
+    );
 
-    drawToken('loot_food', 0xd5a557, (g) => {
-      g.fillStyle(0xa17f44);
-      g.fillRect(8, 10, 12, 10);
-      g.fillStyle(0xcfb07a);
-      g.fillRect(9, 11, 10, 4);
-      g.fillStyle(0x6b7280);
-      g.fillRect(9, 9, 10, 1);
-      g.fillStyle(0x374151);
-      g.fillRect(11, 16, 6, 2);
-    });
+    drawToken(
+      'loot_food',
+      { x: '#2d2418', d: '#6f5632', b: '#b9945a', h: '#e6c483', r: '#a73a2d', g: '#2d9f56', l: '#ffd175' },
+      [
+        '....ll......',
+        '...lggl.....',
+        '..xxxxxxxx..',
+        '.xddddddddx.',
+        '.xdbbbbbbdx.',
+        '.xdbrrrbbdx.',
+        '.xdbrrrbbdx.',
+        '.xdbbbbbbdx.',
+        '.xdhhhhhhdx.',
+        '.xddddddddx.',
+        '..xxxxxxxx..',
+        '............',
+      ]
+    );
 
-    drawToken('loot_ammo', 0xcf9154, (g) => {
-      g.fillStyle(0xc89d58);
-      g.fillRect(8, 10, 2, 8);
-      g.fillRect(12, 9, 2, 9);
-      g.fillRect(16, 10, 2, 8);
-      g.fillStyle(0x9a6f39);
-      g.fillRect(8, 17, 2, 2);
-      g.fillRect(12, 17, 2, 2);
-      g.fillRect(16, 17, 2, 2);
-      g.fillStyle(0xf6d365);
-      g.fillRect(8, 9, 2, 2);
-      g.fillRect(12, 8, 2, 2);
-      g.fillRect(16, 9, 2, 2);
-    });
+    drawToken(
+      'loot_water',
+      { x: '#1b2f43', w: '#4f7aa3', c: '#8fd0f2' },
+      [
+        '.....xx.....',
+        '....xwwx....',
+        '....xwwx....',
+        '...xwccwx...',
+        '...xwccwx...',
+        '...xwccwx...',
+        '...xwccwx...',
+        '...xwccwx...',
+        '...xwccwx...',
+        '...xwccwx...',
+        '....xxxx....',
+        '............',
+      ]
+    );
 
-    drawToken('loot_scrap', 0x7d8fa4, (g) => {
-      g.fillStyle(0x667788);
-      g.fillRect(7, 11, 6, 6);
-      g.fillRect(14, 13, 6, 6);
-      g.fillStyle(0x9bafc2);
-      g.fillCircle(10, 14, 2);
-      g.fillCircle(17, 16, 2);
-      g.fillStyle(0x394554);
-      g.fillCircle(10, 14, 1);
-      g.fillCircle(17, 16, 1);
-    });
+    drawToken(
+      'loot_scrap',
+      { x: '#273443', s: '#6d8094', h: '#a2b3c4' },
+      [
+        '....xx......',
+        '...xssx.....',
+        '..xssssx....',
+        '.xsshhssx...',
+        '.sshxxhss...',
+        'xssh..hssx..',
+        'xssh..hssx..',
+        '.sshxxhss...',
+        '.xsshhssx...',
+        '..xssssx....',
+        '...xssx.....',
+        '....xx......',
+      ]
+    );
 
-    drawToken('loot_water', 0x5aa7d6, (g) => {
-      g.fillStyle(0x3b88b8);
-      g.fillRect(10, 9, 8, 10);
-      g.fillStyle(0x8cc7ea);
-      g.fillRect(11, 10, 6, 7);
-      g.fillStyle(0xb8e3fb);
-      g.fillRect(12, 8, 4, 2);
-    });
+    drawToken(
+      'loot_medical',
+      { x: '#3a1b20', r: '#be4b57', w: '#f6edf0' },
+      [
+        '............',
+        '..xxxxxxxx..',
+        '.xrrrrrrrrx.',
+        '.xrrrrrrrrx.',
+        '.xrrrwwrrrx.',
+        '.xrrrwwrrrx.',
+        '.xwwwwwwwwx.',
+        '.xrrrwwrrrx.',
+        '.xrrrwwrrrx.',
+        '.xrrrrrrrrx.',
+        '..xxxxxxxx..',
+        '............',
+      ]
+    );
 
-    drawToken('loot_medical', 0xc46a6a, (g) => {
-      g.fillStyle(0x975454);
-      g.fillRect(8, 10, 12, 10);
-      g.fillStyle(0xe5e7eb);
-      g.fillRect(12, 11, 2, 8);
-      g.fillRect(10, 14, 6, 2);
-      g.fillStyle(0x6e3131);
-      g.fillRect(9, 9, 10, 1);
-    });
+    drawToken(
+      'loot_ammo',
+      { t: '#f4cc72', b: '#b88544', s: '#6f4f2e', x: '#352714' },
+      [
+        '............',
+        '..tt.tt.tt..',
+        '..tt.tt.tt..',
+        '..tt.tt.tt..',
+        '..bb.bb.bb..',
+        '..bb.bb.bb..',
+        '..bb.bb.bb..',
+        '..bb.bb.bb..',
+        '..ss.ss.ss..',
+        '..ss.ss.ss..',
+        '...xxxxxx...',
+        '............',
+      ]
+    );
 
-    drawToken('loot_core', 0x9d84e6, (g) => {
-      g.fillStyle(0x7c66c7);
-      g.fillRect(11, 10, 6, 8);
-      g.fillRect(10, 11, 8, 6);
-      g.fillStyle(0xc2b0f5);
-      g.fillRect(12, 12, 4, 4);
-      g.fillStyle(0xe4ddff);
-      g.fillRect(12, 10, 4, 1);
-    });
+    drawToken(
+      'loot_core',
+      { g: '#6f54b6', p: '#8b68ea', C: '#b59cff', W: '#f1eaff' },
+      [
+        '.....g......',
+        '....gpg.....',
+        '...gpppg....',
+        '..gppCppg...',
+        '.gppCCCppg..',
+        '.ppCCWCCpp..',
+        '.gppCCCppg..',
+        '..gppCppg...',
+        '...gpppg....',
+        '....gpg.....',
+        '.....g......',
+        '............',
+      ]
+    );
   }
 
   private generateParticleTextures(): void {

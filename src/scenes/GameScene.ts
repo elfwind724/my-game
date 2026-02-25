@@ -8,6 +8,9 @@ import {
   gameState,
   type Resources,
   type CompanionData,
+  type AutoBuildRule,
+  type ConstructionTaskData,
+  type ConstructionTaskKind,
   type PermanentTalentBonuses,
   type DayChallengeBranch,
   type DayChallengeMasteryBonuses,
@@ -30,7 +33,8 @@ import { BaseSystem } from '../systems/BaseSystem';
 import { CompanionPersonalitySystem } from '../systems/CompanionPersonalitySystem';
 import { GearLootSystem } from '../systems/GearLootSystem';
 import { BASE_POWER_PER_TURRET } from '../data/base';
-import { BUILDING_DEFS } from '../data/buildings';
+import { BUILDING_DEFS, getBuildingUpgradeHint } from '../data/buildings';
+import { BASE_PLACEMENT_RULE } from '../data/buildingEcology';
 import { WEAPON_DEFS } from '../data/weapons';
 import {
   RUN_EVENT_ARC_LABELS,
@@ -67,6 +71,10 @@ import {
   getActionDurationMs,
   mapLegacyEnemyTypeToV2Archetype,
 } from '../data/v2SpriteAnims';
+import {
+  customHeroTextureKey,
+  hasCustomHeroDirectionalTextures,
+} from '../data/customHero';
 
 interface CampInteractable {
   sprite: Phaser.GameObjects.Sprite;
@@ -115,6 +123,23 @@ interface DayLifeSpotBonus {
   bonusXp: number;
   expiresAt: number;
   color: string;
+}
+
+interface ConstructionSiteVisual {
+  container: Phaser.GameObjects.Container;
+  bar: Phaser.GameObjects.Rectangle;
+  label: Phaser.GameObjects.Text;
+  eta: Phaser.GameObjects.Text;
+}
+
+interface ResourceFloatingToastEntry {
+  id: number;
+  type: string;
+  label: string;
+  amount: number;
+  text: Phaser.GameObjects.Text;
+  timer: Phaser.Time.TimerEvent | null;
+  tween: Phaser.Tweens.Tween | null;
 }
 
 interface DayMiniGameProfile {
@@ -515,9 +540,14 @@ export default class GameScene extends Phaser.Scene {
   private villageLights: { x: number; y: number; scale: number }[] = [];
   private lastPowerWarning: number = 0;
   private lastHungerWarning: number = 0;
+  private lastStructureWarning: number = 0;
   private dayActivityUsage: Map<ExplorationActionType, number> = new Map();
   private explorationStatusNextAt: number = 0;
-  private lootToastNextAt: number = 0;
+  private resourceToastSeed: number = 0;
+  private resourceToastBaseX: number = 0;
+  private resourceToastBaseY: number = 0;
+  private resourceFloatingToasts: ResourceFloatingToastEntry[] = [];
+  private resourceFloatingToastsByType: Map<string, ResourceFloatingToastEntry> = new Map();
   private lootLegendQueue: string[] = [];
   private lootLegendActiveResourceId: string | null = null;
   private lootLegendContainer: Phaser.GameObjects.Container | null = null;
@@ -730,6 +760,15 @@ export default class GameScene extends Phaser.Scene {
   private residentDayYieldNextAt: Map<string, number> = new Map();
   private residentDefenseNextFireAt: Map<string, number> = new Map();
   private residentNightAnchorIndex: Map<string, number> = new Map();
+  private constructionSiteVisuals: Map<string, ConstructionSiteVisual> = new Map();
+  private constructionAssignedResidents: Map<string, string> = new Map();
+  private constructionFxNextAt: Map<string, number> = new Map();
+  private nextAutoBuildPlanAt: number = 0;
+  private nextAutoBuildCrewSyncAt: number = 0;
+  private nextAutoDutyDispatchSyncAt: number = 0;
+  private nextAutoDutyDispatchTipAt: number = 0;
+  private nextConstructionSummaryAt: number = 0;
+  private nextScavengerCollectorSyncAt: number = 0;
   private residentAssistTask: ResidentAssistTask | null = null;
   private residentRecentChatter: Map<string, string[]> = new Map();
   private companionCombatRecentChatter: Map<string, string[]> = new Map();
@@ -737,6 +776,7 @@ export default class GameScene extends Phaser.Scene {
 
   // VS-style multi-weapon fire timers
   private weaponTimers: Map<string, number> = new Map();
+  private vsWeaponPatternCounter: Map<string, number> = new Map();
 
   // Combo tracking
   private comboCount: number = 0;
@@ -1108,6 +1148,7 @@ export default class GameScene extends Phaser.Scene {
     this.facilityTransitionFallback?.remove(false);
     this.facilityTransitionFallback = null;
     this.weaponTimers.clear();
+    this.vsWeaponPatternCounter.clear();
     this.turretIdSeed = 0;
     this.isCraftingPanelOpen = false;
     this.bulletTrailTick = 0;
@@ -1169,6 +1210,14 @@ export default class GameScene extends Phaser.Scene {
     this.residentDayYieldNextAt.clear();
     this.residentDefenseNextFireAt.clear();
     this.residentNightAnchorIndex.clear();
+    this.clearConstructionSiteVisuals();
+    this.constructionAssignedResidents.clear();
+    this.nextAutoBuildPlanAt = 0;
+    this.nextAutoBuildCrewSyncAt = 0;
+    this.nextAutoDutyDispatchSyncAt = 0;
+    this.nextAutoDutyDispatchTipAt = 0;
+    this.nextConstructionSummaryAt = 0;
+    this.nextScavengerCollectorSyncAt = 0;
     this.residentRecentChatter.clear();
     this.companionCombatRecentChatter.clear();
     this.companionCombatNextAt.clear();
@@ -1181,7 +1230,10 @@ export default class GameScene extends Phaser.Scene {
     this.scavengeDurabilityPenaltyStartAt = 0;
     this.scavengeDurabilityPenaltyDurationMs = 0;
     this.explorationStatusNextAt = 0;
-    this.lootToastNextAt = 0;
+    this.resourceToastSeed = 0;
+    this.resourceToastBaseX = 0;
+    this.resourceToastBaseY = 0;
+    this.clearResourceFloatingToasts();
     this.dayAdventureChain = 0;
     this.dayAdventureLastAt = 0;
     this.clearResidentAssistTask();
@@ -1206,10 +1258,15 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Player
-    const playerTexture = this.textures.exists(HERO_V2_TEXTURE_KEY) ? HERO_V2_TEXTURE_KEY : 'player';
+    const hasCustomHero = hasCustomHeroDirectionalTextures(this);
+    const playerTexture = hasCustomHero
+      ? customHeroTextureKey('s')
+      : (this.textures.exists(HERO_V2_TEXTURE_KEY) ? HERO_V2_TEXTURE_KEY : 'player');
     this.player = this.physics.add.sprite(1000, 750, playerTexture);
     if (playerTexture === HERO_V2_TEXTURE_KEY) {
       this.player.setFrame(getHeroFrameIndex('s', 'walk', 0));
+    } else if (hasCustomHero) {
+      this.player.setData('customFacingDir', 's');
     }
     const playerScale = this.getPlayerVisualScale();
     this.player.setScale(playerScale);
@@ -1308,6 +1365,7 @@ export default class GameScene extends Phaser.Scene {
     events.on('companion-status-changed', this.onCompanionStatusChanged, this);
     events.on('companion-bulk-status-changed', this.onCompanionBulkStatusChanged, this);
     events.on('companion-job-changed', this.onCompanionJobChanged, this);
+    events.on('base-autobuild-updated', this.onAutoBuildConfigUpdated, this);
     events.on('select-build-item', this.onBuildSelection, this);
     events.on('crafting-panel-state', this.onCraftingPanelState, this);
     events.on('mobile-move', this.onMobileMove, this);
@@ -1406,6 +1464,27 @@ export default class GameScene extends Phaser.Scene {
         active: this.lootLegendActiveResourceId,
       };
     };
+    (window as any).__debug_spawn_loot_preview = (clusters: number = 1) => {
+      const safeClusters = Phaser.Math.Clamp(Math.floor(clusters || 1), 1, 6);
+      const previewLootTable = [
+        { type: 'resource', id: 'wood', chance: 1, min: 1, max: 1 },
+        { type: 'resource', id: 'metal', chance: 1, min: 1, max: 1 },
+        { type: 'resource', id: 'food', chance: 1, min: 1, max: 1 },
+        { type: 'resource', id: 'water', chance: 1, min: 1, max: 1 },
+        { type: 'resource', id: 'scrap', chance: 1, min: 1, max: 1 },
+        { type: 'resource', id: 'medical', chance: 1, min: 1, max: 1 },
+        { type: 'resource', id: 'ammo', chance: 1, min: 1, max: 1 },
+        { type: 'resource', id: 'energyCore', chance: 1, min: 1, max: 1 },
+      ] as any;
+      for (let i = 0; i < safeClusters; i += 1) {
+        const radius = 40 + i * 20;
+        const angle = (Math.PI * 2 * i) / Math.max(1, safeClusters);
+        const dropX = this.player.x + Math.cos(angle) * radius;
+        const dropY = this.player.y + Math.sin(angle) * radius;
+        this.lootSystem.spawnLoot(dropX, dropY, previewLootTable, 0, 1);
+      }
+      return { ok: true, clusters: safeClusters };
+    };
     (window as any).__debug_open_cave_raid = () => {
       if (this.dayChallengeSelectionOpen) {
         const fallbackChoice = this.dayChallengePendingChoices[0];
@@ -1453,6 +1532,28 @@ export default class GameScene extends Phaser.Scene {
       this.openDayExplorationMiniGame(spot);
       return { ok: true, spotId: spot.id };
     };
+    (window as any).__debug_select_day_challenge = (
+      branch: DayChallengeBranch = 'stable',
+      actionType?: ExplorationActionType
+    ) => {
+      if (!this.dayChallengeSelectionOpen) {
+        return { ok: false, reason: 'selection_not_open' };
+      }
+      const picked = this.dayChallengePendingChoices.find((choice) => (
+        choice.branch === branch && (!actionType || choice.actionType === actionType)
+      )) || this.dayChallengePendingChoices[0];
+      if (!picked) {
+        this.closeDayChallengeSelectionPanel();
+        return { ok: false, reason: 'no_choice' };
+      }
+      this.selectDayExplorationChallenge(picked);
+      return {
+        ok: true,
+        branch: picked.branch,
+        actionType: picked.actionType,
+        targetQuality: picked.targetQuality,
+      };
+    };
     (window as any).render_game_to_text = () => {
       const p = this.player;
       const resources = gameState.data.resources;
@@ -1496,6 +1597,8 @@ export default class GameScene extends Phaser.Scene {
           x: Math.round(p.x),
           y: Math.round(p.y),
           zone: this.getWorldZoneAt(p.x, p.y),
+          texture: p.texture?.key || null,
+          customFacingDir: (p.getData('customFacingDir') as string | undefined) || null,
         } : null,
         enemies: this.enemies?.countActive?.(true) ?? 0,
         bosses: bossCount,
@@ -1560,6 +1663,12 @@ export default class GameScene extends Phaser.Scene {
         population: {
           used: BaseSystem.getPopulationUsage(),
           cap: BaseSystem.getPopulationCapacity(),
+        },
+        baseDiagnostics: {
+          upkeepNodes: gameState.data.base.diagnosticUpkeepNodes || 0,
+          inputNodes: gameState.data.base.diagnosticInputNodes || 0,
+          powerNodes: gameState.data.base.diagnosticPowerNodes || 0,
+          total: (gameState.data.base.nodeDiagnostics || []).length,
         },
         companions: {
           party: gameState.data.companions.filter((c) => c.status === 'party').length,
@@ -1878,6 +1987,26 @@ export default class GameScene extends Phaser.Scene {
       total: entries.length,
       entries,
     };
+  }
+
+  public focusCameraOnWorldPoint(x: number, y: number, holdMs: number = 900): void {
+    const cam = this.cameras.main;
+    const targetX = Phaser.Math.Clamp(x, cam.width * 0.5, 2000 - cam.width * 0.5);
+    const targetY = Phaser.Math.Clamp(y, cam.height * 0.5, 1500 - cam.height * 0.5);
+    cam.stopFollow();
+    cam.pan(targetX, targetY, 320, 'Sine.easeOut', true);
+    const ping = this.add.circle(x, y, 12, 0x22d3ee, 0.16).setDepth(180);
+    this.tweens.add({
+      targets: ping,
+      scale: 2.4,
+      alpha: 0,
+      duration: 620,
+      onComplete: () => ping.destroy(),
+    });
+    this.time.delayedCall(Math.max(320, holdMs), () => {
+      if (!this.player?.active) return;
+      cam.startFollow(this.player, true, 0.18, 0.18);
+    });
   }
 
   private getRunEventStoryFlagKey(flag: string): string {
@@ -8537,6 +8666,7 @@ export default class GameScene extends Phaser.Scene {
       (wall as any).maxHealth = def.health;
       (wall as any).buildingId = def.id;
       (wall as any).buildingDef = def;
+      (wall as any).buildingTier = def.tier;
       gameState.data.buildings.push({ id: def.id, type: def.category, x, y, tier: def.tier, health: def.health });
     };
 
@@ -8561,6 +8691,7 @@ export default class GameScene extends Phaser.Scene {
       t.clearTint();
       (t as any).buildingId = def.id;
       (t as any).buildingDef = def;
+      (t as any).buildingTier = def.tier;
       (t as any).health = def.health;
       (t as any).maxHealth = def.health;
       this.initTurretAutoLevelStats(t, 15, 700, 220);
@@ -9061,6 +9192,7 @@ export default class GameScene extends Phaser.Scene {
       this.enforceFacilityLock();
     }
     this.enemySystem.update();
+    this.updateScavengerCollectors();
     this.lootSystem.update();
     this.weatherSystem.update();
 
@@ -9099,6 +9231,11 @@ export default class GameScene extends Phaser.Scene {
       this.nextResidentAssistUpdateAt = this.time.now + (this.lowPerfMode ? 220 : 120);
       this.updateResidentAssistTask();
     }
+    if (this.time.now >= this.nextAutoDutyDispatchSyncAt) {
+      this.nextAutoDutyDispatchSyncAt = this.time.now + (this.lowPerfMode ? 2600 : 1400);
+      this.maintainAutoDutyDispatch();
+    }
+    this.updateConstructionAutomation(delta);
 
     // Homing bullets
     this.updateHomingBullets();
@@ -9295,7 +9432,9 @@ export default class GameScene extends Phaser.Scene {
       (level >= 9 ? 1 : 0) +
       (level >= 14 ? 1 : 0) +
       (level >= 20 ? 1 : 0) +
+      (level >= 24 ? 1 : 0) +
       (masteryPeak >= 5 ? 1 : 0) +
+      (masteryPeak >= 9 ? 1 : 0) +
       (runMomentumTier >= 10 ? 1 : 0) +
       protocolBonuses.projectileBonus +
       this.gearResonanceProjectileBonus;
@@ -9333,14 +9472,16 @@ export default class GameScene extends Phaser.Scene {
       * protocolBonuses.speedMul;
     const speedMulWithGear = speedMul * this.gearResonanceSpeedMul;
     const spreadMul = Math.max(0.5, 1 - Math.min(0.5, (level - 1) * 0.014 + partySyncBonus * 0.28 + masteryBonus * 0.32 + runMomentumMul * 0.14));
-    const patternPower = Math.max(0, protocolBonuses.patternPower + Math.floor(level / 10));
-    const signatureRateMul = protocolBonuses.signatureRateMul * (1 + Math.min(0.22, masteryPeak * 0.02));
+    const patternPower = Math.max(0, protocolBonuses.patternPower + Math.floor(level / 8));
+    const signatureRateMul = protocolBonuses.signatureRateMul * (1 + Math.min(0.36, masteryPeak * 0.03 + level * 0.004));
     const extraChainChance = protocolBonuses.extraChainChance + Math.min(0.1, runMomentumTier * 0.004);
-    const signatureDamageMul = 1 + Math.min(0.35, patternPower * 0.05);
-    const signatureSpeedMul = 1 + Math.min(0.32, patternPower * 0.045);
-    const orbitAmpMul = 1 + Math.min(0.26, patternPower * 0.04);
-    const companionDamageMul = protocolBonuses.companionDamageMul;
-    const companionFireRateMul = protocolBonuses.companionFireRateMul;
+    const signatureDamageMul = 1 + Math.min(0.5, patternPower * 0.07 + level * 0.004);
+    const signatureSpeedMul = 1 + Math.min(0.44, patternPower * 0.055 + level * 0.003);
+    const orbitAmpMul = 1 + Math.min(0.38, patternPower * 0.05);
+    const companionDamageMul = protocolBonuses.companionDamageMul
+      * (1 + Math.min(0.22, avgCompanionLevel * 0.006 + roleVariety * 0.03));
+    const companionFireRateMul = protocolBonuses.companionFireRateMul
+      * (1 + Math.min(0.16, avgCompanionLevel * 0.004 + roleVariety * 0.02));
     const levelSpikeTier = Math.floor((level - 1) / 5);
     const levelSpikeFireRateMul = 1 + Math.min(0.34, levelSpikeTier * 0.055);
     const levelSpikeDamageMul = 1 + Math.min(0.52, levelSpikeTier * 0.08);
@@ -9449,6 +9590,10 @@ export default class GameScene extends Phaser.Scene {
     const finalSpecial = weaponDef.special || mods.forceSpecial;
     const damage = (weaponDef.damage || 10) * (mods.damageMul || 1);
     let created = 0;
+    const patternKey = String(weaponDef.id || weaponDef.nameCN || weaponDef.name || 'vs');
+    const shotIndex = (this.vsWeaponPatternCounter.get(patternKey) || 0) + 1;
+    this.vsWeaponPatternCounter.set(patternKey, shotIndex);
+    const patternIntensity = 1 + patternPower * 0.22 + Math.max(0, signatureRateMul - 1) * 0.35;
 
     for (let i = 0; i < projectileCount; i++) {
       const spread = spreadDeg * (Math.PI / 180);
@@ -9535,10 +9680,10 @@ export default class GameScene extends Phaser.Scene {
       });
     }
 
-    const cadence = (base: number): number => Math.max(2, Math.round(base / signatureRateMul));
-    const burstChance = Phaser.Math.Clamp((0.07 + patternPower * 0.035) * (12 / cadence(9)), 0, 0.46);
+    const cadence = (base: number): number => Math.max(1, Math.round(base / (signatureRateMul * patternIntensity)));
+    const burstChance = Phaser.Math.Clamp((0.1 + patternPower * 0.045) * (14 / cadence(9)), 0, 0.72);
     if (patternPower > 0 && created > 0 && Math.random() < burstChance) {
-      const burstCount = Math.min(8, 3 + patternPower);
+      const burstCount = Math.min(14, 4 + patternPower);
       const burstSpread = Math.PI * 2;
       for (let i = 0; i < burstCount; i++) {
         const extra = this.acquireBulletFromGroup(this.vsBullets, this.player.x, this.player.y);
@@ -9546,8 +9691,8 @@ export default class GameScene extends Phaser.Scene {
         created += 1;
         const angleOffset = -burstSpread / 2 + (burstSpread / burstCount) * i;
         const burstAngle = angle + angleOffset;
-        const burstSpeed = speed * (0.82 + patternPower * 0.05) * signatureSpeedMul;
-        const burstDamage = damage * (0.42 + patternPower * 0.08) * signatureDamageMul;
+        const burstSpeed = speed * (0.88 + patternPower * 0.06) * signatureSpeedMul;
+        const burstDamage = damage * (0.54 + patternPower * 0.1) * signatureDamageMul;
         extra.enableBody(true, this.player.x, this.player.y, true, true);
         extra.setActive(true).setVisible(true);
         const burstTexture = this.getVSBulletTexture(weaponDef, finalSpecial === 'burn' ? 'burn' : finalSpecial || 'chain');
@@ -9592,6 +9737,64 @@ export default class GameScene extends Phaser.Scene {
         });
       }
     }
+    if (patternPower >= 3 && created > 0 && shotIndex % cadence(5) === 0) {
+      const novaCount = Math.min(18, 8 + patternPower * 2);
+      for (let i = 0; i < novaCount; i++) {
+        const nova = this.acquireBulletFromGroup(this.vsBullets, this.player.x, this.player.y);
+        if (!nova) continue;
+        created += 1;
+        const novaAngle = angle + (Math.PI * 2 * i / Math.max(1, novaCount)) + Phaser.Math.FloatBetween(-0.08, 0.08);
+        const novaSpecial = finalSpecial === 'burn'
+          ? 'burn'
+          : finalSpecial === 'pierce'
+            ? 'pierce'
+            : 'chain';
+        const novaTexture = this.getVSBulletTexture(weaponDef, novaSpecial);
+        const novaScale = this.getVSBulletScale(novaTexture) * (novaTexture === 'bullet_cannon' ? 1 : 1.08);
+        const novaSpeed = speed * (0.92 + patternPower * 0.045) * signatureSpeedMul;
+        const novaDamage = damage * (0.38 + patternPower * 0.07) * signatureDamageMul;
+        nova.enableBody(true, this.player.x, this.player.y, true, true);
+        nova.setActive(true).setVisible(true);
+        nova.setTexture(novaTexture);
+        nova.setScale(novaScale);
+        nova.setTint(weaponDef.color || 0x0ea5e9);
+        nova.setBlendMode(Phaser.BlendModes.ADD);
+        const body = nova.body as Phaser.Physics.Arcade.Body;
+        body.reset(this.player.x, this.player.y);
+        body.setAllowGravity(false);
+        const novaRadius = Math.max(4, Math.min(7, Math.floor(4 * novaScale)));
+        body.setCircle(novaRadius, nova.width / 2 - novaRadius, nova.height / 2 - novaRadius);
+        body.setCollideWorldBounds(false);
+        body.setBounce(0, 0);
+        body.setDrag(0, 0);
+        body.setVelocity(Math.cos(novaAngle) * novaSpeed, Math.sin(novaAngle) * novaSpeed);
+        nova.setRotation(novaAngle + Math.PI / 2);
+        const anyNova = nova as any;
+        anyNova.weaponDamage = novaDamage;
+        anyNova.weaponSpecial = extraChainChance > 0.18 ? 'chain' : novaSpecial;
+        anyNova.weaponRange = Math.max(140, (weaponDef.range || 400) * 0.72);
+        anyNova.originX = this.player.x;
+        anyNova.originY = this.player.y;
+        anyNova.isHoming = false;
+        anyNova.homingTarget = null;
+        anyNova.brandDamageApplied = true;
+        anyNova.bulletTextureKey = novaTexture;
+        anyNova.baseVelocityX = Math.cos(novaAngle) * novaSpeed;
+        anyNova.baseVelocityY = Math.sin(novaAngle) * novaSpeed;
+        anyNova.swayAmplitude = (14 + patternPower * 2.4) * orbitAmpMul;
+        anyNova.swayFrequency = 0.014 + patternPower * 0.0009;
+        anyNova.swayPhase = (Math.PI * 2 * i) / Math.max(1, novaCount);
+        anyNova.pierceLeft = anyNova.weaponSpecial === 'pierce' ? (2 + (mods.pierceBonus || 0)) : null;
+        const novaLife = anyNova.weaponRange / Math.max(120, novaSpeed) * 1000;
+        anyNova.spawnTime = this.time.now;
+        anyNova.maxLifetime = novaLife + 120;
+        if (anyNova.vsLifetimeTimer) anyNova.vsLifetimeTimer.remove();
+        anyNova.vsLifetimeTimer = this.time.delayedCall(novaLife, () => {
+          anyNova.vsLifetimeTimer = null;
+          if (nova.active) this.disableBullet(nova);
+        });
+      }
+    }
     return created;
   }
 
@@ -9602,11 +9805,13 @@ export default class GameScene extends Phaser.Scene {
     if (special === 'explode') return 'bullet_cannon';
     if (special === 'slow') return 'bullet_frost';
     if (special === 'chain') return 'bullet_chain';
-    if (id.includes('scatter') || id.includes('crit_storm')) return 'bullet_scatter';
-    if (id.includes('pulse') || id.includes('bullet_hell')) return 'bullet_pulse';
+    if (id.includes('scatter') || id.includes('crit_storm') || id.includes('shotgun')) return 'bullet_scatter';
+    if (id.includes('pulse') || id.includes('bullet_hell') || id.includes('rifle')) return 'bullet_pulse';
+    if (id.includes('flame') || id.includes('flamethrower') || id.includes('inferno')) return 'bullet_flame';
     if (id.includes('frost') || id.includes('absolute_zero')) return 'bullet_frost';
+    if (id.includes('chain') || id.includes('storm') || id.includes('thunder')) return 'bullet_chain';
     if (id.includes('cannon') || id.includes('reflection')) return 'bullet_cannon';
-    if (id.includes('pierce') || id.includes('annihilation')) return 'bullet_pierce';
+    if (id.includes('pierce') || id.includes('annihilation') || id.includes('laser')) return 'bullet_pierce';
     return 'bullet';
   }
 
@@ -9911,7 +10116,7 @@ export default class GameScene extends Phaser.Scene {
     x: number,
     y: number,
     special: string | undefined,
-    color: number,
+    _color: number,
     textureKey?: string
   ): void {
     const archetype = this.resolveBulletVfxArchetype(textureKey, special);
@@ -9920,7 +10125,7 @@ export default class GameScene extends Phaser.Scene {
         : archetype === 'frost' ? 0x93c5fd
           : archetype === 'flame' ? 0xf97316
             : archetype === 'pierce' ? 0x7dd3fc
-              : color;
+              : 0x67e8f9;
     const coreSize = archetype === 'cannon' ? 8 : archetype === 'pierce' ? 6 : 5;
     const baseSparkCount = archetype === 'cannon' ? 8 : archetype === 'scatter' ? 5 : 6;
     const sparkCount = this.ultraLowPerfMode ? Math.max(1, Math.floor(baseSparkCount * 0.35))
@@ -9938,6 +10143,15 @@ export default class GameScene extends Phaser.Scene {
       scaleY: archetype === 'pierce' ? 1.2 : 2,
       duration,
       onComplete: () => core.destroy(),
+    });
+    const halo = this.add.circle(x, y, coreSize + 2, ringColor, 0.24).setDepth(109);
+    halo.setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: halo,
+      alpha: 0,
+      scale: archetype === 'cannon' ? 3.1 : 2.4,
+      duration: duration + 40,
+      onComplete: () => halo.destroy(),
     });
 
     for (let i = 0; i < sparkCount; i++) {
@@ -10008,6 +10222,15 @@ export default class GameScene extends Phaser.Scene {
       duration: archetype === 'cannon' ? 110 : 80,
       onComplete: () => core.destroy(),
     });
+    const rune = this.add.circle(fxX, fxY, archetype === 'cannon' ? 7 : 5, tint, 0.26).setDepth(108);
+    rune.setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({
+      targets: rune,
+      alpha: 0,
+      scale: archetype === 'cannon' ? 2.2 : 1.8,
+      duration: archetype === 'cannon' ? 130 : 95,
+      onComplete: () => rune.destroy(),
+    });
 
     if (this.ultraLowPerfMode) return;
     const sparkCount = this.lowPerfMode ? 1 : (archetype === 'cannon' ? 4 : 2);
@@ -10043,7 +10266,22 @@ export default class GameScene extends Phaser.Scene {
         sourceMultiplier *= this.nightDirectiveEffects.playerDamageMul;
       }
     } else if (source.type === 'companion') {
-      sourceMultiplier *= 1 + Math.min(0.26, (level - 1) * 0.01);
+      const activeCompanions = gameState.data.companions.filter(c => c.status !== 'base');
+      const companionLevel = Math.max(
+        1,
+        source.companionId
+          ? (gameState.data.companions.find(c => c.id === source.companionId)?.level || 1)
+          : Math.round(
+            activeCompanions.length > 0
+              ? activeCompanions.reduce((sum, c) => sum + Math.max(1, c.level || 1), 0) / activeCompanions.length
+              : 1
+          )
+      );
+      sourceMultiplier *= 1 + Math.min(0.7, (level - 1) * 0.022);
+      sourceMultiplier *= 1 + Math.min(1.05, (companionLevel - 1) * 0.038 + Math.max(0, activeCompanions.length - 1) * 0.045);
+      if (companionLevel >= 20) {
+        sourceMultiplier *= 1.12 + Math.min(0.18, (companionLevel - 20) * 0.01);
+      }
       if (gameState.data.isNight) {
         sourceMultiplier *= this.nightDirectiveEffects.companionDamageMul;
       }
@@ -10055,7 +10293,7 @@ export default class GameScene extends Phaser.Scene {
     }
     if (gameState.data.isNight && this.hasDayBuff('training')) {
       if (source.type === 'player') sourceMultiplier *= 1.16;
-      else if (source.type === 'companion') sourceMultiplier *= 1.12;
+      else if (source.type === 'companion') sourceMultiplier *= 1.24;
       else sourceMultiplier *= 1.1;
     }
 
@@ -10099,6 +10337,10 @@ export default class GameScene extends Phaser.Scene {
 
     // Damage number
     this.showDamageNumber(enemy.x, enemy.y - 10, finalDamage, isCrit);
+    if (source.type === 'companion' && source.companionId && ed.health > 0) {
+      const progress = this.companionSystem.registerDamage(source.companionId, finalDamage);
+      this.handleCompanionProgressUpdate(source.companionId, progress, '作战成长');
+    }
 
     // Hit effect
     this.animationSystem.playHitEffect(enemy);
@@ -10233,6 +10475,13 @@ export default class GameScene extends Phaser.Scene {
     this.gainBattleMomentum(ed, source);
     this.gainOverdriveCharge(source);
     this.handleAutoLevelKill(source);
+    if (source.type !== 'companion') {
+      const assistWeight = source.type === 'player' ? 0.5 : 0.32;
+      const assistProgressList = this.companionSystem.registerTeamAssistKill(assistWeight, 4);
+      assistProgressList.forEach((item) => {
+        this.handleCompanionProgressUpdate(item.companionId, item.progress, '协同成长');
+      });
+    }
     this.maybeEmitCompanionCombatChatter(source, 'kill');
 
     events.emit(GameEvents.ENEMY_KILLED, { enemyType: ed.enemyType, reward: xpValue });
@@ -10824,37 +11073,50 @@ export default class GameScene extends Phaser.Scene {
 
     if (source.type === 'companion' && source.companionId) {
       const info = this.companionSystem.registerKill(source.companionId);
-      if (!info) return;
-      if (info.leveledUp) {
-        const c = gameState.data.companions.find(item => item.id === source.companionId);
-        if (c) {
-          c.level = info.level;
-          if (info.advancedClass) {
-            c.advancedClass = info.advancedClass;
-            c.promotionTier = 1;
-          }
-        }
-        this.showFloatingText(
-          this.player.x,
-          this.player.y - 52,
-          info.promoted
-            ? `${info.name.split('(')[0]} 转职：${info.advancedClass}`
-            : `${info.name.split('(')[0]} 升级 Lv.${info.level}`,
-          Phaser.Display.Color.IntegerToColor(info.tint).rgba,
-          false
-        );
-        if (info.reachedMax) {
-          this.showFloatingText(
-            this.player.x,
-            this.player.y - 72,
-            `${info.name.split('(')[0]} 已达满级 Lv.40`,
-            '#f59e0b',
-            false
-          );
-        }
-        this.lastCompanionRosterSignature = '';
+      this.handleCompanionProgressUpdate(source.companionId, info, '击杀成长');
+    }
+  }
+
+  private handleCompanionProgressUpdate(
+    companionId: string,
+    info: ReturnType<CompanionSystem['registerKill']>,
+    reason: '作战成长' | '击杀成长' | '协同成长' = '击杀成长'
+  ): void {
+    if (!info || !info.leveledUp) return;
+    const companionData = gameState.data.companions.find(item => item.id === companionId);
+    if (companionData) {
+      companionData.level = info.level;
+      if (info.advancedClass) {
+        companionData.advancedClass = info.advancedClass;
+        companionData.promotionTier = 1;
       }
     }
+    const companionName = info.name.split('(')[0];
+    this.showFloatingText(
+      this.player.x,
+      this.player.y - 52,
+      info.promoted
+        ? `${companionName} 转职：${info.advancedClass}`
+        : `${companionName} ${reason} Lv.${info.level}`,
+      Phaser.Display.Color.IntegerToColor(info.tint).rgba,
+      false
+    );
+    if (info.reachedMax) {
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 72,
+        `${companionName} 已达满级 Lv.40`,
+        '#f59e0b',
+        false
+      );
+    }
+    if (!this.lowPerfMode) {
+      this.createMuzzleFlash(
+        this.player.x + Phaser.Math.Between(-10, 10),
+        this.player.y - Phaser.Math.Between(8, 18)
+      );
+    }
+    this.lastCompanionRosterSignature = '';
   }
 
   private resetWeaponMasteryProgress(): void {
@@ -11075,6 +11337,118 @@ export default class GameScene extends Phaser.Scene {
       duration: 1500, ease: 'Quad.easeOut',
       onComplete: () => text.destroy(),
     });
+  }
+
+  private clearResourceFloatingToasts(): void {
+    for (const entry of this.resourceFloatingToasts) {
+      entry.timer?.remove(false);
+      entry.timer = null;
+      entry.tween?.remove();
+      entry.tween = null;
+      entry.text.destroy();
+    }
+    this.resourceFloatingToasts = [];
+    this.resourceFloatingToastsByType.clear();
+  }
+
+  private relayoutResourceFloatingToasts(): void {
+    if (this.resourceFloatingToasts.length <= 0) return;
+    const gap = 24;
+    const latestIndex = this.resourceFloatingToasts.length - 1;
+    for (let i = 0; i < this.resourceFloatingToasts.length; i += 1) {
+      const entry = this.resourceFloatingToasts[i];
+      if (!entry.text.active) continue;
+      const stackOffset = latestIndex - i;
+      entry.text.setPosition(this.resourceToastBaseX, this.resourceToastBaseY - stackOffset * gap);
+    }
+  }
+
+  private dismissResourceFloatingToast(toastId: number): void {
+    const idx = this.resourceFloatingToasts.findIndex((entry) => entry.id === toastId);
+    if (idx < 0) return;
+    const [entry] = this.resourceFloatingToasts.splice(idx, 1);
+    if (this.resourceFloatingToastsByType.get(entry.type)?.id === toastId) {
+      this.resourceFloatingToastsByType.delete(entry.type);
+    }
+    entry.timer?.remove(false);
+    entry.timer = null;
+    entry.tween?.remove();
+    entry.tween = null;
+    entry.text.destroy();
+    this.relayoutResourceFloatingToasts();
+  }
+
+  private armResourceFloatingToast(entry: ResourceFloatingToastEntry): void {
+    entry.timer?.remove(false);
+    entry.timer = null;
+    entry.tween?.remove();
+    entry.tween = null;
+    if (!entry.text.active) return;
+    entry.text.setAlpha(1);
+    entry.timer = this.time.delayedCall(1200, () => {
+      this.dismissResourceFloatingToast(entry.id);
+    });
+    entry.tween = this.tweens.add({
+      targets: entry.text,
+      y: entry.text.y - 22,
+      alpha: 0,
+      duration: 1200,
+      ease: 'Quad.easeOut',
+      onComplete: () => {
+        this.dismissResourceFloatingToast(entry.id);
+      },
+    });
+  }
+
+  private enqueueResourceFloatingToast(type: string, label: string, color: string, amount: number): void {
+    if (!this.player?.active) return;
+    const safeAmount = Math.max(1, Math.floor(amount || 1));
+    this.resourceToastBaseX = this.player.x;
+    this.resourceToastBaseY = this.player.y - 58;
+
+    const existing = this.resourceFloatingToastsByType.get(type);
+    if (existing && existing.text.active) {
+      existing.amount += safeAmount;
+      existing.text.setText(`+${label} ${existing.amount}`);
+      const existingIndex = this.resourceFloatingToasts.findIndex((entry) => entry.id === existing.id);
+      if (existingIndex >= 0) {
+        this.resourceFloatingToasts.splice(existingIndex, 1);
+        this.resourceFloatingToasts.push(existing);
+      }
+      this.relayoutResourceFloatingToasts();
+      this.armResourceFloatingToast(existing);
+      return;
+    }
+
+    while (this.resourceFloatingToasts.length >= 4) {
+      const oldest = this.resourceFloatingToasts[0];
+      if (!oldest) break;
+      this.dismissResourceFloatingToast(oldest.id);
+    }
+
+    const text = this.add.text(this.resourceToastBaseX, this.resourceToastBaseY, `+${label} ${safeAmount}`, {
+      fontFamily: this.getUIFontFamily(),
+      fontSize: '22px',
+      color,
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 4,
+      align: 'center',
+    }).setOrigin(0.5).setDepth(2000);
+
+    const entry: ResourceFloatingToastEntry = {
+      id: ++this.resourceToastSeed,
+      type,
+      label,
+      amount: safeAmount,
+      text,
+      timer: null,
+      tween: null,
+    };
+    this.resourceFloatingToasts.push(entry);
+    this.resourceFloatingToastsByType.set(type, entry);
+    this.relayoutResourceFloatingToasts();
+    this.armResourceFloatingToast(entry);
   }
 
   private applyBurnEffect(enemy: Phaser.Physics.Arcade.Sprite): void {
@@ -11342,12 +11716,24 @@ export default class GameScene extends Phaser.Scene {
       `当前：${def.nameCN}  T${def.tier}  HP${def.health}`,
       `成本：${costParts.join(' ')}`,
     ];
+    lines.push(getBuildingUpgradeHint(def.id));
+    const chain = BaseSystem.getBuildChainStatus(def.id);
+    lines.push(`链路：${chain.roleCN} | 分区：${chain.zoneLabelCN}`);
+    if (chain.blockedReasons.length > 0) {
+      lines.push(`阻塞：${chain.blockedReasons.slice(0, 2).join('；')}`);
+    }
     this.buildPaletteText.setText(lines.join('\n'));
   }
 
   private onBuildSelection(payload: { buildingId?: string } | null): void {
     const buildingId = payload?.buildingId;
     if (!buildingId || !BUILDING_DEFS[buildingId]) return;
+    const chain = BaseSystem.getBuildChainStatus(buildingId);
+    if (!chain.canConstruct) {
+      const msg = `建造链未满足：${chain.blockedReasons[0] || '请先完成前置设施'}`;
+      this.showFloatingText(this.cameras.main.width / 2, 220, msg, '#f87171', true);
+      return;
+    }
     this.selectedBuildingId = buildingId;
     this.initBuildList();
     this.isBuildMode = true;
@@ -11397,19 +11783,68 @@ export default class GameScene extends Phaser.Scene {
     // Check validity
     const bDef = BUILDING_DEFS[this.selectedBuildingId];
     const canAfford = bDef ? gameState.canAfford(bDef.cost as any) : false;
+    const occupied = this.findPlacedBuildingAt(gridX, gridY);
     let blocked = false;
-    [...this.walls.getChildren(), ...this.turrets.getChildren()].forEach(b => {
-      const s = b as Phaser.Physics.Arcade.Sprite;
-      if (Math.abs(s.x - gridX) < 32 && Math.abs(s.y - gridY) < 32) blocked = true;
-    });
-    if (bDef?.category === 'turret') {
+    let blockReason = '';
+    let canExecute = canAfford;
+    let actionHint = '放置';
+    let upgradeCostHint = '';
+    if (occupied && bDef) {
+      const fromId = String((occupied as any).buildingId || '');
+      const fromTier = Math.max(1, Number((occupied as any).buildingTier || BUILDING_DEFS[fromId]?.tier || 1));
+      const upgradeCheck = BaseSystem.getBuildingUpgradeCheck(fromId, bDef.id, fromTier, gameState.data.currentDay, gameState.data.buildings, { x: gridX, y: gridY });
+      actionHint = upgradeCheck.kind === 'tier' || upgradeCheck.kind === 'morph' ? '升级' : '占位';
+      if (upgradeCheck.kind !== 'none') {
+        upgradeCostHint = BaseSystem.getBuildingUpgradeCostText(upgradeCheck);
+      }
+      if (!upgradeCheck.available) {
+        blocked = true;
+        blockReason = upgradeCheck.blockedReasons[0] || '位置已被占用';
+      } else if (!upgradeCheck.canAfford) {
+        blocked = true;
+        blockReason = '升级资源不足';
+      } else {
+        blocked = false;
+        canExecute = true;
+      }
+    }
+    if (bDef) {
+      const placement = BaseSystem.validateBuildPlacement(bDef.id, gridX, gridY);
+      if (!occupied && !placement.canPlace) {
+        blocked = true;
+        blockReason = placement.positionReason || placement.blockedReasons[0] || '建造链不满足';
+      }
+    }
+    if (!occupied && bDef?.category === 'turret') {
       const powerCapacity = BaseSystem.computePowerCapacity(gameState.data.buildings);
       const powerUsed = BaseSystem.computePowerUsed(gameState.data.buildings);
       const need = bDef.powerUse ?? BASE_POWER_PER_TURRET;
-      if (powerUsed + need > powerCapacity) blocked = true;
+      if (powerUsed + need > powerCapacity) {
+        blocked = true;
+        blockReason = '电力不足';
+      }
+    }
+    if (!occupied && !canAfford) {
+      blockReason = '资源不足';
+    }
+    if (this.buildPaletteText && bDef) {
+      const chain = BaseSystem.validateBuildPlacement(bDef.id, gridX, gridY);
+      const lines = [
+        `建造模式：制造工坊-建筑页选择  |  左键放置  |  B退出`,
+        `当前：${bDef.nameCN}  T${bDef.tier}  HP${bDef.health}`,
+        `成本：${Object.entries(bDef.cost).map(([res, amt]) => {
+          const names: Record<string, string> = { wood: '木', metal: '金', scrap: '件', food: '食', water: '水', medical: '医', ammo: '弹', energyCore: '核' };
+          return `${names[res] || res}${amt}`;
+        }).join(' ')}`,
+        getBuildingUpgradeHint(bDef.id),
+        occupied ? `同格行为：${actionHint}${upgradeCostHint ? ` | 升级耗材 ${upgradeCostHint}` : ''}` : `同格行为：放置`,
+        `链路：${chain.roleCN} | 分区：${chain.zoneLabelCN} | 距核心${Math.round(chain.distanceToCore)}`,
+        blocked ? `状态：阻塞 - ${blockReason || '不可执行'}` : `状态：可${occupied ? '升级' : '放置'}`,
+      ];
+      this.buildPaletteText.setText(lines.join('\n'));
     }
 
-    const color = canAfford && !blocked ? 0x4ade80 : 0xef4444;
+    const color = canExecute && !blocked ? 0x4ade80 : 0xef4444;
     this.buildPreview.setFillStyle(color, 0.3);
     this.buildPreview.setStrokeStyle(2, color);
   }
@@ -11421,6 +11856,29 @@ export default class GameScene extends Phaser.Scene {
 
     const bDef = BUILDING_DEFS[this.selectedBuildingId];
     if (!bDef) return;
+    if (this.findPendingConstructionAt(gridX, gridY)) {
+      this.showFloatingText(this.cameras.main.width / 2, 200, '该位置已有施工任务', '#fbbf24', true);
+      return;
+    }
+    const occupied = this.findPlacedBuildingAt(gridX, gridY);
+    if (occupied) {
+      if (!this.tryUpgradeOnSameTile(occupied, bDef.id, 'manual')) {
+        this.showFloatingText(this.cameras.main.width / 2, 200, '该建筑不可按当前路线升级', '#ef4444', true);
+      }
+      return;
+    }
+
+    const placement = BaseSystem.validateBuildPlacement(bDef.id, gridX, gridY);
+    if (!placement.canPlace) {
+      this.showFloatingText(
+        this.cameras.main.width / 2,
+        200,
+        placement.positionReason || placement.blockedReasons[0] || '建造链不满足',
+        '#ef4444',
+        true
+      );
+      return;
+    }
 
     // Power check for turrets
     if (bDef.category === 'turret') {
@@ -11433,20 +11891,367 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    // Check overlap
-    let blocked = false;
-    [...this.walls.getChildren(), ...this.turrets.getChildren()].forEach(b => {
-      const s = b as Phaser.Physics.Arcade.Sprite;
-      if (Math.abs(s.x - gridX) < 32 && Math.abs(s.y - gridY) < 32) blocked = true;
-    });
-    if (blocked) return;
+    if (this.findPlacedBuildingAt(gridX, gridY)) return;
 
     if (!gameState.spendResources(bDef.cost as any)) {
       this.showFloatingText(this.cameras.main.width / 2, 200, '资源不足!', '#ef4444', true);
       return;
     }
+    const durationMs = this.computeConstructionDurationMs('build', bDef.id, bDef.tier, bDef.cost as Partial<Resources>, 'manual');
+    this.enqueueConstructionTask({
+      id: `ct_${this.time.now}_${Math.floor(Math.random() * 100000)}`,
+      kind: 'build',
+      status: 'queued',
+      source: 'manual',
+      buildingId: bDef.id,
+      x: gridX,
+      y: gridY,
+      targetTier: bDef.tier,
+      cost: { ...(bDef.cost as any) },
+      durationMs,
+      progressMs: 0,
+      queuedAt: Math.floor(this.time.now),
+    });
+    events.emit('update-resources', gameState.data.resources);
+    this.showFloatingText(gridX, gridY - 24, `开始施工 ${bDef.nameCN}`, '#38bdf8', false);
+  }
 
-    // Place
+  private getTurretBaseProfileById(buildingId: string): { damage: number; fireRate: number; range: number } {
+    if (buildingId === 'missile_turret') return { damage: 30, fireRate: 880, range: 300 };
+    if (buildingId === 'laser_turret') return { damage: 24, fireRate: 760, range: 280 };
+    if (buildingId === 'slow_turret') return { damage: 14, fireRate: 620, range: 250 };
+    return { damage: 15, fireRate: 700, range: 250 };
+  }
+
+  private tryUpgradeOnSameTile(
+    existing: Phaser.Physics.Arcade.Sprite,
+    toSelectedId: string,
+    source: 'manual' | 'auto' = 'manual'
+  ): boolean {
+    const fromId = String((existing as any).buildingId || '');
+    if (!fromId || !BUILDING_DEFS[fromId]) return false;
+    const posX = Math.round(existing.x);
+    const posY = Math.round(existing.y);
+    if (this.findPendingConstructionAt(posX, posY)) {
+      if (source === 'manual') {
+        this.showFloatingText(this.cameras.main.width / 2, 200, '该建筑已有升级施工', '#fbbf24', true);
+      }
+      return false;
+    }
+    const fromTier = Math.max(
+      1,
+      Number((existing as any).buildingTier || (existing as any).tier || BUILDING_DEFS[fromId].tier || 1)
+    );
+    const check = BaseSystem.getBuildingUpgradeCheck(
+      fromId,
+      toSelectedId,
+      fromTier,
+      gameState.data.currentDay,
+      gameState.data.buildings,
+      { x: posX, y: posY }
+    );
+    if (!check.available) {
+      if (source === 'manual') {
+        const reason = check.blockedReasons[0] || '升级条件不满足';
+        this.showFloatingText(this.cameras.main.width / 2, 200, reason, '#ef4444', true);
+      }
+      return false;
+    }
+    if (!check.canAfford) {
+      if (source === 'manual') {
+        this.showFloatingText(this.cameras.main.width / 2, 200, '升级资源不足', '#ef4444', true);
+      }
+      return false;
+    }
+    if (!gameState.spendResources(check.cost as any)) {
+      if (source === 'manual') {
+        this.showFloatingText(this.cameras.main.width / 2, 200, '升级资源不足', '#ef4444', true);
+      }
+      return false;
+    }
+    const durationMs = this.computeConstructionDurationMs(
+      check.kind === 'tier' ? 'upgrade-tier' : 'upgrade-morph',
+      check.toId,
+      check.toTier,
+      check.cost as Partial<Resources>,
+      source
+    );
+    this.enqueueConstructionTask({
+      id: `ct_${this.time.now}_${Math.floor(Math.random() * 100000)}`,
+      kind: check.kind === 'tier' ? 'upgrade-tier' : 'upgrade-morph',
+      status: 'queued',
+      source,
+      fromBuildingId: check.fromId,
+      buildingId: check.toId,
+      x: posX,
+      y: posY,
+      targetTier: check.toTier,
+      cost: { ...(check.cost as any) },
+      durationMs,
+      progressMs: 0,
+      queuedAt: Math.floor(this.time.now),
+    });
+    events.emit('update-resources', gameState.data.resources);
+    if (source === 'manual') {
+      this.showFloatingText(
+        existing.x,
+        existing.y - 26,
+        `升级施工 ${check.summary}`,
+        '#4ade80',
+        false
+      );
+    }
+    return true;
+  }
+
+  private getConstructionTasks(): ConstructionTaskData[] {
+    if (!Array.isArray(gameState.data.constructionTasks)) {
+      gameState.data.constructionTasks = [];
+    }
+    return gameState.data.constructionTasks;
+  }
+
+  private findPendingConstructionAt(x: number, y: number): ConstructionTaskData | null {
+    const tasks = this.getConstructionTasks();
+    return tasks.find((task) => (
+      task.status !== 'done'
+      && task.status !== 'failed'
+      && Math.abs(task.x - x) < 2
+      && Math.abs(task.y - y) < 2
+    )) || null;
+  }
+
+  private enqueueConstructionTask(task: ConstructionTaskData): void {
+    this.getConstructionTasks().push(task);
+    this.createConstructionSiteVisual(task);
+    this.updateConstructionSiteVisual(task);
+    BaseSystem.refreshBaseState();
+    events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+    events.emit('update-resources', gameState.data.resources);
+  }
+
+  private computeConstructionDurationMs(
+    kind: ConstructionTaskKind,
+    buildingId: string,
+    targetTier: number,
+    cost: Partial<Resources>,
+    source: 'manual' | 'auto'
+  ): number {
+    const weightMap: Partial<Record<keyof Resources, number>> = {
+      wood: 0.9,
+      metal: 1.2,
+      scrap: 1.15,
+      food: 0.5,
+      water: 0.5,
+      medical: 1.4,
+      ammo: 1.05,
+      energyCore: 9,
+      bitcoin: 0,
+    };
+    let costWeight = 0;
+    (Object.entries(cost || {}) as Array<[keyof Resources, number]>).forEach(([key, amount]) => {
+      if (!amount || amount <= 0) return;
+      costWeight += amount * (weightMap[key] || 1);
+    });
+    const base = kind === 'build' ? 4800 : kind === 'upgrade-tier' ? 4200 : 4600;
+    const tierBonus = Math.max(0, targetTier - 1) * 420;
+    const def = BUILDING_DEFS[buildingId];
+    const categoryBonus = def?.category === 'turret' ? 900 : def?.category === 'defense' ? 360 : 620;
+    const sourceMul = source === 'manual' ? 0.94 : 1;
+    return Math.max(1800, Math.round((base + costWeight * 180 + tierBonus + categoryBonus) * sourceMul));
+  }
+
+  private updateConstructionAutomation(delta: number): void {
+    const tasks = this.getConstructionTasks();
+    if (tasks.length <= 0 && !gameState.data.autoBuild.enabled) return;
+
+    if (this.time.now >= this.nextAutoBuildCrewSyncAt) {
+      this.nextAutoBuildCrewSyncAt = this.time.now + 2200;
+      this.maintainAutoBuildCrew();
+    }
+
+    this.processConstructionTasks(delta);
+
+    if (this.time.now >= this.nextAutoBuildPlanAt) {
+      this.nextAutoBuildPlanAt = this.time.now + (this.lowPerfMode ? 1600 : 980);
+      this.planAutoConstruction();
+    }
+
+    if (this.time.now >= this.nextConstructionSummaryAt) {
+      this.nextConstructionSummaryAt = this.time.now + 5200;
+      const activeCount = tasks.filter((task) => task.status === 'active').length;
+      const queueCount = tasks.filter((task) => task.status === 'queued').length;
+      if (activeCount > 0 || queueCount > 0) {
+        this.showFloatingText(
+          this.player.x,
+          this.player.y - 82,
+          `施工队列：进行中${activeCount} · 排队${queueCount}`,
+          '#67e8f9',
+          false
+        );
+      }
+    }
+  }
+
+  private processConstructionTasks(delta: number): void {
+    const tasks = this.getConstructionTasks();
+    if (tasks.length <= 0) return;
+
+    const autoCfg = gameState.data.autoBuild;
+    let activeCount = tasks.filter((task) => task.status === 'active').length;
+    let activeAutoCount = tasks.filter((task) => task.status === 'active' && task.source === 'auto').length;
+    const maxConcurrent = Math.max(1, autoCfg.maxConcurrent || 1);
+    const crewCapacity = this.getConstructionCrewCapacity();
+    const queued = tasks
+      .filter((task) => task.status === 'queued')
+      .sort((a, b) => (a.queuedAt || 0) - (b.queuedAt || 0));
+    for (const task of queued) {
+      if (activeCount >= maxConcurrent) break;
+      if (task.source === 'auto' && autoCfg.pauseAtNight && gameState.data.isNight) continue;
+      if (task.source === 'auto' && (crewCapacity <= 0 || activeAutoCount >= crewCapacity)) continue;
+      task.status = 'active';
+      task.startedAt = Math.floor(this.time.now);
+      task.progressMs = Math.max(0, task.progressMs || 0);
+      this.assignResidentToConstruction(task);
+      this.updateConstructionSiteVisual(task);
+      activeCount += 1;
+      if (task.source === 'auto') activeAutoCount += 1;
+    }
+
+    const finishedTaskIds: string[] = [];
+    for (const task of tasks) {
+      if (task.status !== 'active') continue;
+      if (task.source === 'auto' && autoCfg.pauseAtNight && gameState.data.isNight) {
+        this.updateConstructionSiteVisual(task);
+        continue;
+      }
+      if (!this.constructionAssignedResidents.has(task.id) && !gameState.data.isNight) {
+        this.assignResidentToConstruction(task);
+      }
+      const speedMul = this.getConstructionSpeedMultiplier(task);
+      task.progressMs += delta * speedMul;
+      this.updateConstructionSiteVisual(task);
+      if (task.progressMs < task.durationMs) continue;
+
+      const done = this.completeConstructionTask(task);
+      if (done) {
+        task.status = 'done';
+      } else {
+        this.failConstructionTask(task, '施工失败，资源已返还');
+      }
+      finishedTaskIds.push(task.id);
+    }
+
+    if (finishedTaskIds.length > 0) {
+      gameState.data.constructionTasks = tasks.filter((task) => (
+        task.status !== 'done' && task.status !== 'failed'
+      ));
+      events.emit('update-resources', gameState.data.resources);
+      BaseSystem.refreshBaseState();
+      events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+    }
+  }
+
+  private getConstructionSpeedMultiplier(task: ConstructionTaskData): number {
+    const assigned = gameState.data.base.jobAssigned || { idle: 0, workshop: 0, power: 0 };
+    const workshop = Math.max(0, assigned.workshop || 0);
+    const power = Math.max(0, assigned.power || 0);
+    const idle = Math.max(0, assigned.idle || 0);
+    let mul = 1 + workshop * 0.24 + power * 0.09 + Math.min(0.2, idle * 0.03);
+    if (task.source === 'manual') mul += 0.08;
+    if (gameState.data.isNight) mul *= 0.86;
+    if (!this.constructionAssignedResidents.has(task.id)) {
+      mul *= task.source === 'auto' ? 0.48 : 0.78;
+    } else {
+      mul *= 1.12;
+      const companionId = this.constructionAssignedResidents.get(task.id);
+      const companion = companionId ? gameState.data.companions.find((item) => item.id === companionId) : null;
+      if (companion) {
+        const duty = this.getCompanionAutoDuty(companion);
+        if (duty === 'builder') mul *= 1.26;
+        else if (duty === 'defender') mul *= 1.12;
+      }
+    }
+    return Phaser.Math.Clamp(mul, 0.62, 3.2);
+  }
+
+  private completeConstructionTask(task: ConstructionTaskData): boolean {
+    this.releaseResidentFromConstruction(task.id);
+    this.removeConstructionSiteVisual(task.id);
+    if (task.kind === 'build') {
+      const ok = this.createPlacedBuilding(task.buildingId, task.x, task.y, task.targetTier);
+      if (ok) {
+        this.showFloatingText(task.x, task.y - 24, `完工 ${BUILDING_DEFS[task.buildingId]?.nameCN || task.buildingId}`, '#4ade80', false);
+      }
+      return ok;
+    }
+
+    const existing = this.findPlacedBuildingAt(task.x, task.y);
+    if (!existing) return false;
+    const toDef = BUILDING_DEFS[task.buildingId];
+    if (!toDef) return false;
+    const fromDef = (existing as any).buildingDef || BUILDING_DEFS[String((existing as any).buildingId || '')];
+    if (!fromDef) return false;
+    const fromMax = Math.max(1, Number((existing as any).maxHealth || fromDef.health));
+    const fromHp = Phaser.Math.Clamp(Number((existing as any).health || fromMax), 0, fromMax);
+    const hpRatio = Phaser.Math.Clamp(fromHp / fromMax, 0.25, 1);
+    const toMax = Math.max(1, toDef.health + Math.max(0, task.targetTier - toDef.tier) * toDef.healthPerTier);
+    const toHp = Math.max(1, Math.round(toMax * hpRatio));
+
+    const texture = this.getBuildingTextureKey(toDef.id, toDef.category);
+    const textureWithVariant = this.pickBuildTextureWithVariant(texture, toDef.id, existing.x, existing.y);
+    existing.setTexture(textureWithVariant);
+    const useTint = texture === 'wall' || texture === 'turret';
+    if (useTint) existing.setTint(toDef.color);
+    else existing.clearTint();
+
+    (existing as any).buildingId = toDef.id;
+    (existing as any).buildingDef = toDef;
+    (existing as any).buildingTier = task.targetTier;
+    (existing as any).maxHealth = toMax;
+    (existing as any).health = toHp;
+    existing.setAlpha(Phaser.Math.Clamp(toHp / toMax, 0.35, 1));
+
+    if (toDef.category === 'turret') {
+      const profile = this.getTurretBaseProfileById(toDef.id);
+      (existing as any).baseHealth = toMax;
+      this.initTurretAutoLevelStats(existing, profile.damage, profile.fireRate, profile.range);
+    }
+
+    const idx = this.findBuildingRecordIndexByPos(Math.round(existing.x), Math.round(existing.y));
+    if (idx !== -1) {
+      gameState.data.buildings[idx] = {
+        ...gameState.data.buildings[idx],
+        id: toDef.id,
+        type: toDef.category,
+        tier: task.targetTier,
+        health: toHp,
+      };
+    }
+    this.showFloatingText(existing.x, existing.y - 24, `升级完工 ${toDef.nameCN} T${task.targetTier}`, '#4ade80', false);
+    QuestSystem.updateProgress('build', toDef.id, 1);
+    return true;
+  }
+
+  private failConstructionTask(task: ConstructionTaskData, reason: string): void {
+    task.status = 'failed';
+    this.releaseResidentFromConstruction(task.id);
+    this.removeConstructionSiteVisual(task.id);
+    this.restoreConstructionCost(task.cost);
+    this.showFloatingText(task.x, task.y - 24, reason, '#ef4444', false);
+  }
+
+  private restoreConstructionCost(cost: Partial<Resources>): void {
+    (Object.entries(cost || {}) as Array<[keyof Resources, number]>).forEach(([key, amount]) => {
+      if (!amount || amount <= 0) return;
+      gameState.addResource(key, amount);
+    });
+  }
+
+  private createPlacedBuilding(buildingId: string, gridX: number, gridY: number, targetTier: number): boolean {
+    const bDef = BUILDING_DEFS[buildingId];
+    if (!bDef) return false;
+    if (this.findPlacedBuildingAt(gridX, gridY)) return false;
     const group = bDef.category === 'turret' ? this.turrets : this.walls;
     const texture = this.getBuildingTextureKey(bDef.id, bDef.category);
     const textureWithVariant = this.pickBuildTextureWithVariant(texture, bDef.id, gridX, gridY);
@@ -11455,22 +12260,601 @@ export default class GameScene extends Phaser.Scene {
     const useTint = texture === 'wall' || texture === 'turret';
     if (useTint) building.setTint(bDef.color);
     else building.clearTint();
-    (building as any).health = bDef.health;
-    (building as any).maxHealth = bDef.health;
+    const tier = Math.max(bDef.tier, targetTier || bDef.tier);
+    const maxHealth = Math.max(1, bDef.health + Math.max(0, tier - bDef.tier) * bDef.healthPerTier);
+    (building as any).health = maxHealth;
+    (building as any).maxHealth = maxHealth;
     (building as any).buildingId = bDef.id;
     (building as any).buildingDef = bDef;
+    (building as any).buildingTier = tier;
 
     if (bDef.category === 'turret') {
-      this.initTurretAutoLevelStats(building, 15, 700, 250);
+      const turretProfile = this.getTurretBaseProfileById(bDef.id);
+      this.initTurretAutoLevelStats(building, turretProfile.damage, turretProfile.fireRate, turretProfile.range);
     }
 
-    gameState.data.stats.buildingsPlaced++;
-    gameState.data.buildings.push({ id: bDef.id, type: bDef.category, x: gridX, y: gridY, tier: bDef.tier, health: bDef.health });
-    events.emit('update-resources', gameState.data.resources);
-    BaseSystem.refreshBaseState();
-
-    // Quest progress
+    gameState.data.stats.buildingsPlaced += 1;
+    gameState.data.buildings.push({
+      id: bDef.id,
+      type: bDef.category,
+      x: gridX,
+      y: gridY,
+      tier,
+      health: maxHealth,
+    });
     QuestSystem.updateProgress('build', bDef.id, 1);
+    return true;
+  }
+
+  private planAutoConstruction(): void {
+    const autoBuild = gameState.data.autoBuild;
+    if (!autoBuild?.enabled) return;
+    if (autoBuild.pauseAtNight && gameState.data.isNight) return;
+    if (this.getConstructionCrewCapacity() <= 0) return;
+
+    const taskList = this.getConstructionTasks();
+    const pendingCount = taskList.filter((task) => task.status === 'queued' || task.status === 'active').length;
+    const queueCap = Math.max(autoBuild.maxConcurrent, autoBuild.queueCap || autoBuild.maxConcurrent * 3);
+    if (pendingCount >= queueCap) return;
+
+    const dutyCounts = this.getBaseAutoDutyCounts();
+    const rules = [...(autoBuild.rules || [])]
+      .map((rule) => ({
+        rule,
+        targetCount: this.getEffectiveRuleTarget(rule, dutyCounts),
+        active: rule.enabled || (dutyCounts.defender > 0 && this.isDefenseRuleBuilding(rule.buildingId)),
+        priority: rule.priority + (this.isDefenseRuleBuilding(rule.buildingId) ? dutyCounts.defender * 6 : dutyCounts.builder * 2),
+      }))
+      .filter((entry) => entry.active && entry.targetCount > 0 && !!BUILDING_DEFS[entry.rule.buildingId])
+      .sort((a, b) => b.priority - a.priority);
+    for (const entry of rules) {
+      if (this.tryQueueAutoRule(entry.rule, entry.targetCount)) break;
+    }
+  }
+
+  private tryQueueAutoRule(rule: AutoBuildRule, effectiveTargetCount?: number): boolean {
+    const def = BUILDING_DEFS[rule.buildingId];
+    if (!def) return false;
+    const targetCount = Math.max(0, Math.floor(effectiveTargetCount ?? rule.targetCount));
+    const existingCount = gameState.data.buildings.filter((building) => building.id === rule.buildingId).length;
+    const plannedCount = this.getConstructionTasks().filter((task) => (
+      (task.status === 'queued' || task.status === 'active') && task.buildingId === rule.buildingId
+    )).length;
+    const totalCount = existingCount + plannedCount;
+
+    if (totalCount < targetCount) {
+      const pos = this.findAutoBuildPlacement(rule.buildingId);
+      if (!pos) return false;
+      const cost = def.cost as Partial<Resources>;
+      if (!this.canSpendWithReserve(cost)) return false;
+      if (!gameState.spendResources(cost as any)) return false;
+      const durationMs = this.computeConstructionDurationMs('build', def.id, def.tier, cost, 'auto');
+      this.enqueueConstructionTask({
+        id: `ct_${this.time.now}_${Math.floor(Math.random() * 100000)}`,
+        kind: 'build',
+        status: 'queued',
+        source: 'auto',
+        buildingId: def.id,
+        x: pos.x,
+        y: pos.y,
+        targetTier: def.tier,
+        cost: { ...(cost as any) },
+        durationMs,
+        progressMs: 0,
+        queuedAt: Math.floor(this.time.now),
+      });
+      this.showFloatingText(pos.x, pos.y - 22, `自动施工 ${def.nameCN}`, '#67e8f9', false);
+      return true;
+    }
+
+    if (!rule.allowUpgrade) return false;
+    const maxTier = Math.min(def.maxTier, Math.max(def.tier, rule.maxTier || def.maxTier));
+    if (maxTier <= def.tier) return false;
+
+    const candidates = gameState.data.buildings
+      .filter((building) => building.id === rule.buildingId && (building.tier || def.tier) < maxTier)
+      .sort((a, b) => (a.tier || 1) - (b.tier || 1));
+    for (const candidate of candidates) {
+      if (this.findPendingConstructionAt(candidate.x, candidate.y)) continue;
+      const sprite = this.findPlacedBuildingAt(candidate.x, candidate.y);
+      if (!sprite) continue;
+      if (this.tryUpgradeOnSameTile(sprite, rule.buildingId, 'auto')) {
+        this.showFloatingText(candidate.x, candidate.y - 22, `自动升级 ${def.nameCN}`, '#a78bfa', false);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private findAutoBuildPlacement(buildingId: string): { x: number; y: number } | null {
+    const chain = BaseSystem.getBuildChainStatus(buildingId, gameState.data.currentDay, gameState.data.buildings);
+    const centerX = Math.floor(BASE_PLACEMENT_RULE.innerCenterX / 64) * 64 + 32;
+    const centerY = Math.floor(BASE_PLACEMENT_RULE.innerCenterY / 64) * 64 + 32;
+    const minRing = chain.zone === 'outer' ? 3 : 0;
+    const maxRing = chain.zone === 'inner' ? 5 : 10;
+
+    for (let ring = minRing; ring <= maxRing; ring += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        for (let dy = -ring; dy <= ring; dy += 1) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+          const x = centerX + dx * 64;
+          const y = centerY + dy * 64;
+          if (x < 32 || x > 1968 || y < 32 || y > 1468) continue;
+          if (this.findPlacedBuildingAt(x, y)) continue;
+          if (this.findPendingConstructionAt(x, y)) continue;
+          const placement = BaseSystem.validateBuildPlacement(buildingId, x, y);
+          if (placement.canPlace) return { x, y };
+        }
+      }
+    }
+    return null;
+  }
+
+  private canSpendWithReserve(cost: Partial<Resources>): boolean {
+    const reserve = gameState.data.autoBuild.reserve || {};
+    return (Object.entries(cost || {}) as Array<[keyof Resources, number]>).every(([key, amount]) => {
+      if (!amount || amount <= 0) return true;
+      if (key === 'bitcoin') return true;
+      const remain = (gameState.data.resources[key] || 0) - amount;
+      const keep = Number((reserve as any)[key] || 0);
+      return remain >= keep;
+    });
+  }
+
+  private getCompanionAutoDuty(companion: CompanionData): 'builder' | 'scavenger' | 'defender' | 'support' {
+    const duty = companion.autoDuty || BaseSystem.getCompanionAutoDuty(companion);
+    companion.autoDuty = duty;
+    return duty;
+  }
+
+  private getBaseAutoDutyCounts(): Record<'builder' | 'scavenger' | 'defender' | 'support', number> {
+    const counts = {
+      builder: 0,
+      scavenger: 0,
+      defender: 0,
+      support: 0,
+    };
+    gameState.data.companions.forEach((companion) => {
+      if (companion.status !== 'base') return;
+      counts[this.getCompanionAutoDuty(companion)] += 1;
+    });
+    return counts;
+  }
+
+  private maintainAutoDutyDispatch(): void {
+    const cfg = gameState.data.autoBuild;
+    if (!cfg?.autoAssignDuties) return;
+    const baseRoster = gameState.data.companions.filter((companion) => companion.status === 'base');
+    if (baseRoster.length <= 0) return;
+
+    let shouldAssign = false;
+    for (const companion of baseRoster) {
+      const duty = this.getCompanionAutoDuty(companion);
+      const expectedJob = BaseSystem.recommendJobForCompanion(companion);
+      if (duty === 'builder' || duty === 'defender') {
+        if (companion.job !== 'workshop') {
+          shouldAssign = true;
+          break;
+        }
+        continue;
+      }
+      if (companion.job === 'idle' || companion.job !== expectedJob) {
+        shouldAssign = true;
+        break;
+      }
+    }
+    if (!shouldAssign) return;
+
+    const result = BaseSystem.autoAssignBaseCompanions();
+    if (result.assigned <= 0) return;
+    BaseSystem.refreshBaseState();
+    this.syncBaseResidents();
+    this.syncCompanionRoster();
+    if (this.time.now >= this.nextAutoDutyDispatchTipAt) {
+      this.nextAutoDutyDispatchTipAt = this.time.now + 6000;
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 70,
+        `自动分工：建筑工/拾荒者/防御者已派任`,
+        '#67e8f9',
+        false
+      );
+    }
+  }
+
+  private updateScavengerCollectors(): void {
+    if (this.time.now < this.nextScavengerCollectorSyncAt) return;
+    this.nextScavengerCollectorSyncAt = this.time.now + (this.lowPerfMode ? 320 : 160);
+    const collectors: Array<{ x: number; y: number; radius: number }> = [];
+    let scavengerCount = 0;
+    let scavengerLevelSum = 0;
+    for (const [companionId, container] of this.baseResidents.entries()) {
+      if (!container.active || !container.visible) continue;
+      if (container.getData('constructionBusy')) continue;
+      const companion = gameState.data.companions.find((item) => item.id === companionId);
+      if (!companion || companion.status !== 'base') continue;
+      if (this.getCompanionAutoDuty(companion) !== 'scavenger') continue;
+      scavengerCount += 1;
+      scavengerLevelSum += Math.max(1, companion.level || 1);
+      const radius = Phaser.Math.Clamp(132 + (companion.level || 1) * 6, 132, 320);
+      collectors.push({ x: container.x, y: container.y, radius });
+    }
+    if (scavengerCount > 0) {
+      const avgScavengerLevel = scavengerLevelSum / scavengerCount;
+      collectors.push({
+        x: BASE_PLACEMENT_RULE.innerCenterX,
+        y: BASE_PLACEMENT_RULE.innerCenterY,
+        radius: Phaser.Math.Clamp(180 + scavengerCount * 24 + avgScavengerLevel * 4, 180, 420),
+      });
+      collectors.push({
+        x: this.player.x,
+        y: this.player.y,
+        radius: Phaser.Math.Clamp(84 + scavengerCount * 8, 84, 160),
+      });
+    }
+    this.lootSystem.setCompanionCollectors(collectors);
+  }
+
+  private isDefenseRuleBuilding(buildingId: string): boolean {
+    return buildingId.includes('wall')
+      || buildingId.includes('turret')
+      || buildingId === 'gate'
+      || buildingId === 'spike_trap'
+      || buildingId === 'electric_fence'
+      || buildingId === 'mine_field';
+  }
+
+  private getEffectiveRuleTarget(rule: AutoBuildRule, counts: Record<'builder' | 'scavenger' | 'defender' | 'support', number>): number {
+    let target = Math.max(0, Math.floor(rule.targetCount || 0));
+    const id = rule.buildingId;
+    if (id.includes('wall') || id === 'gate') {
+      const defenseTarget = counts.defender > 0 ? 2 + counts.defender * 2 : 0;
+      target = Math.max(target, defenseTarget);
+    } else if (id.includes('turret')) {
+      const defenseTarget = counts.defender > 0 ? 1 + Math.ceil(counts.defender * 0.6) : 0;
+      target = Math.max(target, defenseTarget);
+    } else if (id === 'generator' && counts.builder > 0) {
+      target = Math.max(target, 1);
+    }
+    return Phaser.Math.Clamp(target, 0, 40);
+  }
+
+  private maintainAutoBuildCrew(): void {
+    const cfg = gameState.data.autoBuild;
+    if (!cfg?.enabled || !cfg.autoAssignBuilders) return;
+
+    const baseRoster = gameState.data.companions.filter((comp) => comp.status === 'base');
+    if (baseRoster.length <= 0) return;
+    const dutyCounts = this.getBaseAutoDutyCounts();
+    const dutyDrivenTarget = dutyCounts.builder + Math.ceil(dutyCounts.defender * 0.6);
+    const requestedTarget = Math.max(0, Math.floor(cfg.desiredBuilderCount || 0));
+    const autoDutyMode = !!cfg.autoAssignDuties;
+    const moderatedRequested = autoDutyMode
+      ? Math.min(requestedTarget, dutyDrivenTarget + 1)
+      : requestedTarget;
+    const targetBuilders = Phaser.Math.Clamp(
+      Math.max(moderatedRequested, dutyDrivenTarget),
+      0,
+      Math.min(12, baseRoster.length)
+    );
+
+    const buildTasks = this.getConstructionTasks().filter((task) => task.status === 'queued' || task.status === 'active');
+    const activeTasks = buildTasks.filter((task) => task.status === 'active');
+    let workshopCount = baseRoster.filter((comp) => comp.job === 'workshop').length;
+    let changed = 0;
+
+    if (targetBuilders <= 0 && activeTasks.length <= 0 && workshopCount > 0) {
+      const candidates = baseRoster
+        .filter((comp) => comp.job === 'workshop' && !this.isCompanionConstructionBusy(comp.id))
+        .sort((a, b) => Number(a.level || 1) - Number(b.level || 1));
+      for (const candidate of candidates) {
+        candidate.job = 'idle';
+        changed += 1;
+      }
+      workshopCount = 0;
+    } else if (workshopCount < targetBuilders) {
+      const dutyWeight = (companion: CompanionData): number => {
+        const duty = this.getCompanionAutoDuty(companion);
+        if (autoDutyMode) {
+          if (duty === 'builder') return 4;
+          if (duty === 'defender') return 3;
+          if (duty === 'support') return 1;
+          return -1;
+        }
+        if (duty === 'builder') return 3;
+        if (duty === 'defender') return 2;
+        if (duty === 'scavenger') return 1;
+        return 0;
+      };
+      const candidates = baseRoster
+        .filter((comp) => comp.job === 'idle')
+        .sort((a, b) => {
+          const da = dutyWeight(a);
+          const db = dutyWeight(b);
+          if (da !== db) return db - da;
+          const la = Number(a.level || 1);
+          const lb = Number(b.level || 1);
+          return lb - la;
+        });
+      for (const candidate of candidates) {
+        if (workshopCount >= targetBuilders) break;
+        if (!BaseSystem.canAssignJob('workshop')) break;
+        candidate.job = 'workshop';
+        workshopCount += 1;
+        changed += 1;
+      }
+    } else if (workshopCount > targetBuilders && activeTasks.length <= 0) {
+      const demote = workshopCount - targetBuilders;
+      if (demote > 0) {
+        const candidates = baseRoster
+          .filter((comp) => comp.job === 'workshop' && !this.isCompanionConstructionBusy(comp.id))
+          .sort((a, b) => {
+            const dutyOrder = (companion: CompanionData): number => {
+              const duty = this.getCompanionAutoDuty(companion);
+              if (autoDutyMode) {
+                if (duty === 'scavenger') return 0;
+                if (duty === 'support') return 1;
+                if (duty === 'defender') return 2;
+                return 3;
+              }
+              if (duty === 'support') return 0;
+              if (duty === 'scavenger') return 1;
+              if (duty === 'defender') return 2;
+              return 3;
+            };
+            const oa = dutyOrder(a);
+            const ob = dutyOrder(b);
+            if (oa !== ob) return oa - ob;
+            return Number(a.level || 1) - Number(b.level || 1);
+          });
+        for (let i = 0; i < candidates.length && i < demote; i += 1) {
+          candidates[i].job = 'idle';
+          changed += 1;
+        }
+      }
+    }
+
+    if (changed <= 0) return;
+    BaseSystem.refreshBaseState();
+    this.syncBaseResidents();
+    events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+      this.showFloatingText(
+      this.player.x,
+      this.player.y - 76,
+      `施工委派已调整：${targetBuilders}名工坊`,
+      '#67e8f9',
+      false
+    );
+  }
+
+  private getConstructionCrewCapacity(): number {
+    const cfg = gameState.data.autoBuild;
+    if (!cfg?.enabled) return 0;
+    const mode = cfg.crewMode === 'workshop_only' ? 'workshop_only' : 'workshop_idle';
+    const desired = Math.max(0, Math.floor(cfg.desiredBuilderCount || 0));
+    if (desired <= 0) return 0;
+
+    const workers = gameState.data.companions.filter((comp) => {
+      if (comp.status !== 'base') return false;
+      if (this.isCompanionConstructionBusy(comp.id)) return false;
+      if (mode === 'workshop_only') return comp.job === 'workshop';
+      return comp.job === 'workshop' || comp.job === 'idle';
+    }).length;
+    return Math.max(0, Math.min(desired, workers));
+  }
+
+  private isCompanionConstructionBusy(companionId: string): boolean {
+    const container = this.baseResidents.get(companionId);
+    if (!container || !container.active) return false;
+    return !!container.getData('constructionBusy');
+  }
+
+  private createConstructionSiteVisual(task: ConstructionTaskData): void {
+    if (this.constructionSiteVisuals.has(task.id)) return;
+    const wrap = this.add.container(task.x, task.y - 30).setDepth(120);
+    const frame = this.add.rectangle(0, 0, 64, 30, 0x020617, 0.88).setStrokeStyle(1, 0x1e293b, 1);
+    const barBg = this.add.rectangle(0, 4, 48, 4, 0x111827, 0.95).setOrigin(0.5, 0.5);
+    const bar = this.add.rectangle(-24, 4, 48, 4, 0x38bdf8, 0.95).setOrigin(0, 0.5);
+    const label = this.add.text(0, -8, '施工', {
+      fontSize: this.worldFs(10, 9),
+      color: '#93c5fd',
+      fontFamily: this.getUIFontFamily(),
+    }).setOrigin(0.5, 0.5);
+    const eta = this.add.text(0, 12, '--', {
+      fontSize: this.worldFs(9, 8),
+      color: '#94a3b8',
+      fontFamily: this.getUIFontFamily(),
+    }).setOrigin(0.5, 0.5);
+    wrap.add([frame, barBg, bar, label, eta]);
+    this.constructionSiteVisuals.set(task.id, { container: wrap, bar, label, eta });
+  }
+
+  private updateConstructionSiteVisual(task: ConstructionTaskData): void {
+    let visual = this.constructionSiteVisuals.get(task.id);
+    if (!visual) {
+      this.createConstructionSiteVisual(task);
+      visual = this.constructionSiteVisuals.get(task.id);
+      if (!visual) return;
+    }
+    visual.container.setPosition(task.x, task.y - 30);
+    const progressRatio = Phaser.Math.Clamp(task.durationMs > 0 ? task.progressMs / task.durationMs : 0, 0, 1);
+    visual.bar.setScale(Math.max(0.06, progressRatio), 1);
+    const remainMs = Math.max(0, Math.round(task.durationMs - task.progressMs));
+    const remainSec = Math.ceil(remainMs / 1000);
+    visual.eta.setText(task.status === 'queued' ? '等待派工' : `剩余 ${remainSec}s`);
+    const pausedAtNight = task.status === 'active'
+      && task.source === 'auto'
+      && gameState.data.isNight
+      && gameState.data.autoBuild.pauseAtNight;
+    if (task.status === 'active') {
+      if (pausedAtNight) {
+        visual.bar.setFillStyle(0xf59e0b, 0.9);
+        visual.label.setText('夜间暂停').setColor('#fbbf24');
+      } else {
+        visual.bar.setFillStyle(task.source === 'auto' ? 0x22d3ee : 0x4ade80, 0.95);
+        visual.label.setText(`施工 ${Math.round(progressRatio * 100)}%`).setColor('#e2e8f0');
+        const nextFxAt = this.constructionFxNextAt.get(task.id) || 0;
+        if (this.time.now >= nextFxAt) {
+          this.constructionFxNextAt.set(task.id, this.time.now + Phaser.Math.Between(260, 440));
+          this.emitConstructionPulseFx(task.x, task.y, task.source === 'auto' ? 0x38bdf8 : 0x4ade80);
+        }
+      }
+    } else if (task.status === 'queued') {
+      visual.bar.setFillStyle(0x64748b, 0.75);
+      visual.label.setText('排队中').setColor('#94a3b8');
+    } else {
+      visual.bar.setFillStyle(0xf87171, 0.95);
+      visual.label.setText('失败').setColor('#fca5a5');
+    }
+  }
+
+  private removeConstructionSiteVisual(taskId: string): void {
+    const visual = this.constructionSiteVisuals.get(taskId);
+    if (!visual) return;
+    this.constructionSiteVisuals.delete(taskId);
+    this.constructionFxNextAt.delete(taskId);
+    this.tweens.add({
+      targets: visual.container,
+      alpha: 0,
+      y: visual.container.y - 8,
+      duration: 180,
+      onComplete: () => visual.container.destroy(),
+    });
+  }
+
+  private clearConstructionSiteVisuals(): void {
+    this.constructionSiteVisuals.forEach((visual) => visual.container.destroy());
+    this.constructionSiteVisuals.clear();
+    this.constructionFxNextAt.clear();
+  }
+
+  private assignResidentToConstruction(task: ConstructionTaskData): void {
+    if (gameState.data.isNight) return;
+    if (this.constructionAssignedResidents.has(task.id)) return;
+    const mode = gameState.data.autoBuild.crewMode === 'workshop_only' ? 'workshop_only' : 'workshop_idle';
+    const candidates = Array.from(this.baseResidents.entries()).filter(([companionId, container]) => {
+      if (!container.active || !container.visible) return false;
+      if (container.getData('constructionBusy')) return false;
+      const comp = gameState.data.companions.find((item) => item.id === companionId);
+      if (!comp || comp.status !== 'base') return false;
+      if (mode === 'workshop_only') return comp.job === 'workshop';
+      return comp.job === 'workshop' || comp.job === 'idle';
+    });
+    if (candidates.length <= 0) return;
+    candidates.sort((a, b) => {
+      const ca = gameState.data.companions.find((item) => item.id === a[0]);
+      const cb = gameState.data.companions.find((item) => item.id === b[0]);
+      const sa = (ca?.job === 'workshop' ? 2 : ca?.job === 'idle' ? 1 : 0);
+      const sb = (cb?.job === 'workshop' ? 2 : cb?.job === 'idle' ? 1 : 0);
+      if (sa !== sb) return sb - sa;
+      const da = ca ? (this.getCompanionAutoDuty(ca) === 'builder' ? 2 : this.getCompanionAutoDuty(ca) === 'defender' ? 1 : 0) : 0;
+      const db = cb ? (this.getCompanionAutoDuty(cb) === 'builder' ? 2 : this.getCompanionAutoDuty(cb) === 'defender' ? 1 : 0) : 0;
+      if (da !== db) return db - da;
+      return Phaser.Math.Distance.Between(a[1].x, a[1].y, task.x, task.y)
+        - Phaser.Math.Distance.Between(b[1].x, b[1].y, task.x, task.y);
+    });
+    const [companionId, container] = candidates[0];
+    this.constructionAssignedResidents.set(task.id, companionId);
+    container.setData('constructionBusy', true);
+    container.setData('constructionTaskId', task.id);
+    container.setData('residentMode', 'moving');
+    this.setResidentConstructionDecor(container, true);
+    const label = container.getData('labelObj') as Phaser.GameObjects.Text | undefined;
+    if (label?.active) {
+      const name = (container.getData('residentName') || '伙伴') as string;
+      label.setText(`${name}·施工`);
+    }
+    this.tweens.killTweensOf(container);
+    this.tweens.add({
+      targets: container,
+      x: task.x + Phaser.Math.Between(-16, 16),
+      y: task.y + Phaser.Math.Between(-12, 12),
+      duration: 780,
+      ease: 'Sine.easeInOut',
+      onComplete: () => {
+        if (!container.active) return;
+        container.setData('residentMode', 'inside');
+      },
+    });
+  }
+
+  private releaseResidentFromConstruction(taskId: string): void {
+    const companionId = this.constructionAssignedResidents.get(taskId);
+    if (!companionId) return;
+    this.constructionAssignedResidents.delete(taskId);
+    const container = this.baseResidents.get(companionId);
+    if (!container || !container.active) return;
+    container.setData('constructionBusy', false);
+    container.setData('constructionTaskId', null);
+    container.setData('residentMode', 'idle');
+    this.setResidentConstructionDecor(container, false);
+    const companion = gameState.data.companions.find((item) => item.id === companionId);
+    if (companion && companion.status === 'base' && !gameState.data.isNight) {
+      this.applyResidentBehavior(container, this.getResidentBehaviorForCompanion(companion, Phaser.Math.Between(0, 999), 'stroll'), false);
+    }
+  }
+
+  private releaseAllConstructionResidents(): void {
+    const taskIds = Array.from(this.constructionAssignedResidents.keys());
+    taskIds.forEach((taskId) => this.releaseResidentFromConstruction(taskId));
+  }
+
+  private setResidentConstructionDecor(container: Phaser.GameObjects.Container, active: boolean): void {
+    const oldIcon = container.getData('constructionIcon') as Phaser.GameObjects.Text | undefined;
+    const oldTween = container.getData('constructionIconTween') as Phaser.Tweens.Tween | undefined;
+    oldTween?.remove();
+    if (!active) {
+      oldIcon?.destroy();
+      container.setData('constructionIcon', null);
+      container.setData('constructionIconTween', null);
+      return;
+    }
+    if (oldIcon?.active) {
+      const tw = this.tweens.add({
+        targets: oldIcon,
+        y: -50,
+        duration: 360,
+        yoyo: true,
+        repeat: -1,
+      });
+      container.setData('constructionIconTween', tw);
+      return;
+    }
+    const icon = this.add.text(0, -50, '工', {
+      fontSize: this.worldFs(11, 10),
+      color: '#fbbf24',
+      fontFamily: this.getUIFontFamily(),
+      stroke: '#0f172a',
+      strokeThickness: 2,
+    }).setOrigin(0.5, 0.5);
+    container.add(icon);
+    const tw = this.tweens.add({
+      targets: icon,
+      y: -46,
+      duration: 360,
+      yoyo: true,
+      repeat: -1,
+    });
+    container.setData('constructionIcon', icon);
+    container.setData('constructionIconTween', tw);
+  }
+
+  private emitConstructionPulseFx(x: number, y: number, color: number): void {
+    const spark = this.add.circle(
+      x + Phaser.Math.Between(-8, 8),
+      y + Phaser.Math.Between(-10, 8),
+      Phaser.Math.Between(2, 4),
+      color,
+      0.88
+    ).setDepth(121);
+    this.tweens.add({
+      targets: spark,
+      alpha: 0,
+      scale: 1.5,
+      y: spark.y - Phaser.Math.Between(8, 16),
+      duration: Phaser.Math.Between(220, 360),
+      onComplete: () => spark.destroy(),
+    });
   }
 
   private getBuildingTextureKey(buildingId: string, category: string): string {
@@ -11526,13 +12910,26 @@ export default class GameScene extends Phaser.Scene {
     return candidates[hash % candidates.length];
   }
 
+  private findPlacedBuildingAt(gridX: number, gridY: number): Phaser.Physics.Arcade.Sprite | null {
+    const hitTest = (children: Phaser.GameObjects.GameObject[]): Phaser.Physics.Arcade.Sprite | null => {
+      for (const obj of children) {
+        const sprite = obj as Phaser.Physics.Arcade.Sprite;
+        if (!sprite.active) continue;
+        if (Math.abs(sprite.x - gridX) < 32 && Math.abs(sprite.y - gridY) < 32) return sprite;
+      }
+      return null;
+    };
+    return hitTest(this.turrets.getChildren()) || hitTest(this.walls.getChildren());
+  }
+
+  private findBuildingRecordIndexByPos(x: number, y: number): number {
+    return gameState.data.buildings.findIndex((b) => Math.abs(b.x - x) < 2 && Math.abs(b.y - y) < 2);
+  }
+
   private removeBuildingRecord(building: Phaser.Physics.Arcade.Sprite): void {
-    const id = (building as any).buildingId;
     const bx = Math.round(building.x);
     const by = Math.round(building.y);
-    const idx = gameState.data.buildings.findIndex(b =>
-      b.id === id && Math.abs(b.x - bx) < 2 && Math.abs(b.y - by) < 2
-    );
+    const idx = this.findBuildingRecordIndexByPos(bx, by);
     if (idx !== -1) {
       gameState.data.buildings.splice(idx, 1);
     }
@@ -11592,6 +12989,8 @@ export default class GameScene extends Phaser.Scene {
     const now = this.time.now;
     const base = gameState.data.base;
     const overload = base.powerUsed > base.powerCapacity;
+    const structureMul = Phaser.Math.Clamp(base.structureIntegrity || 1, 0.55, 1);
+    const breachOpen = !!base.structureBreachOpen;
     let remainingPower = base.powerCapacity;
     const turrets = this.turrets.getChildren() as Phaser.Physics.Arcade.Sprite[];
     turrets.sort((a, b) => (a.y - b.y) || (a.x - b.x));
@@ -11599,6 +12998,10 @@ export default class GameScene extends Phaser.Scene {
     if (overload && now - this.lastPowerWarning > 6000) {
       this.lastPowerWarning = now;
       this.showFloatingText(this.cameras.main.width / 2, 160, '⚡ 电力超载，部分炮塔停机', '#ef4444', true);
+    }
+    if (breachOpen && now - this.lastStructureWarning > 6500) {
+      this.lastStructureWarning = now;
+      this.showFloatingText(this.cameras.main.width / 2, 186, '⚠ 防线破口，炮塔效率下降', '#fb7185', true);
     }
 
     turrets.forEach(t => {
@@ -11621,8 +13024,9 @@ export default class GameScene extends Phaser.Scene {
       }
 
       const fireRate = td.fireRate || 700;
+      const effectiveFireRate = Math.round(fireRate * (1 + (1 - structureMul) * 0.42));
       const range = td.range || 220;
-      if (now - (td.lastFireTime || 0) < fireRate) return;
+      if (now - (td.lastFireTime || 0) < effectiveFireRate) return;
 
       let nearest: Phaser.Physics.Arcade.Sprite | null = null;
       let nearDist = range;
@@ -11649,7 +13053,7 @@ export default class GameScene extends Phaser.Scene {
           const velocityY = Math.sin(angle) * bulletSpeed;
           bullet.setVelocity(velocityX, velocityY);
           const b = bullet as any;
-          b.damage = td.damage || 15;
+          b.damage = Math.max(1, Math.round((td.damage || 15) * structureMul));
           b.ownerType = 'turret';
           b.ownerId = td.runtimeId || null;
           b.bulletTextureKey = 'bullet_pulse';
@@ -12296,7 +13700,7 @@ export default class GameScene extends Phaser.Scene {
 
     baseCompanions.forEach((comp, index) => {
       CompanionPersonalitySystem.ensureProfile(comp);
-      const behavior = this.getResidentBehavior(comp.job, index, undefined);
+      const behavior = this.getResidentBehaviorForCompanion(comp, index, undefined);
       const points = behaviorBuckets[behavior];
       const point = points[usage[behavior] % points.length];
       usage[behavior] += 1;
@@ -12387,6 +13791,26 @@ export default class GameScene extends Phaser.Scene {
     if (job === 'farm') pool.unshift('fishing', 'forage');
     if (job === 'power' || job === 'workshop') pool.unshift('guard', 'adventure');
     if (job === 'medical') pool.unshift('sleep', 'stroll');
+    if (current) pool.push(current);
+    return pool[(idx + Phaser.Math.Between(0, pool.length - 1)) % pool.length];
+  }
+
+  private getResidentBehaviorForCompanion(
+    companion: CompanionData,
+    idx: number,
+    current: ResidentBehavior | undefined
+  ): ResidentBehavior {
+    const duty = this.getCompanionAutoDuty(companion);
+    const pool: ResidentBehavior[] = [this.getResidentBehavior(companion.job, idx, current)];
+    if (duty === 'builder') {
+      pool.unshift('adventure', 'guard');
+    } else if (duty === 'scavenger') {
+      pool.unshift('forage', 'fishing', 'adventure');
+    } else if (duty === 'defender') {
+      pool.unshift('guard', 'guard', 'adventure');
+    } else {
+      pool.unshift('stroll', 'cooking', 'sleep');
+    }
     if (current) pool.push(current);
     return pool[(idx + Phaser.Math.Between(0, pool.length - 1)) % pool.length];
   }
@@ -12529,9 +13953,12 @@ export default class GameScene extends Phaser.Scene {
     if (spot.actionType === 'fish') {
       const food = addResource('food', 2);
       const water = addResource('water', 1);
+      const metal = Math.random() < 0.45 ? addResource('metal', 1) : 0;
       if (Math.random() < 0.22) addResource('scrap', 1);
       exp = Phaser.Math.Between(3, 6);
-      summary = `河流钓鱼 +食物${food} +净水${water}`;
+      summary = metal > 0
+        ? `河流淘金 +食物${food} +净水${water} +金属${metal}`
+        : `河流钓鱼 +食物${food} +净水${water}`;
       color = '#38bdf8';
       dangerRoll = 0.16;
       dangerMin = 1;
@@ -12568,11 +13995,11 @@ export default class GameScene extends Phaser.Scene {
       dangerMax = 3;
       dangerText = '搜刮噪音暴露位置';
     } else {
-      const scrap = addResource('scrap', 3);
-      const metal = addResource('metal', 2);
+      const scrap = addResource('scrap', 2);
+      const metal = addResource('metal', 3);
       if (Math.random() < 0.35) addResource('energyCore', 1);
       exp = Phaser.Math.Between(7, 12);
-      summary = `山洞探险 +零件${scrap} +金属${metal}`;
+      summary = `山洞挖矿 +金属${metal} +零件${scrap}`;
       color = '#a78bfa';
       dangerRoll = 0.48;
       dangerMin = 2;
@@ -12666,11 +14093,12 @@ export default class GameScene extends Phaser.Scene {
     if (gameState.data.isNight) return;
     for (const [companionId, container] of this.baseResidents.entries()) {
       if (!container.active) continue;
+      if (container.getData('constructionBusy')) continue;
       if (this.residentBusy(container)) continue;
       const companion = gameState.data.companions.find(c => c.id === companionId);
       if (!companion || companion.status !== 'base') continue;
       const current = (container.getData('behavior') || 'stroll') as ResidentBehavior;
-      const next = this.getResidentBehavior(companion.job, Phaser.Math.Between(0, 999), current);
+      const next = this.getResidentBehaviorForCompanion(companion, Phaser.Math.Between(0, 999), current);
       const keepCurrent = current === next && Math.random() < 0.45;
       this.applyResidentBehavior(container, keepCurrent ? current : next, false);
     }
@@ -12773,7 +14201,7 @@ export default class GameScene extends Phaser.Scene {
       const comp = gameState.data.companions.find(c => c.id === companionId);
       if (!comp || comp.status !== 'base') continue;
       this.clearResidentRuntime(container);
-      this.applyResidentBehavior(container, this.getResidentBehavior(comp.job, Phaser.Math.Between(0, 999), 'stroll'), false);
+      this.applyResidentBehavior(container, this.getResidentBehaviorForCompanion(comp, Phaser.Math.Between(0, 999), 'stroll'), false);
     }
   }
 
@@ -13531,7 +14959,14 @@ export default class GameScene extends Phaser.Scene {
       stroll: { resource: 'water', amount: [1, 1], exp: [2, 4], text: '散步协助' },
     };
 
-    const reward = rewardMap[behavior];
+    const reward = { ...rewardMap[behavior] };
+    if (behavior === 'fishing' && Math.random() < 0.4) {
+      reward.resource = 'metal';
+      reward.text = '淘金协助';
+    } else if (behavior === 'adventure' && Math.random() < 0.55) {
+      reward.resource = 'metal';
+      reward.text = '矿脉协助';
+    }
     const chainMult = chainStep === 2 ? 1.8 : 1;
     const assistLabel = chainStep === 2 ? `连携${reward.text}` : reward.text;
     const marker = this.add.text(container.x, container.y - 48, `E 协助 · ${assistLabel}`, {
@@ -13591,7 +15026,7 @@ export default class GameScene extends Phaser.Scene {
     this.showFloatingText(
       container?.x || this.player.x,
       (container?.y || this.player.y) - 40,
-      `${task.chainStep === 2 ? '连携协助' : '协助成功'} ${name} +${amount}${task.rewardResource === 'food' ? '食物' : task.rewardResource === 'ammo' ? '弹药' : task.rewardResource === 'wood' ? '木材' : task.rewardResource === 'scrap' ? '零件' : '资源'}`,
+      `${task.chainStep === 2 ? '连携协助' : '协助成功'} ${name} +${amount}${task.rewardResource === 'food' ? '食物' : task.rewardResource === 'ammo' ? '弹药' : task.rewardResource === 'wood' ? '木材' : task.rewardResource === 'scrap' ? '零件' : task.rewardResource === 'metal' ? '金属' : '资源'}`,
       task.chainStep === 2 ? '#f97316' : '#22c55e',
       false
     );
@@ -13620,7 +15055,7 @@ export default class GameScene extends Phaser.Scene {
     const runMul = this.getRunDayActivityGainMultiplier();
     const roster = gameState.data.companions.filter((c) => c.status === 'base');
     const activeResidents = Array.from(this.baseResidents.entries())
-      .filter(([, container]) => container.active && container.visible);
+      .filter(([, container]) => container.active && container.visible && !container.getData('constructionBusy'));
     if (activeResidents.length <= 0) return;
 
     Phaser.Utils.Array.Shuffle(activeResidents);
@@ -13646,11 +15081,14 @@ export default class GameScene extends Phaser.Scene {
       let text = '白天产出';
 
       if (behavior === 'fishing' && roll < 0.72) {
-        resource = Math.random() < 0.3 ? 'water' : 'food';
+        const fishingRoll = Math.random();
+        resource = fishingRoll < 0.28 ? 'metal' : (fishingRoll < 0.56 ? 'water' : 'food');
         amount = Math.max(1, Math.round((Math.random() < 0.2 ? 2 : 1) * moraleMul * profileMul));
-        exp = 2;
-        color = '#38bdf8';
-        text = resource === 'water' ? '净水补给' : '渔获补给';
+        exp = resource === 'metal' ? 3 : 2;
+        color = resource === 'metal' ? '#fbbf24' : '#38bdf8';
+        text = resource === 'metal'
+          ? '河流淘金'
+          : (resource === 'water' ? '净水补给' : '渔获补给');
       } else if (behavior === 'cooking' && roll < 0.75) {
         resource = 'food';
         amount = Math.max(1, Math.round((Math.random() < 0.22 ? 2 : 1) * moraleMul * profileMul));
@@ -13664,11 +15102,11 @@ export default class GameScene extends Phaser.Scene {
         color = '#4ade80';
         text = '野外搜集';
       } else if (behavior === 'adventure' && roll < 0.64) {
-        resource = Math.random() < 0.58 ? 'scrap' : 'metal';
-        amount = Math.max(1, Math.round((Math.random() < 0.24 ? 2 : 1) * moraleMul * profileMul));
+        resource = Math.random() < 0.68 ? 'metal' : 'scrap';
+        amount = Math.max(1, Math.round((Math.random() < 0.28 ? 2 : 1) * moraleMul * profileMul));
         exp = 3;
-        color = '#fda4af';
-        text = '探险发现';
+        color = resource === 'metal' ? '#c4b5fd' : '#fda4af';
+        text = resource === 'metal' ? '山洞挖矿' : '洞穴探险';
       } else if (behavior === 'guard' && roll < 0.56) {
         resource = Math.random() < 0.52 ? 'ammo' : 'scrap';
         amount = Math.max(1, Math.round(1 * moraleMul * profileMul));
@@ -13754,19 +15192,21 @@ export default class GameScene extends Phaser.Scene {
     if (this.isGameOver || gameState.data.isNight) return;
     if (this.baseResidents.size <= 0) return;
 
-    const entries = Array.from(this.baseResidents.entries());
+    const entries = Array.from(this.baseResidents.entries())
+      .filter(([, container]) => !container.getData('constructionBusy'));
+    if (entries.length <= 0) return;
     const [companionId, container] = Phaser.Utils.Array.GetRandom(entries);
     if (!container || !container.active) return;
     const behavior = (container.getData('behavior') || 'stroll') as ResidentBehavior;
     const companion = gameState.data.companions.find(c => c.id === companionId);
     const name = companion?.name?.split('(')[0] || '伙伴';
     const hints: Record<ResidentBehavior, { text: string; color: string; icon: string }> = {
-      fishing: { text: `${name} 钓到补给`, color: '#38bdf8', icon: '◉' },
+      fishing: { text: `${name} 正在河流淘金`, color: '#38bdf8', icon: '◉' },
       cooking: { text: `${name} 正在做饭`, color: '#fb923c', icon: '♨' },
       guard: { text: `${name} 正在巡逻`, color: '#93c5fd', icon: '⚑' },
       sleep: { text: `${name} 在休息`, color: '#c4b5fd', icon: 'Z' },
       forage: { text: `${name} 外出搜集`, color: '#4ade80', icon: '✦' },
-      adventure: { text: `${name} 正在探险`, color: '#fca5a5', icon: '✧' },
+      adventure: { text: `${name} 正在山洞挖矿`, color: '#fca5a5', icon: '✧' },
       stroll: { text: `${name} 在散步`, color: '#bfdbfe', icon: '·' },
     };
     const hint = hints[behavior];
@@ -13816,10 +15256,15 @@ export default class GameScene extends Phaser.Scene {
     const gainScale = this.hasDayBuff('morale') ? 1.35 : 1;
     const gainRoll = Math.random();
     if (behavior === 'fishing' && gainRoll < 0.45 + moraleBoost) {
-      gameState.addResource('food', Math.max(1, Math.round(1 * gainScale)));
-      if (Math.random() < 0.28 + moraleBoost * 0.5) gameState.addResource('water', 1);
+      if (Math.random() < 0.34 + moraleBoost * 0.5) {
+        gameState.addResource('metal', Math.max(1, Math.round(1 * gainScale)));
+        this.showFloatingText(container.x + 22, container.y - 48, '+淘金', '#fbbf24', false);
+      } else {
+        gameState.addResource('food', Math.max(1, Math.round(1 * gainScale)));
+        if (Math.random() < 0.28 + moraleBoost * 0.5) gameState.addResource('water', 1);
+        this.showFloatingText(container.x + 22, container.y - 48, '+食物', '#22c55e', false);
+      }
       events.emit('update-resources', gameState.data.resources);
-      this.showFloatingText(container.x + 22, container.y - 48, '+食物', '#22c55e', false);
     } else if (behavior === 'cooking' && gainRoll < 0.42 + moraleBoost) {
       gameState.addResource('food', Math.max(1, Math.round(1 * gainScale)));
       events.emit('update-resources', gameState.data.resources);
@@ -13829,9 +15274,9 @@ export default class GameScene extends Phaser.Scene {
       events.emit('update-resources', gameState.data.resources);
       this.showFloatingText(container.x + 24, container.y - 48, '+材料', '#4ade80', false);
     } else if (behavior === 'adventure' && gainRoll < 0.4 + moraleBoost) {
-      gameState.addResource(Math.random() < 0.55 ? 'scrap' : 'metal', Math.max(1, Math.round(1 * gainScale)));
+      gameState.addResource(Math.random() < 0.7 ? 'metal' : 'scrap', Math.max(1, Math.round(1 * gainScale)));
       events.emit('update-resources', gameState.data.resources);
-      this.showFloatingText(container.x + 24, container.y - 48, '+发现', '#fda4af', false);
+      this.showFloatingText(container.x + 24, container.y - 48, '+挖矿发现', '#fda4af', false);
     } else if (behavior === 'guard' && gainRoll < 0.25 + moraleBoost * 0.7) {
       gameState.addResource('ammo', Math.max(1, Math.round(1 * gainScale)));
       events.emit('update-resources', gameState.data.resources);
@@ -13913,7 +15358,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     const residents = Array.from(this.baseResidents.entries())
-      .filter(([, container]) => container.active && container.visible);
+      .filter(([, container]) => container.active && container.visible && !container.getData('constructionBusy'));
     if (residents.length <= 0) return;
 
     const [companionId, container] = Phaser.Utils.Array.GetRandom(residents);
@@ -13922,12 +15367,12 @@ export default class GameScene extends Phaser.Scene {
     const name = companion?.name?.split('(')[0] || ((container.getData('residentName') || '伙伴') as string);
 
     const lifeLinePool: Record<ResidentBehavior, string[]> = {
-      fishing: ['正在修补渔网', '在比拼抛竿技巧', '把渔获送去炊事台'],
+      fishing: ['正在浅滩淘金', '在比拼抛竿技巧', '把渔获送去炊事台'],
       cooking: ['在分发热汤', '把食材切分装箱', '给巡逻队准备便当'],
       guard: ['在补强路障', '正在轮班巡逻', '检查探照灯电量'],
       sleep: ['在短暂午休', '靠墙打个盹', '整理床位轮休'],
       forage: ['翻到可用零件', '捡回了木料', '推着小车回营'],
-      adventure: ['记录外出路线', '整理探险见闻', '校准随身终端'],
+      adventure: ['记录矿脉路线', '整理洞穴见闻', '校准随身终端'],
       stroll: ['和邻里打招呼', '在广场散步', '正在喂营地小狗'],
     };
     const line = `${name} ${Phaser.Utils.Array.GetRandom(lifeLinePool[behavior])}`;
@@ -13951,7 +15396,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (Math.random() < 0.2) {
       const rewardByBehavior: Record<ResidentBehavior, keyof Resources> = {
-        fishing: 'food',
+        fishing: Math.random() < 0.36 ? 'metal' : 'food',
         cooking: 'food',
         guard: 'ammo',
         sleep: 'water',
@@ -13984,7 +15429,7 @@ export default class GameScene extends Phaser.Scene {
   private maybeEmitResidentSocialMoment(): void {
     if (this.isGameOver || gameState.data.isNight) return;
     const activeResidents = Array.from(this.baseResidents.entries())
-      .filter(([, container]) => container.active && container.visible);
+      .filter(([, container]) => container.active && container.visible && !container.getData('constructionBusy'));
     if (activeResidents.length < 2) return;
     if (Math.random() > 0.72) return;
 
@@ -14163,6 +15608,7 @@ export default class GameScene extends Phaser.Scene {
     this.clearResidentAssistTask();
     this.residentDayYieldNextAt.clear();
     this.pendingDayRunEventAfterChallenge = false;
+    this.releaseAllConstructionResidents();
     this.activateNightResidentDefense();
     const triggered = this.maybeTriggerRunEvent('night');
     if (triggered) {
@@ -14509,10 +15955,6 @@ export default class GameScene extends Phaser.Scene {
     events.emit('loot-codex-updated');
     QuestSystem.updateProgress('collect', data.type, amount);
 
-    const now = this.time.now;
-    const isRare = data.type === 'energyCore' || data.type === 'medical' || data.type === 'ammo';
-    if (!isRare && amount < 2 && now < this.lootToastNextAt) return;
-
     const names: Record<string, { label: string; color: string }> = {
       wood: { label: '木材', color: '#f59e0b' },
       metal: { label: '金属', color: '#93c5fd' },
@@ -14524,8 +15966,7 @@ export default class GameScene extends Phaser.Scene {
       energyCore: { label: '能量核', color: '#c4b5fd' },
     };
     const entry = names[data.type] || { label: data.type, color: '#e2e8f0' };
-    this.showFloatingText(this.player.x, this.player.y - 58, `+${entry.label} ${amount}`, entry.color, false);
-    this.lootToastNextAt = now + 180;
+    this.enqueueResourceFloatingToast(data.type, entry.label, entry.color, amount);
   }
 
   private onCompanionStatusChanged(data: { id: string; status: 'party' | 'base' }): void {
@@ -14538,6 +15979,10 @@ export default class GameScene extends Phaser.Scene {
       this.syncBaseResidents();
       this.showFloatingText(this.player.x, this.player.y - 30, `${comp.name} 出战`, '#38bdf8', false);
     } else {
+      comp.autoDuty = BaseSystem.getCompanionAutoDuty(comp);
+      if (gameState.data.autoBuild.autoAssignDuties) {
+        BaseSystem.autoAssignBaseCompanions();
+      }
       this.syncCompanionPresence();
       this.syncBaseResidents();
       this.showFloatingText(this.player.x, this.player.y - 30, `${comp.name} 驻守基地`, '#fbbf24', false);
@@ -14553,12 +15998,15 @@ export default class GameScene extends Phaser.Scene {
       if (comp.status === nextStatus) return;
       comp.status = nextStatus;
       if (nextStatus === 'party') comp.job = 'idle';
+      if (nextStatus === 'base') comp.autoDuty = BaseSystem.getCompanionAutoDuty(comp);
       changed += 1;
     });
     if (changed <= 0) return;
 
     if (nextStatus === 'base') {
-      BaseSystem.autoAssignBaseCompanions();
+      if (gameState.data.autoBuild.autoAssignDuties) {
+        BaseSystem.autoAssignBaseCompanions();
+      }
       this.showFloatingText(this.player.x, this.player.y - 30, `全部伙伴转为驻守 (${changed})`, '#fbbf24', false);
     } else {
       this.showFloatingText(this.player.x, this.player.y - 30, `全部伙伴转为出战 (${changed})`, '#38bdf8', false);
@@ -14585,6 +16033,20 @@ export default class GameScene extends Phaser.Scene {
       workshop: '工坊',
     };
     this.showFloatingText(this.player.x, this.player.y - 30, `${comp.name} → ${jobNames[data.job] || data.job}`, '#a78bfa', false);
+  }
+
+  private onAutoBuildConfigUpdated(payload?: { enabled?: boolean; ruleCount?: number; builders?: number }): void {
+    BaseSystem.refreshBaseState();
+    const enabled = payload?.enabled ?? gameState.data.autoBuild.enabled;
+    const ruleCount = payload?.ruleCount ?? gameState.data.autoBuild.rules.filter((rule) => rule.enabled && rule.targetCount > 0).length;
+    const builders = payload?.builders ?? Math.max(0, Math.floor(gameState.data.autoBuild.desiredBuilderCount || 0));
+    this.showFloatingText(
+      this.player.x,
+      this.player.y - 54,
+      enabled ? `自动建造启用 · 目标${ruleCount}项 · 施工${builders}` : '自动建造已停用',
+      enabled ? '#67e8f9' : '#94a3b8',
+      false
+    );
   }
 
   private updateHomingBullets(): void {
@@ -14811,6 +16273,7 @@ export default class GameScene extends Phaser.Scene {
     events.off('companion-status-changed', this.onCompanionStatusChanged, this);
     events.off('companion-bulk-status-changed', this.onCompanionBulkStatusChanged, this);
     events.off('companion-job-changed', this.onCompanionJobChanged, this);
+    events.off('base-autobuild-updated', this.onAutoBuildConfigUpdated, this);
     events.off('select-build-item', this.onBuildSelection, this);
     events.off('crafting-panel-state', this.onCraftingPanelState, this);
     events.off('mobile-move', this.onMobileMove, this);
@@ -14833,6 +16296,8 @@ export default class GameScene extends Phaser.Scene {
     this.baseRoutineTimer = null;
     this.dayResidentEconomyTimer = null;
     this.dayLifePulseTimer = null;
+    this.clearConstructionSiteVisuals();
+    this.constructionAssignedResidents.clear();
     this.residentDayYieldNextAt.clear();
     this.daySpotBonuses.clear();
     this.dayExplorationChallenge = null;
@@ -14902,6 +16367,7 @@ export default class GameScene extends Phaser.Scene {
     (window as any).__force_bloodmoon_test = undefined;
     (window as any).__debug_trigger_run_event = undefined;
     (window as any).__debug_show_loot_legend = undefined;
+    (window as any).__debug_spawn_loot_preview = undefined;
     (window as any).__debug_open_cave_raid = undefined;
     (window as any).__debug_open_forest_hunt = undefined;
     (window as any).__debug_open_city_scavenge = undefined;

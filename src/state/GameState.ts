@@ -81,6 +81,7 @@ export interface CompanionData {
   id: string;
   name: string;
   role: 'tank' | 'sniper' | 'medic';
+  autoDuty?: CompanionAutoDuty;
   level: number;
   bulletEffect: string;
   textureKey?: string;
@@ -90,6 +91,8 @@ export interface CompanionData {
   promotionTier?: 0 | 1;
   profile?: CompanionProfile;
 }
+
+export type CompanionAutoDuty = 'builder' | 'scavenger' | 'defender' | 'support';
 
 export interface CompanionProfile {
   gender: '男' | '女';
@@ -109,8 +112,83 @@ export interface BaseState {
   foodProduction: number;
   foodConsumption: number;
   foodDeficit: number;
+  structureIntegrity: number;
+  structureCoverage: number;
+  structureBreachOpen: boolean;
+  ecologyIntegrity: number;
+  ecologyUpkeepRatio: number;
+  ecologyProductionRatio: number;
+  ecologyDefenseScore: number;
+  ecologySustainScore: number;
+  ecologyIndustryScore: number;
+  ecologyComfortScore: number;
+  ecologyIntelScore: number;
+  ecologyTotalScore: number;
+  ecologyWarnings: string[];
+  diagnosticUpkeepNodes: number;
+  diagnosticInputNodes: number;
+  diagnosticPowerNodes: number;
+  nodeDiagnostics: BaseNodeDiagnostic[];
   jobSlots: Record<BaseJob, number>;
   jobAssigned: Record<BaseJob, number>;
+}
+
+export type BaseNodeIssue = 'upkeep' | 'input' | 'power';
+
+export interface BaseNodeDiagnostic {
+  id: string;
+  nameCN: string;
+  x: number;
+  y: number;
+  tier: number;
+  issues: BaseNodeIssue[];
+  shortageResources: string[];
+  shortageAmounts: Record<string, number>;
+}
+
+export type AutoBuildResourceKey = Exclude<keyof Resources, 'bitcoin'>;
+export type AutoBuildCrewMode = 'workshop_only' | 'workshop_idle';
+export type ConstructionTaskKind = 'build' | 'upgrade-tier' | 'upgrade-morph';
+export type ConstructionTaskStatus = 'queued' | 'active' | 'done' | 'failed';
+
+export interface AutoBuildRule {
+  id: string;
+  buildingId: string;
+  enabled: boolean;
+  targetCount: number;
+  maxTier: number;
+  priority: number;
+  allowUpgrade: boolean;
+}
+
+export interface AutoBuildSettings {
+  enabled: boolean;
+  pauseAtNight: boolean;
+  maxConcurrent: number;
+  queueCap: number;
+  autoAssignDuties: boolean;
+  autoAssignBuilders: boolean;
+  desiredBuilderCount: number;
+  crewMode: AutoBuildCrewMode;
+  reserve: Partial<Record<AutoBuildResourceKey, number>>;
+  rules: AutoBuildRule[];
+}
+
+export interface ConstructionTaskData {
+  id: string;
+  kind: ConstructionTaskKind;
+  status: ConstructionTaskStatus;
+  source: 'manual' | 'auto';
+  fromBuildingId?: string;
+  buildingId: string;
+  x: number;
+  y: number;
+  targetTier: number;
+  cost: Partial<Record<AutoBuildResourceKey, number>>;
+  durationMs: number;
+  progressMs: number;
+  queuedAt: number;
+  startedAt?: number;
 }
 
 export type GearWeaponType = 'pistol' | 'shotgun' | 'rifle' | 'flamethrower' | 'laser' | 'rocket';
@@ -259,6 +337,8 @@ export interface GameStateData {
 
   // Buildings placed
   buildings: Array<{ id: string; type: string; x: number; y: number; tier: number; health: number }>;
+  autoBuild: AutoBuildSettings;
+  constructionTasks: ConstructionTaskData[];
 
   // Quests
   activeQuests: QuestProgress[];
@@ -318,6 +398,33 @@ const DEFAULT_RESOURCES: Resources = {
   ammo: 20,
   energyCore: 0,
   bitcoin: 0,
+};
+
+const DEFAULT_AUTO_BUILD_SETTINGS: AutoBuildSettings = {
+  enabled: false,
+  pauseAtNight: true,
+  maxConcurrent: 1,
+  queueCap: 6,
+  autoAssignDuties: true,
+  autoAssignBuilders: true,
+  desiredBuilderCount: 2,
+  crewMode: 'workshop_idle',
+  reserve: {
+    wood: 12,
+    metal: 10,
+    scrap: 8,
+    food: 4,
+    water: 2,
+  },
+  rules: [
+    { id: 'wall_line', buildingId: 'wall', enabled: true, targetCount: 8, maxTier: 3, priority: 100, allowUpgrade: true },
+    { id: 'turret_line', buildingId: 'turret', enabled: true, targetCount: 2, maxTier: 3, priority: 95, allowUpgrade: true },
+    { id: 'power_line', buildingId: 'generator', enabled: true, targetCount: 1, maxTier: 2, priority: 90, allowUpgrade: true },
+    { id: 'farm_line', buildingId: 'farm', enabled: true, targetCount: 1, maxTier: 2, priority: 80, allowUpgrade: true },
+    { id: 'storage_line', buildingId: 'storage', enabled: true, targetCount: 1, maxTier: 2, priority: 72, allowUpgrade: true },
+    { id: 'medical_line', buildingId: 'medical_station', enabled: false, targetCount: 1, maxTier: 2, priority: 70, allowUpgrade: true },
+    { id: 'room_line', buildingId: 'room_quarters', enabled: false, targetCount: 1, maxTier: 2, priority: 62, allowUpgrade: true },
+  ],
 };
 
 interface PermanentTalentNodeDef {
@@ -503,10 +610,33 @@ function createDefaultState(): GameStateData {
       foodProduction: 0,
       foodConsumption: 0,
       foodDeficit: 0,
+      structureIntegrity: 1,
+      structureCoverage: 1,
+      structureBreachOpen: false,
+      ecologyIntegrity: 1,
+      ecologyUpkeepRatio: 1,
+      ecologyProductionRatio: 1,
+      ecologyDefenseScore: 0,
+      ecologySustainScore: 0,
+      ecologyIndustryScore: 0,
+      ecologyComfortScore: 0,
+      ecologyIntelScore: 0,
+      ecologyTotalScore: 0,
+      ecologyWarnings: [],
+      diagnosticUpkeepNodes: 0,
+      diagnosticInputNodes: 0,
+      diagnosticPowerNodes: 0,
+      nodeDiagnostics: [],
       jobSlots: { idle: 0, kitchen: 0, farm: 0, power: 0, medical: 0, workshop: 0 },
       jobAssigned: { idle: 0, kitchen: 0, farm: 0, power: 0, medical: 0, workshop: 0 },
     },
     buildings: [],
+    autoBuild: {
+      ...DEFAULT_AUTO_BUILD_SETTINGS,
+      reserve: { ...DEFAULT_AUTO_BUILD_SETTINGS.reserve },
+      rules: DEFAULT_AUTO_BUILD_SETTINGS.rules.map((rule) => ({ ...rule })),
+    },
+    constructionTasks: [],
 
     activeQuests: [],
     completedQuestIds: [],
@@ -925,6 +1055,8 @@ class GameStateManager {
             ...defaults.bitcoinPerks,
             ...(parsed.bitcoinPerks || {}),
           },
+          autoBuild: this.normalizeAutoBuildSettings(parsed.autoBuild, defaults.autoBuild),
+          constructionTasks: this.normalizeConstructionTasks(parsed.constructionTasks),
         };
         this.state.gearStash = Array.isArray(parsed.gearStash)
           ? parsed.gearStash.filter((item: any) => item && typeof item.uid === 'string')
@@ -959,6 +1091,7 @@ class GameStateManager {
         ...EMPTY_BITCOIN_PERKS,
         ...(this.state.bitcoinPerks || {}),
       },
+      autoBuild: this.normalizeAutoBuildSettings(this.state.autoBuild, createDefaultState().autoBuild),
       meta: {
         bitcoinBank: Number((this.state.meta?.bitcoinBank || 0).toFixed(3)),
         permanentUpgrades: {
@@ -985,6 +1118,8 @@ class GameStateManager {
     this.state.gearStash = unlocks.gearStash;
     this.state.equippedGearSlots = unlocks.equippedGearSlots;
     this.state.bitcoinPerks = unlocks.bitcoinPerks;
+    this.state.autoBuild = unlocks.autoBuild;
+    this.state.constructionTasks = [];
     this.state.meta = unlocks.meta;
     this.sanitizeEquippedGearSlots();
     this.applyMetaBonusesToRun();
@@ -1224,6 +1359,107 @@ class GameStateManager {
       return node;
     }
     return null;
+  }
+
+  private normalizeAutoBuildSettings(raw: any, defaults: AutoBuildSettings): AutoBuildSettings {
+    const mergedReserve: Partial<Record<AutoBuildResourceKey, number>> = {
+      ...defaults.reserve,
+      ...(raw?.reserve || {}),
+    };
+    const reserve: Partial<Record<AutoBuildResourceKey, number>> = {};
+    (Object.entries(mergedReserve) as Array<[AutoBuildResourceKey, number | undefined]>).forEach(([key, value]) => {
+      reserve[key] = Math.max(0, Math.floor(Number(value || 0)));
+    });
+
+    const fallbackRuleMap = new Map(defaults.rules.map((rule) => [rule.id, rule]));
+    const parsedRules: AutoBuildRule[] = Array.isArray(raw?.rules)
+      ? raw.rules
+        .map((rule: any): AutoBuildRule | null => {
+          const ruleId = typeof rule?.id === 'string' && rule.id.trim().length > 0
+            ? rule.id
+            : '';
+          if (!ruleId) return null;
+          const fallback = fallbackRuleMap.get(ruleId);
+          const buildingId = typeof rule?.buildingId === 'string' && rule.buildingId.trim().length > 0
+            ? rule.buildingId
+            : fallback?.buildingId;
+          if (!buildingId) return null;
+          return {
+            id: ruleId,
+            buildingId,
+            enabled: rule?.enabled != null ? !!rule.enabled : !!fallback?.enabled,
+            targetCount: Math.max(0, Math.floor(Number(rule?.targetCount ?? fallback?.targetCount ?? 0))),
+            maxTier: Math.max(1, Math.floor(Number(rule?.maxTier ?? fallback?.maxTier ?? 1))),
+            priority: Math.max(0, Math.floor(Number(rule?.priority ?? fallback?.priority ?? 0))),
+            allowUpgrade: rule?.allowUpgrade != null ? !!rule.allowUpgrade : !!fallback?.allowUpgrade,
+          };
+        })
+        .filter((rule: AutoBuildRule | null): rule is AutoBuildRule => !!rule)
+      : [];
+    const usedRuleIds = new Set(parsedRules.map((rule) => rule.id));
+    const mergedRules = [
+      ...parsedRules,
+      ...defaults.rules
+        .filter((rule) => !usedRuleIds.has(rule.id))
+        .map((rule) => ({ ...rule })),
+    ];
+
+    return {
+      enabled: raw?.enabled != null ? !!raw.enabled : defaults.enabled,
+      pauseAtNight: raw?.pauseAtNight != null ? !!raw.pauseAtNight : defaults.pauseAtNight,
+      maxConcurrent: Math.max(1, Math.min(4, Math.floor(Number(raw?.maxConcurrent ?? defaults.maxConcurrent)))),
+      queueCap: Math.max(2, Math.min(24, Math.floor(Number(raw?.queueCap ?? defaults.queueCap)))),
+      autoAssignDuties: raw?.autoAssignDuties != null ? !!raw.autoAssignDuties : defaults.autoAssignDuties,
+      autoAssignBuilders: raw?.autoAssignBuilders != null ? !!raw.autoAssignBuilders : defaults.autoAssignBuilders,
+      desiredBuilderCount: Math.max(0, Math.min(12, Math.floor(Number(raw?.desiredBuilderCount ?? defaults.desiredBuilderCount)))),
+      crewMode: raw?.crewMode === 'workshop_only' ? 'workshop_only' : defaults.crewMode,
+      reserve,
+      rules: mergedRules,
+    };
+  }
+
+  private normalizeConstructionTasks(raw: any): ConstructionTaskData[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((task: any): ConstructionTaskData | null => {
+        const id = typeof task?.id === 'string' ? task.id : '';
+        const buildingId = typeof task?.buildingId === 'string' ? task.buildingId : '';
+        if (!id || !buildingId) return null;
+        const kind: ConstructionTaskKind = task?.kind === 'upgrade-tier' || task?.kind === 'upgrade-morph'
+          ? task.kind
+          : 'build';
+        const status: ConstructionTaskStatus = task?.status === 'active'
+          ? 'active'
+          : task?.status === 'done'
+            ? 'done'
+            : task?.status === 'failed'
+              ? 'failed'
+              : 'queued';
+        const source = task?.source === 'auto' ? 'auto' : 'manual';
+        const cost: Partial<Record<AutoBuildResourceKey, number>> = {};
+        if (task?.cost && typeof task.cost === 'object') {
+          (Object.entries(task.cost) as Array<[AutoBuildResourceKey, unknown]>).forEach(([key, value]) => {
+            cost[key] = Math.max(0, Math.floor(Number(value || 0)));
+          });
+        }
+        return {
+          id,
+          kind,
+          status,
+          source,
+          fromBuildingId: typeof task?.fromBuildingId === 'string' ? task.fromBuildingId : undefined,
+          buildingId,
+          x: Math.round(Number(task?.x || 0)),
+          y: Math.round(Number(task?.y || 0)),
+          targetTier: Math.max(1, Math.floor(Number(task?.targetTier || 1))),
+          cost,
+          durationMs: Math.max(600, Math.floor(Number(task?.durationMs || 0))),
+          progressMs: Math.max(0, Math.floor(Number(task?.progressMs || 0))),
+          queuedAt: Math.max(0, Math.floor(Number(task?.queuedAt || 0))),
+          startedAt: task?.startedAt != null ? Math.max(0, Math.floor(Number(task.startedAt || 0))) : undefined,
+        };
+      })
+      .filter((task: ConstructionTaskData | null): task is ConstructionTaskData => !!task && task.status !== 'done');
   }
 
   // --- Legacy compatibility (for gradual migration) ---

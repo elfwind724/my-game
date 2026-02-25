@@ -32,6 +32,20 @@ export interface BuildingDef {
   jobSlots?: number;
 }
 
+export interface BuildingRequirement {
+  buildingId: string;
+  minCount: number;
+}
+
+export interface BuildingMorphUpgradeDef {
+  fromId: string;
+  toId: string;
+  nameCN: string;
+  requiresDay?: number;
+  requiresBuildings?: BuildingRequirement[];
+  costMul?: number;
+}
+
 export const BUILDING_DEFS: Record<string, BuildingDef> = {
   // ===== DEFENSE =====
   wall: {
@@ -538,3 +552,94 @@ export const BUILD_CATEGORIES: Array<{ id: BuildingFilterCategory; nameCN: strin
   { id: 'utility', nameCN: '设施', icon: '🏠' },
   { id: 'special', nameCN: '特殊', icon: '⭐' },
 ];
+
+export const BUILDING_MORPH_UPGRADES: BuildingMorphUpgradeDef[] = [
+  {
+    fromId: 'wall',
+    toId: 'reinforced_wall',
+    nameCN: '墙体加固',
+    requiresDay: 2,
+    requiresBuildings: [{ buildingId: 'workbench', minCount: 1 }],
+    costMul: 0.68,
+  },
+  {
+    fromId: 'turret',
+    toId: 'slow_turret',
+    nameCN: '炮塔控场改装',
+    requiresDay: 2,
+    requiresBuildings: [{ buildingId: 'workbench', minCount: 1 }],
+    costMul: 0.72,
+  },
+  {
+    fromId: 'turret',
+    toId: 'laser_turret',
+    nameCN: '炮塔激光改装',
+    requiresDay: 3,
+    requiresBuildings: [
+      { buildingId: 'workbench', minCount: 1 },
+      { buildingId: 'radar', minCount: 1 },
+    ],
+    costMul: 0.74,
+  },
+  {
+    fromId: 'laser_turret',
+    toId: 'missile_turret',
+    nameCN: '炮塔导弹改装',
+    requiresDay: 5,
+    requiresBuildings: [
+      { buildingId: 'workbench', minCount: 2 },
+      { buildingId: 'radar', minCount: 1 },
+      { buildingId: 'ammo_factory', minCount: 1 },
+    ],
+    costMul: 0.78,
+  },
+  {
+    fromId: 'kitchen_station',
+    toId: 'kitchen',
+    nameCN: '炊事台升级厨房',
+    requiresDay: 2,
+    requiresBuildings: [{ buildingId: 'workbench', minCount: 1 }],
+    costMul: 0.68,
+  },
+  {
+    fromId: 'room_quarters',
+    toId: 'bunk_bed',
+    nameCN: '宿舍改造床位',
+    requiresDay: 2,
+    requiresBuildings: [{ buildingId: 'workbench', minCount: 1 }],
+    costMul: 0.62,
+  },
+];
+
+export function getBuildingMorphUpgrade(fromId: string, toId: string): BuildingMorphUpgradeDef | null {
+  return BUILDING_MORPH_UPGRADES.find((item) => item.fromId === fromId && item.toId === toId) || null;
+}
+
+export function getBuildingTierTechRequirements(targetTier: number): BuildingRequirement[] {
+  if (targetTier <= 1) return [];
+  if (targetTier === 2) return [{ buildingId: 'workbench', minCount: 1 }];
+  if (targetTier === 3) {
+    return [
+      { buildingId: 'workbench', minCount: 1 },
+      { buildingId: 'radar', minCount: 1 },
+    ];
+  }
+  return [
+    { buildingId: 'workbench', minCount: 2 },
+    { buildingId: 'radar', minCount: 1 },
+    { buildingId: 'generator', minCount: 1 },
+  ];
+}
+
+export function getBuildingUpgradeHint(buildingId: string): string {
+  const selfDef = BUILDING_DEFS[buildingId];
+  if (!selfDef) return '';
+  const paths = BUILDING_MORPH_UPGRADES.filter((item) => item.fromId === buildingId).map((item) => {
+    const toName = BUILDING_DEFS[item.toId]?.nameCN || item.toId;
+    return `→ ${toName}`;
+  });
+  const tierHint = selfDef.maxTier > selfDef.tier ? `同座标升阶至T${selfDef.maxTier}` : '';
+  const merged = [tierHint, ...paths].filter(Boolean);
+  if (merged.length <= 0) return '无可用升级分支';
+  return `升级树: ${merged.join(' / ')}`;
+}

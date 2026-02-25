@@ -18,6 +18,7 @@ interface CompanionInstance {
     lastPattern: number;
     killCount: number;
     nextLevelKills: number;
+    damageProgress: number;
     baseDamage: number;
     baseFireRate: number;
     baseRange: number;
@@ -26,6 +27,21 @@ interface CompanionInstance {
     baseBulletColor: number;
     baseTextureKey: string;
 }
+
+type CompanionProgressResult = {
+    leveledUp: boolean;
+    level: number;
+    name: string;
+    tint: number;
+    promoted?: boolean;
+    advancedClass?: string;
+    reachedMax?: boolean;
+} | null;
+
+type CompanionAssistProgress = {
+    companionId: string;
+    progress: CompanionProgressResult;
+};
 
 interface AdvancedClassDef {
     nameCN: string;
@@ -119,6 +135,7 @@ export class CompanionSystem {
             lastPattern: 0,
             killCount: 0,
             nextLevelKills: this.getKillsToNextLevel(config.level),
+            damageProgress: 0,
             baseDamage: this.inferBaseValue(config.stats.damage, config.level, 1.08),
             baseFireRate: config.stats.fireRate,
             baseRange: this.inferBaseValue(config.stats.range, config.level, 1.02),
@@ -182,17 +199,18 @@ export class CompanionSystem {
         };
     }
 
-    public registerKill(companionId: string): {
-        leveledUp: boolean;
-        level: number;
-        name: string;
-        tint: number;
-        promoted?: boolean;
-        advancedClass?: string;
-        reachedMax?: boolean;
-    } | null {
+    public registerKill(companionId: string): CompanionProgressResult {
         const comp = this.companions.find(c => c.id === companionId);
         if (!comp || !comp.sprite.active) return null;
+        comp.killCount += 1.45;
+        return this.resolveCompanionProgress(comp);
+    }
+
+    public registerDamage(companionId: string, dealtDamage: number): CompanionProgressResult {
+        const comp = this.companions.find(c => c.id === companionId);
+        if (!comp || !comp.sprite.active) return null;
+        const safeDamage = Math.max(0, dealtDamage || 0);
+        if (safeDamage <= 0) return null;
         if (comp.config.level >= COMPANION_MAX_LEVEL) {
             return {
                 leveledUp: false,
@@ -203,34 +221,36 @@ export class CompanionSystem {
                 advancedClass: comp.config.advancedClass,
             };
         }
-        comp.killCount += 1;
-        let leveledUp = false;
-        let promoted = false;
-        while (comp.config.level < COMPANION_MAX_LEVEL && comp.killCount >= comp.nextLevelKills) {
-            comp.config.level += 1;
-            leveledUp = true;
-            if (comp.config.level >= COMPANION_PROMOTION_LEVEL && comp.config.promotionTier !== 1) {
-                this.promoteCompanion(comp);
-                promoted = true;
+        const level = Math.max(1, comp.config.level || 1);
+        const damagePerProgress = 56 + level * 3.2;
+        const roleBonus = comp.config.role === 'sniper' ? 0.12 : comp.config.role === 'medic' ? 0.08 : 0.1;
+        const gain = Phaser.Math.Clamp(0.14 + safeDamage / Math.max(16, damagePerProgress) + roleBonus, 0.14, 2.6);
+        comp.damageProgress += safeDamage;
+        comp.killCount += gain;
+        return this.resolveCompanionProgress(comp);
+    }
+
+    public registerTeamAssistKill(weight: number = 0.42, maxCompanions: number = 3): CompanionAssistProgress[] {
+        const active = this.companions
+            .filter(comp => comp.sprite.active && comp.config.level < COMPANION_MAX_LEVEL)
+            .sort((a, b) => (a.config.level || 1) - (b.config.level || 1));
+        if (active.length <= 0) return [];
+
+        const credit = Phaser.Math.Clamp(weight, 0.15, 0.95);
+        const cap = Phaser.Math.Clamp(maxCompanions, 1, active.length);
+        const targets = active.slice(0, cap);
+        const results: CompanionAssistProgress[] = [];
+        targets.forEach((comp, idx) => {
+            const roleBoost = comp.config.role === 'sniper' ? 1.06 : comp.config.role === 'medic' ? 1.0 : 1.04;
+            const splitPenalty = 1 - idx * 0.08;
+            const gained = Math.max(0.08, credit * roleBoost * splitPenalty);
+            comp.killCount += gained;
+            const progress = this.resolveCompanionProgress(comp);
+            if (progress) {
+                results.push({ companionId: comp.id, progress });
             }
-            comp.nextLevelKills += this.getKillsToNextLevel(comp.config.level);
-            this.applyLevelScaling(comp);
-        }
-        const reachedMax = comp.config.level >= COMPANION_MAX_LEVEL;
-        if (reachedMax) {
-            comp.config.level = COMPANION_MAX_LEVEL;
-            comp.nextLevelKills = Number.MAX_SAFE_INTEGER;
-            this.applyLevelScaling(comp);
-        }
-        return {
-            leveledUp,
-            level: comp.config.level,
-            name: comp.config.name,
-            tint: comp.config.bulletEffect.color ?? 0xffffff,
-            promoted,
-            advancedClass: comp.config.advancedClass,
-            reachedMax,
-        };
+        });
+        return results;
     }
 
     public update(
@@ -240,7 +260,7 @@ export class CompanionSystem {
         fireRateMultiplier: number = 1
     ): void {
         const now = this.scene.time.now;
-        const fireRateMul = Phaser.Math.Clamp(fireRateMultiplier || 1, 0.55, 3.2);
+        const fireRateMul = Phaser.Math.Clamp(fireRateMultiplier || 1, 0.55, 4.6);
         const active = this.companions.filter(comp => comp.sprite.active);
         const isNight = !!gameState.data.isNight;
         active.forEach((comp, index) => {
@@ -524,7 +544,7 @@ export class CompanionSystem {
             : role === 'sniper'
                 ? (level >= 14 ? 1 : 0) + promotionBonus
                 : (level >= 10 ? 1 : 0) + promotionBonus;
-        const pellets = Math.min(8, Math.max(1, basePellets + levelBurstBonus + rolePelletBonus));
+        const pellets = Math.min(11, Math.max(1, basePellets + levelBurstBonus + rolePelletBonus));
         let spreadDeg = effect.type === 'scatter'
             ? 25 + levelBurstBonus * 3
             : (levelBurstBonus > 0 ? 8 + levelBurstBonus * 2 : 0);
@@ -540,18 +560,18 @@ export class CompanionSystem {
 
             const clonedEffect: BulletEffect = {
                 ...effect,
-                damage: effect.damage + damageBonus + levelBurstBonus * 2
+                damage: effect.damage + damageBonus + levelBurstBonus * 3
             };
             if (role === 'tank') {
                 clonedEffect.type = 'explosive';
                 clonedEffect.explosionRadius = Math.max(56, (clonedEffect.explosionRadius || 56) + Math.floor(level * 0.9));
                 clonedEffect.speed = Math.max(260, Math.round((clonedEffect.speed || 360) * 0.9));
-                clonedEffect.damage = Math.round(clonedEffect.damage * 1.14);
+                clonedEffect.damage = Math.round(clonedEffect.damage * 1.2);
             } else if (role === 'sniper') {
                 clonedEffect.type = 'piercing';
                 clonedEffect.pierceCount = Math.min(14, Math.max(2, (clonedEffect.pierceCount || 2) + Math.floor(level / 6)));
                 clonedEffect.speed = Math.max(420, Math.round((clonedEffect.speed || 460) * 1.22));
-                clonedEffect.damage = Math.round(clonedEffect.damage * (1.12 + Math.min(0.24, level * 0.004)));
+                clonedEffect.damage = Math.round(clonedEffect.damage * (1.18 + Math.min(0.28, level * 0.005)));
             } else {
                 if (level >= 20 && i % 3 === 2) {
                     clonedEffect.type = 'chain';
@@ -561,7 +581,7 @@ export class CompanionSystem {
                     clonedEffect.homingStrength = Math.min(0.36, (clonedEffect.homingStrength || 0.09) + level * 0.0034);
                 }
                 clonedEffect.speed = Math.max(320, Math.round((clonedEffect.speed || 380) * 1.06));
-                clonedEffect.damage = Math.round(clonedEffect.damage * 1.04);
+                clonedEffect.damage = Math.round(clonedEffect.damage * 1.1);
             }
 
             bullet.enableBody(true, comp.sprite.x, comp.sprite.y, true, true);
@@ -640,10 +660,12 @@ export class CompanionSystem {
             });
         }
 
-        if (comp.config.level >= 18 && this.scene.time.now - comp.lastPattern > (role === 'sniper' ? 1350 : 1600)) {
+        const burstCooldownBase = role === 'sniper' ? 980 : role === 'tank' ? 1180 : 900;
+        const burstCooldown = Math.max(260, burstCooldownBase - level * 14);
+        if (comp.config.level >= 14 && this.scene.time.now - comp.lastPattern > burstCooldown) {
             comp.lastPattern = this.scene.time.now;
-            const burstCount = role === 'tank' ? 4 : role === 'sniper' ? 3 : 5;
-            const burstSpread = role === 'sniper' ? 18 : 52;
+            const burstCount = Math.min(15, (role === 'tank' ? 6 : role === 'sniper' ? 5 : 8) + Math.floor(level / 10) + promotionBonus);
+            const burstSpread = role === 'sniper' ? 26 : 68;
             for (let j = 0; j < burstCount; j++) {
                 const extra = this.acquireBullet(bullets, comp.sprite.x, comp.sprite.y);
                 if (!extra) continue;
@@ -651,7 +673,7 @@ export class CompanionSystem {
                 const burstEffect: BulletEffect = {
                     ...effect,
                     type: role === 'tank' ? 'explosive' : role === 'sniper' ? 'piercing' : 'chain',
-                    damage: Math.round(effect.damage + damageBonus + level * 2.2),
+                    damage: Math.round(effect.damage + damageBonus + level * 2.8),
                     speed: Math.round((effect.speed || 420) * (role === 'sniper' ? 1.25 : role === 'tank' ? 0.88 : 1.05)),
                     explosionRadius: role === 'tank' ? Math.max(72, (effect.explosionRadius || 56) + 24) : effect.explosionRadius,
                     pierceCount: role === 'sniper' ? Math.max(4, (effect.pierceCount || 3) + 1) : effect.pierceCount,
@@ -687,8 +709,8 @@ export class CompanionSystem {
                 anyExtra.bulletTextureKey = extraTexture;
                 anyExtra.baseVelocityX = velocityX;
                 anyExtra.baseVelocityY = velocityY;
-                anyExtra.swayAmplitude = role === 'medic' ? 18 : 10;
-                anyExtra.swayFrequency = role === 'medic' ? 0.016 : 0.012;
+                anyExtra.swayAmplitude = role === 'medic' ? 22 : 14;
+                anyExtra.swayFrequency = role === 'medic' ? 0.017 : 0.013;
                 anyExtra.swayPhase = Math.random() * Math.PI * 2;
                 const lifetime = (comp.config.stats.range || 300) / Math.max(120, burstEffect.speed || 420) * 1000;
                 anyExtra.spawnTime = this.scene.time.now;
@@ -698,6 +720,66 @@ export class CompanionSystem {
                     anyExtra.lifetimeTimer = null;
                     if (extra.active) this.disableBullet(extra);
                 });
+            }
+
+            if (level >= 24) {
+                const novaCount = Math.min(18, 8 + Math.floor(level / 3) + promotionBonus * 2);
+                for (let k = 0; k < novaCount; k++) {
+                    const nova = this.acquireBullet(bullets, comp.sprite.x, comp.sprite.y);
+                    if (!nova) continue;
+                    const radialAngle = (Math.PI * 2 * k) / Math.max(1, novaCount) + Phaser.Math.FloatBetween(-0.08, 0.08);
+                    const novaEffect: BulletEffect = {
+                        ...effect,
+                        type: role === 'tank' ? 'explosive' : role === 'sniper' ? 'piercing' : 'chain',
+                        damage: Math.round(effect.damage + damageBonus + level * 3.6),
+                        speed: Math.round((effect.speed || 420) * (role === 'tank' ? 0.92 : role === 'sniper' ? 1.26 : 1.08)),
+                        explosionRadius: role === 'tank' ? Math.max(84, (effect.explosionRadius || 60) + 32) : effect.explosionRadius,
+                        pierceCount: role === 'sniper' ? Math.max(4, (effect.pierceCount || 3) + 2) : effect.pierceCount,
+                        chainCount: role !== 'sniper' ? Math.max(3, (effect.chainCount || 2) + 1) : effect.chainCount,
+                    };
+                    nova.enableBody(true, comp.sprite.x, comp.sprite.y, true, true);
+                    nova.setActive(true).setVisible(true);
+                    const novaTexture = this.getTextureByEffect(novaEffect.type);
+                    nova.setTexture(novaTexture);
+                    nova.setScale(novaTexture === 'bullet_cannon' ? 3.2 : novaTexture === 'bullet_pierce' ? 2.25 : 2.1);
+                    nova.setTint(novaEffect.color ?? 0xffffff);
+                    nova.setBlendMode(Phaser.BlendModes.ADD);
+                    nova.setDepth(10);
+                    const body = nova.body as Phaser.Physics.Arcade.Body;
+                    body.reset(comp.sprite.x, comp.sprite.y);
+                    body.setAllowGravity(false);
+                    const novaScale = novaTexture === 'bullet_cannon' ? 3.2 : novaTexture === 'bullet_pierce' ? 2.25 : 2.1;
+                    const radius = Math.max(4, Math.min(7, Math.floor(4 * novaScale)));
+                    body.setCircle(radius, nova.width / 2 - radius, nova.height / 2 - radius);
+                    const speedMul = 0.9 + Math.min(0.4, level * 0.01);
+                    const velocityX = Math.cos(radialAngle) * (novaEffect.speed || 420) * speedMul;
+                    const velocityY = Math.sin(radialAngle) * (novaEffect.speed || 420) * speedMul;
+                    body.setVelocity(velocityX, velocityY);
+                    nova.setRotation(radialAngle + Math.PI / 2);
+                    const anyNova = nova as any;
+                    anyNova.bulletEffect = novaEffect;
+                    anyNova.damage = novaEffect.damage;
+                    anyNova.pierceLeft = novaEffect.pierceCount ?? 0;
+                    anyNova.ownerType = 'companion';
+                    anyNova.ownerId = comp.id;
+                    anyNova.isHoming = false;
+                    anyNova.homingTarget = null;
+                    anyNova.homingStrength = null;
+                    anyNova.bulletTextureKey = novaTexture;
+                    anyNova.baseVelocityX = velocityX;
+                    anyNova.baseVelocityY = velocityY;
+                    anyNova.swayAmplitude = role === 'tank' ? 10 : role === 'sniper' ? 8 : 20;
+                    anyNova.swayFrequency = role === 'medic' ? 0.018 : 0.013;
+                    anyNova.swayPhase = (Math.PI * 2 * k) / Math.max(1, novaCount);
+                    const lifetime = (comp.config.stats.range || 300) / Math.max(120, (novaEffect.speed || 420) * speedMul) * 1000;
+                    anyNova.spawnTime = this.scene.time.now;
+                    anyNova.maxLifetime = lifetime + 180;
+                    if (anyNova.lifetimeTimer) anyNova.lifetimeTimer.remove();
+                    anyNova.lifetimeTimer = this.scene.time.delayedCall(lifetime, () => {
+                        anyNova.lifetimeTimer = null;
+                        if (nova.active) this.disableBullet(nova);
+                    });
+                }
             }
         }
     }
@@ -777,11 +859,10 @@ export class CompanionSystem {
     private getKillsToNextLevel(level: number): number {
         const lv = Math.max(1, level || 1);
         if (lv < COMPANION_PROMOTION_LEVEL) {
-            return Math.floor(5 + Math.pow(lv, 1.18) * 2.7);
+            return Math.floor(3 + Math.pow(lv, 1.12) * 1.8);
         }
-        // Post-promotion progression is intentionally steeper.
         const postLv = lv - COMPANION_PROMOTION_LEVEL + 1;
-        return Math.floor(18 + Math.pow(postLv + 4, 1.42) * 7.6);
+        return Math.floor(14 + Math.pow(postLv + 2, 1.3) * 4.5);
     }
 
     private applyLevelScaling(comp: CompanionInstance): void {
@@ -793,8 +874,8 @@ export class CompanionSystem {
         const roleRangeMul = role === 'tank' ? 1.012 : role === 'sniper' ? 1.038 : 1.024;
         const preLevel = Math.max(0, Math.min(level, COMPANION_PROMOTION_LEVEL) - 1);
         const postLevel = Math.max(0, level - COMPANION_PROMOTION_LEVEL);
-        let damageMul = Math.pow(1.065 * roleDamageMul, preLevel) * Math.pow(1.112, postLevel);
-        let fireRateMul = Math.pow(0.993 * roleFireRateMul, preLevel) * Math.pow(0.978, postLevel);
+        let damageMul = Math.pow(1.07 * roleDamageMul, preLevel) * Math.pow(1.128, postLevel);
+        let fireRateMul = Math.pow(0.992 * roleFireRateMul, preLevel) * Math.pow(0.974, postLevel);
         let rangeMul = Math.pow(1.015 * roleRangeMul, preLevel) * Math.pow(1.026, postLevel);
         let hpMul = Math.pow(1.04, preLevel) * Math.pow(1.09, postLevel);
         let speedMul = 1 + Math.min(0.52, preLevel * 0.006 + postLevel * 0.012);
@@ -820,15 +901,15 @@ export class CompanionSystem {
         comp.config.stats.range = Math.min(1700, Math.round(comp.baseRange * rangeMul));
         comp.config.stats.health = Math.max(120, Math.round(comp.baseHealth * hpMul));
         comp.config.stats.speed = Math.min(330, Math.round((comp.config.stats.speed || 140) + speedBonus * level * speedMul));
-        comp.config.bulletEffect.damage = Math.max(1, Math.round(comp.baseBulletDamage * damageMul * 1.2));
+        comp.config.bulletEffect.damage = Math.max(1, Math.round(comp.baseBulletDamage * damageMul * 1.34));
         if (role === 'tank') {
             comp.config.bulletEffect.explosionRadius = 56 + Math.min(130, level * 3 + bonusExplosionRadius);
-            comp.config.bulletEffect.size = Math.min(1.8, (comp.config.bulletEffect.size || 1.2) + 0.02 * level);
+            comp.config.bulletEffect.size = Math.min(2.2, (comp.config.bulletEffect.size || 1.2) + 0.025 * level);
         } else if (role === 'sniper') {
             const basePierce = Math.max(1, comp.config.bulletEffect.pierceCount || 2);
-            comp.config.bulletEffect.pierceCount = Math.min(12, basePierce + Math.floor(level / 4) + bonusPierce);
+            comp.config.bulletEffect.pierceCount = Math.min(15, basePierce + Math.floor(level / 4) + bonusPierce);
         } else if (role === 'medic') {
-            comp.config.bulletEffect.homingStrength = Math.min(0.34, 0.08 + level * 0.005 + bonusHoming);
+            comp.config.bulletEffect.homingStrength = Math.min(0.42, 0.1 + level * 0.006 + bonusHoming);
             if (comp.config.specialAbility) {
                 comp.config.specialAbility.cooldown = Math.max(2200, 5000 - level * 85);
             }
@@ -839,6 +920,46 @@ export class CompanionSystem {
         spriteData.maxHealth = comp.config.stats.health;
         const current = Number.isFinite(spriteData.health) ? spriteData.health : comp.config.stats.health;
         spriteData.health = Math.min(comp.config.stats.health, current);
+    }
+
+    private resolveCompanionProgress(comp: CompanionInstance): CompanionProgressResult {
+        if (comp.config.level >= COMPANION_MAX_LEVEL) {
+            return {
+                leveledUp: false,
+                level: COMPANION_MAX_LEVEL,
+                name: comp.config.name,
+                tint: comp.config.bulletEffect.color ?? 0xffffff,
+                reachedMax: true,
+                advancedClass: comp.config.advancedClass,
+            };
+        }
+        let leveledUp = false;
+        let promoted = false;
+        while (comp.config.level < COMPANION_MAX_LEVEL && comp.killCount >= comp.nextLevelKills) {
+            comp.config.level += 1;
+            leveledUp = true;
+            if (comp.config.level >= COMPANION_PROMOTION_LEVEL && comp.config.promotionTier !== 1) {
+                this.promoteCompanion(comp);
+                promoted = true;
+            }
+            comp.nextLevelKills += this.getKillsToNextLevel(comp.config.level);
+            this.applyLevelScaling(comp);
+        }
+        const reachedMax = comp.config.level >= COMPANION_MAX_LEVEL;
+        if (reachedMax) {
+            comp.config.level = COMPANION_MAX_LEVEL;
+            comp.nextLevelKills = Number.MAX_SAFE_INTEGER;
+            this.applyLevelScaling(comp);
+        }
+        return {
+            leveledUp,
+            level: comp.config.level,
+            name: comp.config.name,
+            tint: comp.config.bulletEffect.color ?? 0xffffff,
+            promoted,
+            advancedClass: comp.config.advancedClass,
+            reachedMax,
+        };
     }
 
     private showHealPulse(companion: CompanionInstance): void {

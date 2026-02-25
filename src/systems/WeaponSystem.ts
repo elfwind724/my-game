@@ -251,13 +251,14 @@ export class WeaponSystem {
         const speedMul = mod.speedMul || 1;
         const spreadMul = mod.spreadMul || 1;
         const tint = mod.tintColor;
-        const patternPower = Phaser.Math.Clamp(Math.floor(mod.patternPower || 0), 0, 8);
+        const patternPower = Phaser.Math.Clamp(Math.floor(mod.patternPower || 0), 0, 10);
         const signatureRateMul = Math.max(0.55, mod.signatureRateMul || 1);
         const signatureDamageMul = Math.max(0.7, mod.signatureDamageMul || 1);
         const signatureSpeedMul = Math.max(0.7, mod.signatureSpeedMul || 1);
         const extraChainChance = Phaser.Math.Clamp(mod.extraChainChance || 0, 0, 0.55);
         const orbitAmpMul = Math.max(0.7, mod.orbitAmpMul || 1);
-        const cadence = (base: number): number => Math.max(2, Math.round(base / signatureRateMul));
+        const patternIntensity = 1 + patternPower * 0.22 + Math.max(0, signatureRateMul - 1) * 0.52;
+        const cadence = (base: number): number => Math.max(1, Math.round(base / (signatureRateMul * patternIntensity * 1.06)));
         const resolveSpecial = (base: WeaponConfig['special']): WeaponConfig['special'] => {
             if (extraChainChance > 0 && Math.random() < extraChainChance) return 'chain';
             return base;
@@ -278,7 +279,7 @@ export class WeaponSystem {
                 const spreadOffset = safeCount > 1
                     ? (-safeSpread / 2 + step * i)
                     : 0;
-                const finalAngle = baseAngle + Phaser.Math.DegToRad(spreadOffset + Phaser.Math.FloatBetween(-1.8, 1.8));
+                const finalAngle = baseAngle + Phaser.Math.DegToRad(spreadOffset + Phaser.Math.FloatBetween(-2.6, 2.6));
                 const shotSpeed = Math.max(120, scaled.speed * speedMul * projectileSpeedMul * signatureSpeedMul);
                 const shotDamage = Math.max(1, scaled.damage * damageMul * projectileDamageMul * signatureDamageMul);
                 const spawn = this.getSafeSpawnPoint(x, y, finalAngle);
@@ -346,99 +347,112 @@ export class WeaponSystem {
             }
         };
 
-        if (weaponType === 'pistol' && shotIndex % cadence(6) === 0) {
+        if (weaponType === 'pistol' && shotIndex % cadence(4) === 0) {
             emitArc(
-                3 + Math.min(2, patternPower),
-                22 + patternPower * 4,
-                1.18,
-                0.78,
+                5 + Math.min(4, patternPower),
+                30 + patternPower * 6,
+                1.3,
+                0.94,
                 fallbackSpecial === 'none' ? 'chain' : fallbackSpecial,
                 1.05,
                 (index, total) => ({
-                    swayAmplitude: (10 + patternPower * 2) * orbitAmpMul,
+                    swayAmplitude: (12 + patternPower * 2) * orbitAmpMul,
                     swayFrequency: 0.013 + (index / Math.max(1, total)) * 0.002,
                 })
             );
-            if (patternPower >= 2 && shotIndex % cadence(10) === 0) {
-                emitRadial(5 + Math.min(3, patternPower), 1.02, 0.62, 'chain', 0.92);
+            if (patternPower >= 2 && shotIndex % cadence(6) === 0) {
+                emitRadial(8 + Math.min(5, patternPower), 1.12, 0.8, 'chain', 1.04);
             }
             return;
         }
-        if (weaponType === 'shotgun' && shotIndex % cadence(3) === 0) {
+        if (weaponType === 'shotgun' && shotIndex % cadence(2) === 0) {
             emitArc(
-                7 + Math.min(3, patternPower),
-                68 + patternPower * 5,
-                0.92,
-                0.54,
+                10 + Math.min(5, patternPower),
+                86 + patternPower * 7,
+                1.02,
+                0.72,
                 fallbackSpecial === 'none' ? 'burn' : fallbackSpecial,
                 0.72,
                 () => ({
-                    swayAmplitude: (6 + patternPower * 2) * orbitAmpMul,
+                    swayAmplitude: (8 + patternPower * 2) * orbitAmpMul,
                     swayFrequency: 0.018,
                 })
             );
-            if (patternPower >= 3 && shotIndex % cadence(9) === 0) {
-                emitArc(4 + patternPower, 34, 1.28, 0.5, 'chain', 0.86);
+            if (patternPower >= 2 && shotIndex % cadence(5) === 0) {
+                emitArc(7 + patternPower, 46, 1.34, 0.64, 'chain', 0.96);
             }
             return;
         }
-        if (weaponType === 'rifle' && shotIndex % cadence(8) === 0) {
+        if (weaponType === 'rifle' && shotIndex % cadence(5) === 0) {
             emitArc(
-                3 + Math.min(2, Math.floor(patternPower / 2)),
-                14 + patternPower * 2,
-                1.45,
-                0.88,
+                5 + Math.min(3, Math.floor(patternPower / 2)),
+                18 + patternPower * 3,
+                1.6,
+                1.02,
                 'pierce',
                 1.25,
                 (index) => ({
-                    swayAmplitude: 14 * orbitAmpMul,
+                    swayAmplitude: 16 * orbitAmpMul,
                     swayFrequency: 0.013 + patternPower * 0.0006,
                     swayPhase: index % 2 === 0 ? 0 : Math.PI,
                 })
             );
+            if (patternPower >= 3 && shotIndex % cadence(8) === 0) {
+                emitRadial(6 + patternPower, 1.18, 0.62, 'chain', 1.02, 5);
+            }
             return;
         }
-        if (weaponType === 'flamethrower' && shotIndex % cadence(9) === 0) {
+        if (weaponType === 'flamethrower' && shotIndex % cadence(6) === 0) {
             emitArc(
-                8 + Math.min(4, patternPower),
-                92 + patternPower * 6,
-                0.84,
-                0.58,
+                11 + Math.min(6, patternPower),
+                108 + patternPower * 8,
+                0.94,
+                0.74,
                 'burn',
                 0.9,
                 (_index, total) => ({
-                    swayAmplitude: (12 + patternPower * 3) * orbitAmpMul,
+                    swayAmplitude: (14 + patternPower * 3) * orbitAmpMul,
                     swayFrequency: 0.021 + (total * 0.0002),
                 })
             );
-            if (patternPower >= 2 && shotIndex % cadence(11) === 0) {
-                emitRadial(4 + patternPower, 0.92, 0.45, 'burn', 0.84, 6);
+            if (patternPower >= 2 && shotIndex % cadence(7) === 0) {
+                emitRadial(7 + patternPower, 1.0, 0.62, 'burn', 0.94, 6);
             }
             return;
         }
-        if (weaponType === 'laser' && shotIndex % cadence(4) === 0) {
-            emitArc(3 + Math.min(2, patternPower), 20, 1.32, 0.96, 'pierce', 1.3);
-            if (patternPower >= 2 && shotIndex % cadence(8) === 0) {
-                emitArc(2 + Math.min(2, patternPower), 16, 1.18, 0.66, 'pierce', 1.08);
+        if (weaponType === 'laser' && shotIndex % cadence(3) === 0) {
+            emitArc(5 + Math.min(3, patternPower), 24, 1.48, 1.14, 'pierce', 1.38);
+            if (patternPower >= 2 && shotIndex % cadence(5) === 0) {
+                emitArc(4 + Math.min(3, patternPower), 20, 1.34, 0.82, 'pierce', 1.2);
             }
             return;
         }
-        if (weaponType === 'rocket' && shotIndex % cadence(5) === 0) {
+        if (weaponType === 'rocket' && shotIndex % cadence(4) === 0) {
             emitArc(
-                5 + Math.min(2, patternPower),
-                26 + patternPower * 2,
-                1.1,
-                0.62,
+                7 + Math.min(4, patternPower),
+                36 + patternPower * 4,
+                1.2,
+                0.86,
                 'explode',
                 1.16,
                 (index, total) => ({
-                    swayAmplitude: (5 + patternPower * 1.2) * orbitAmpMul,
+                    swayAmplitude: (7 + patternPower * 1.3) * orbitAmpMul,
                     swayFrequency: 0.011 + (index / Math.max(1, total)) * 0.0014,
                 })
             );
-            if (patternPower >= 1 && shotIndex % cadence(9) === 0) {
-                emitRadial(3 + Math.min(3, patternPower), 0.88, 0.54, 'explode', 0.9, 5);
+            if (patternPower >= 1 && shotIndex % cadence(6) === 0) {
+                emitRadial(6 + Math.min(4, patternPower), 1.02, 0.74, 'explode', 1.04, 5);
             }
+        }
+        if (patternPower >= 2 && shotIndex % cadence(7) === 0) {
+            emitRadial(
+                8 + Math.min(6, patternPower),
+                1.12,
+                0.68 + patternPower * 0.03,
+                fallbackSpecial === 'none' ? 'chain' : fallbackSpecial,
+                1.04,
+                4
+            );
         }
     }
 
@@ -454,18 +468,22 @@ export class WeaponSystem {
         const slotId = slotMap[type];
         const slot = gameState.data.weapons.find(w => w.id === slotId);
         const lv = Math.max(1, gameState.data.playerLevel || 1);
-        const levelDamageMul = 1 + Math.min(1.38, (lv - 1) * 0.052);
-        const levelFireRateMul = Math.max(0.56, 1 - (lv - 1) * 0.013);
+        const levelDamageMul = 1 + Math.min(2.55, (lv - 1) * 0.078);
+        const levelFireRateMul = Math.max(0.36, 1 - (lv - 1) * 0.018);
         const ownedWeapons = Math.max(1, gameState.data.weapons.length);
         const evolvedWeapons = gameState.data.weapons.filter(w => w.evolved).length;
-        const arsenalDamageMul = 1 + Math.min(0.72, ownedWeapons * 0.04 + evolvedWeapons * 0.1);
-        const arsenalFireRateMul = Math.max(0.5, 1 - ownedWeapons * 0.015 - evolvedWeapons * 0.03);
+        const arsenalDamageMul = 1 + Math.min(1.24, ownedWeapons * 0.06 + evolvedWeapons * 0.16);
+        const arsenalFireRateMul = Math.max(0.32, 1 - ownedWeapons * 0.022 - evolvedWeapons * 0.04);
 
         if (!slot) {
             const adaptiveProjectileBonus =
                 (type === 'shotgun' && lv >= 8 ? 1 : 0) +
                 (type === 'shotgun' && lv >= 16 ? 1 : 0) +
-                (type === 'rifle' && lv >= 14 ? 1 : 0);
+                (type === 'rifle' && lv >= 14 ? 1 : 0) +
+                (type === 'pistol' && lv >= 8 ? 1 : 0) +
+                (type === 'pistol' && lv >= 16 ? 1 : 0) +
+                (type === 'laser' && lv >= 18 ? 1 : 0) +
+                (type === 'laser' && lv >= 24 ? 1 : 0);
             const baseScaled: WeaponConfig = {
                 ...config,
                 damage: Math.max(1, Math.round(config.damage * levelDamageMul * arsenalDamageMul)),
@@ -485,16 +503,18 @@ export class WeaponSystem {
         const evolvedBonus = slot.evolved ? 1.24 : 1;
         const levelProjectileBonus = Math.floor((Math.max(1, slot.level) - 1) / 3);
         const projectileBonus = type === 'shotgun'
-            ? levelProjectileBonus + (slot.level >= 7 ? 1 : 0)
+            ? levelProjectileBonus + (slot.level >= 7 ? 1 : 0) + (slot.level >= 12 ? 1 : 0)
             : (type === 'rifle'
-                ? Math.floor((levelProjectileBonus + 1) / 2) + (slot.level >= 9 ? 1 : 0)
-                : (type === 'pistol' && slot.level >= 6 ? 1 : 0));
+                ? Math.floor((levelProjectileBonus + 1) / 2) + (slot.level >= 9 ? 1 : 0) + (slot.level >= 15 ? 1 : 0)
+                : (type === 'pistol'
+                    ? (slot.level >= 6 ? 1 : 0) + (slot.level >= 12 ? 1 : 0)
+                    : (type === 'laser' && slot.level >= 10 ? 1 : 0)));
         const scaledConfig: WeaponConfig = {
             ...config,
             damage: Math.max(1, Math.round(config.damage * damageMul * levelDamageMul * evolvedBonus * arsenalDamageMul)),
             fireRate: Math.max(30, Math.round(config.fireRate * fireRateMul * levelFireRateMul * arsenalFireRateMul)),
-            range: Math.round(config.range * (1 + (slot.level - 1) * 0.09)),
-            speed: Math.round(config.speed * (1 + (slot.level - 1) * 0.065)),
+            range: Math.round(config.range * (1 + (slot.level - 1) * 0.11)),
+            speed: Math.round(config.speed * (1 + (slot.level - 1) * 0.08)),
             projectileCount: Math.max(1, config.projectileCount + projectileBonus),
         };
         return this.applyGearBonuses(scaledConfig, type);
@@ -651,6 +671,7 @@ export class WeaponSystem {
       if (specialValue === 'chain') return 'bullet_chain';
       if (weaponType === 'shotgun') return 'bullet_scatter';
       if (weaponType === 'rifle') return 'bullet_pulse';
+      if (weaponType === 'flamethrower') return 'bullet_flame';
       if (weaponType === 'laser') return 'bullet_pierce';
       if (weaponType === 'rocket') return 'bullet_cannon';
       return 'bullet';

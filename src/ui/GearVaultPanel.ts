@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { BITCOIN_PERK_DEFS, gameState, type GearItem, type GearRarity, type GearWeaponType } from '../state/GameState';
 import { events } from '../utils/EventBus';
+import { resolvePreferredHeroPortraitTexture } from '../data/customHero';
 
 const RARITY_STYLE: Record<GearRarity, { color: number; label: string; uiColor: string }> = {
   common: { color: 0x94a3b8, label: '普通', uiColor: '#94a3b8' },
@@ -176,8 +177,9 @@ export class GearVaultPanel {
 
     const avatarRing = this.scene.add.circle(centerX, centerY, this.unit(34), 0x111827, 0.96).setStrokeStyle(2, 0x38bdf8, 0.5);
     this.container?.add(avatarRing);
-    if (this.scene.textures.exists('player')) {
-      const avatar = this.scene.add.image(centerX, centerY + this.unit(2), 'player').setScale(this.mobileViewport ? 2.35 : 2.2);
+    const avatarTexture = resolvePreferredHeroPortraitTexture(this.scene);
+    if (this.scene.textures.exists(avatarTexture)) {
+      const avatar = this.scene.add.image(centerX, centerY + this.unit(2), avatarTexture).setScale(this.mobileViewport ? 2.35 : 2.2);
       avatar.setTint(0xe2e8f0);
       this.container?.add(avatar);
     } else {

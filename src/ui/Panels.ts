@@ -264,6 +264,17 @@ export class CraftingPanel extends SlidePanel {
     const defs = Object.values(BUILDING_DEFS).filter(def =>
       this.selectedBuildCategory === 'all' ? true : def.category === this.selectedBuildCategory
     );
+    const housingPinnedOrder = ['room_quarters', 'bunk_bed'];
+    defs.sort((a, b) => {
+      const ai = housingPinnedOrder.indexOf(a.id);
+      const bi = housingPinnedOrder.indexOf(b.id);
+      const aPinned = ai >= 0;
+      const bPinned = bi >= 0;
+      if (aPinned && bPinned) return ai - bi;
+      if (aPinned) return -1;
+      if (bPinned) return 1;
+      return 0;
+    });
     const resMap: Record<string, string> = {
       wood: '木',
       metal: '金',
@@ -275,9 +286,22 @@ export class CraftingPanel extends SlidePanel {
       energyCore: '核',
     };
 
+    const popUsage = BaseSystem.getPopulationUsage();
+    const popCap = BaseSystem.getPopulationCapacity();
+    const housingChain = BaseSystem.getBuildChainStatus('room_quarters');
+    const housingHint = housingChain.canConstruct
+      ? '人口扩容已解锁：可建宿舍房间'
+      : `人口扩容未解锁：${(housingChain.blockedReasons || []).slice(0, 1).join('；') || '需前置建筑'}`;
+    container.add(this.scene.add.text(unit(18), unit(124), `人口 ${popUsage}/${popCap} · ${housingHint}`, {
+      fontSize: fs(11),
+      color: housingChain.canConstruct ? '#67e8f9' : '#fbbf24',
+      fontFamily: uiFont,
+      wordWrap: { width: this.panelWidth - unit(36) },
+    }));
+
     const cardH = mobilePortrait ? unit(152) : unit(126);
     const cardGap = unit(8);
-    const listTop = unit(138);
+    const listTop = unit(160);
     const listBottom = h - unit(120);
     const availableHeight = Math.max(cardH, listBottom - listTop);
     const cardsPerPage = Math.max(1, Math.floor((availableHeight + cardGap) / (cardH + cardGap)));

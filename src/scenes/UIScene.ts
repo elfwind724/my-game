@@ -40,9 +40,13 @@ export default class UIScene extends Phaser.Scene {
   private weaponText!: Phaser.GameObjects.Text;
 
   // Bottom left - minimap
+  private minimapBg!: Phaser.GameObjects.Rectangle;
   private minimapGraphics!: Phaser.GameObjects.Graphics;
   private minimapWidth: number = 150;
   private minimapHeight: number = 112;
+  private minimapDiagText!: Phaser.GameObjects.Text;
+  private minimapDiagPanel: Phaser.GameObjects.Container | null = null;
+  private minimapSelectedNode: { x: number; y: number } | null = null;
 
   // Right side
   private companionText!: Phaser.GameObjects.Text;
@@ -292,8 +296,14 @@ export default class UIScene extends Phaser.Scene {
     // ========================================
     this.minimapWidth = portraitLayout ? 124 : 166;
     this.minimapHeight = portraitLayout ? 92 : 124;
-    this.add.rectangle(10, h - 10, this.minimapWidth, this.minimapHeight, 0x121923, 0.92)
-      .setOrigin(0, 1).setStrokeStyle(1, 0xf59e0b, 0.5).setDepth(1000);
+    this.minimapBg = this.add.rectangle(10, h - 10, this.minimapWidth, this.minimapHeight, 0x121923, 0.92)
+      .setOrigin(0, 1).setStrokeStyle(1, 0xf59e0b, 0.5).setDepth(1000)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true });
+    this.minimapBg.on('pointerdown', (pointer: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
+      event.stopPropagation();
+      this.trySelectDiagnosticNodeFromMinimap(pointer.x, pointer.y);
+    });
     this.minimapGraphics = this.add.graphics().setDepth(1001);
 
     this.add.text(10 + this.minimapWidth * 0.5, h - this.minimapHeight - 8, '小地图', {
@@ -301,6 +311,12 @@ export default class UIScene extends Phaser.Scene {
       color: '#fcd34d',
       fontFamily: this.uiFontFamily,
     }).setOrigin(0.5).setDepth(1001);
+    this.minimapDiagText = this.add.text(10 + this.minimapWidth - 3, h - this.minimapHeight - 8, '维0 输0 电0', {
+      fontSize: portraitLayout ? this.hudFs(10, 9) : this.hudFs(11, 10),
+      color: '#93c5fd',
+      fontFamily: this.uiFontFamily,
+      fontStyle: 'bold',
+    }).setOrigin(1, 0).setDepth(1001);
 
     // ========================================
     // RIGHT SIDE - COMPANIONS
@@ -624,6 +640,12 @@ export default class UIScene extends Phaser.Scene {
       if (base.powerCapacity > 0) parts.push(`电${base.powerUsed}/${base.powerCapacity}`);
       if (base.powerUsed > base.powerCapacity) parts.push('⚡超载');
       if (base.foodDeficit > 0) parts.push(`⚠缺粮${base.foodDeficit}`);
+      const nodeIssues = (base.diagnosticUpkeepNodes || 0) + (base.diagnosticInputNodes || 0) + (base.diagnosticPowerNodes || 0);
+      if (nodeIssues > 0) {
+        parts.push(`诊断 维${base.diagnosticUpkeepNodes || 0}/输${base.diagnosticInputNodes || 0}/电${base.diagnosticPowerNodes || 0}`);
+      }
+      parts.push(`防${Math.round((base.structureIntegrity || 0) * 100)}%`);
+      if (base.structureBreachOpen) parts.push('🧱破口');
       this.resourceText.setText(parts.join(' | '));
     });
 
@@ -1219,6 +1241,196 @@ export default class UIScene extends Phaser.Scene {
         this.minimapGraphics.strokeCircle(px, py, mapRadius + 2.1);
       }
     }
+
+    // Base diagnostics: upkeep/input/power shortages.
+    const diagnostics = Array.isArray(gameState.data.base.nodeDiagnostics)
+      ? gameState.data.base.nodeDiagnostics
+      : [];
+    diagnostics.forEach((node: any) => {
+      const x = mapX + Number(node.x || 0) * scaleX;
+      const y = mapY + Number(node.y || 0) * scaleY;
+      const issues: string[] = Array.isArray(node.issues) ? node.issues : [];
+      const hasUpkeep = issues.includes('upkeep');
+      const hasInput = issues.includes('input');
+      const hasPower = issues.includes('power');
+      const mixed = Number(hasUpkeep) + Number(hasInput) + Number(hasPower) >= 2;
+
+      if (mixed) {
+        this.minimapGraphics.fillStyle(0xf472b6, 0.9);
+        this.minimapGraphics.fillCircle(x, y, 2.8);
+        this.minimapGraphics.lineStyle(1, 0xfdf2f8, 0.95);
+        this.minimapGraphics.strokeCircle(x, y, 4.1);
+        return;
+      }
+      if (hasPower) {
+        this.minimapGraphics.fillStyle(0xfbbf24, 0.95);
+        this.minimapGraphics.fillTriangle(x, y - 3.6, x + 2.8, y + 3.4, x - 2.8, y + 3.4);
+        return;
+      }
+      if (hasInput) {
+        this.minimapGraphics.fillStyle(0x38bdf8, 0.9);
+        this.minimapGraphics.fillCircle(x, y, 2.6);
+        return;
+      }
+      if (hasUpkeep) {
+        this.minimapGraphics.fillStyle(0xfb7185, 0.9);
+        this.minimapGraphics.fillRect(x - 2.3, y - 2.3, 4.6, 4.6);
+      }
+    });
+  }
+
+  private trySelectDiagnosticNodeFromMinimap(screenX: number, screenY: number): void {
+    const diagnostics = Array.isArray(gameState.data.base.nodeDiagnostics)
+      ? gameState.data.base.nodeDiagnostics
+      : [];
+    if (diagnostics.length <= 0) {
+      this.showHudToast('当前无故障节点', '#93c5fd');
+      this.hideMinimapDiagnosticPanel();
+      return;
+    }
+    const mapX = 10;
+    const mapW = this.minimapWidth;
+    const mapH = this.minimapHeight;
+    const mapY = this.cameras.main.height - mapH - 10;
+    const scaleX = mapW / 2000;
+    const scaleY = mapH / 1500;
+    let nearest: any = null;
+    let minDist = Number.POSITIVE_INFINITY;
+    diagnostics.forEach((node: any) => {
+      const x = mapX + Number(node.x || 0) * scaleX;
+      const y = mapY + Number(node.y || 0) * scaleY;
+      const dist = Phaser.Math.Distance.Between(screenX, screenY, x, y);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = node;
+      }
+    });
+    if (!nearest || minDist > 12) {
+      this.hideMinimapDiagnosticPanel();
+      return;
+    }
+    this.minimapSelectedNode = {
+      x: Math.round(Number(nearest.x || 0)),
+      y: Math.round(Number(nearest.y || 0)),
+    };
+    const gameScene = this.scene.get('GameScene') as any;
+    gameScene?.focusCameraOnWorldPoint?.(this.minimapSelectedNode.x, this.minimapSelectedNode.y, 1200);
+    this.showMinimapDiagnosticPanel(nearest);
+  }
+
+  private showMinimapDiagnosticPanel(node: any): void {
+    this.hideMinimapDiagnosticPanel();
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+    const panelW = this.mobileViewport ? Math.min(300, w - 20) : 320;
+    const panelH = this.mobileViewport ? 142 : 132;
+    const x = Math.min(w - panelW - 10, 10 + this.minimapWidth + 10);
+    const y = h - this.minimapHeight - panelH - 18;
+    const container = this.add.container(0, 0).setDepth(1900).setScrollFactor(0);
+    const bg = this.add.rectangle(x + panelW * 0.5, y + panelH * 0.5, panelW, panelH, 0x0b1220, 0.94)
+      .setStrokeStyle(1, 0x38bdf8, 0.8)
+      .setScrollFactor(0);
+    container.add(bg);
+    const issueMap: Record<string, string> = { upkeep: '缺维护', input: '缺输入', power: '缺电' };
+    const issues = Array.isArray(node?.issues) ? node.issues : [];
+    const issueText = issues.map((key: string) => issueMap[key] || key).join(' / ');
+    const details = Array.isArray(node?.shortageResources) && node.shortageResources.length > 0
+      ? `短缺: ${node.shortageResources.join('、')}`
+      : '短缺: 无';
+    const title = this.add.text(x + 10, y + 8, `诊断节点 · ${node?.nameCN || '未知设施'} T${node?.tier || 1}`, {
+      fontSize: this.hudFs(13, 12),
+      color: '#e2e8f0',
+      fontFamily: this.uiFontFamily,
+      fontStyle: 'bold',
+    }).setScrollFactor(0);
+    const desc = this.add.text(x + 10, y + 30, `问题: ${issueText || '无'}\n${details}`, {
+      fontSize: this.hudFs(11, 10),
+      color: '#93c5fd',
+      fontFamily: this.uiFontFamily,
+      lineSpacing: 4,
+    }).setScrollFactor(0);
+    container.add([title, desc]);
+
+    const makeBtn = (
+      bx: number,
+      by: number,
+      bw: number,
+      label: string,
+      stroke: number,
+      onTap: () => void
+    ) => {
+      const btn = this.add.rectangle(bx, by, bw, 30, 0x111827, 0.92)
+        .setStrokeStyle(1, stroke, 0.95)
+        .setInteractive({ useHandCursor: true })
+        .setScrollFactor(0);
+      const text = this.add.text(bx, by - 1, label, {
+        fontSize: this.hudFs(12, 11),
+        color: '#e2e8f0',
+        fontFamily: this.uiFontFamily,
+        fontStyle: 'bold',
+      }).setOrigin(0.5).setScrollFactor(0);
+      btn.on('pointerdown', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, event: Phaser.Types.Input.EventData) => {
+        event.stopPropagation();
+        onTap();
+      });
+      container.add([btn, text]);
+    };
+
+    const left = x + 62;
+    const gap = 100;
+    makeBtn(left, y + panelH - 22, 90, '一键维修', 0x22d3ee, () => this.onQuickRepairSelectedNode());
+    makeBtn(left + gap, y + panelH - 22, 90, '派工', 0xf59e0b, () => this.onDispatchSelectedNode());
+    makeBtn(left + gap * 2, y + panelH - 22, 90, '关闭', 0x64748b, () => this.hideMinimapDiagnosticPanel());
+
+    this.minimapDiagPanel = container;
+  }
+
+  private hideMinimapDiagnosticPanel(): void {
+    this.minimapDiagPanel?.destroy();
+    this.minimapDiagPanel = null;
+    this.minimapSelectedNode = null;
+  }
+
+  private onQuickRepairSelectedNode(): void {
+    const node = this.minimapSelectedNode;
+    if (!node) return;
+    const result = BaseSystem.quickRepairDiagnosticNodeByCoord(node.x, node.y);
+    this.showHudToast(result.message, result.ok ? '#38bdf8' : '#ef4444');
+    events.emit('update-resources', gameState.data.resources);
+    const refreshed = (gameState.data.base.nodeDiagnostics || []).find((n) => Math.abs(n.x - node.x) < 2 && Math.abs(n.y - node.y) < 2);
+    if (refreshed) this.showMinimapDiagnosticPanel(refreshed);
+    else this.hideMinimapDiagnosticPanel();
+  }
+
+  private onDispatchSelectedNode(): void {
+    const node = this.minimapSelectedNode;
+    if (!node) return;
+    const result = BaseSystem.dispatchCrewToDiagnosticNodeByCoord(node.x, node.y);
+    this.showHudToast(result.message, result.ok ? '#f59e0b' : '#ef4444');
+    events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+    const refreshed = (gameState.data.base.nodeDiagnostics || []).find((n) => Math.abs(n.x - node.x) < 2 && Math.abs(n.y - node.y) < 2);
+    if (refreshed) this.showMinimapDiagnosticPanel(refreshed);
+    else this.hideMinimapDiagnosticPanel();
+  }
+
+  private showHudToast(message: string, color: string): void {
+    const toast = this.add.text(this.cameras.main.width * 0.5, 86, message, {
+      fontSize: this.hudFs(14, 12),
+      color,
+      fontFamily: this.uiFontFamily,
+      fontStyle: 'bold',
+      stroke: '#020617',
+      strokeThickness: 3,
+      backgroundColor: '#0b1220cc',
+      padding: { x: 8, y: 4 },
+    }).setOrigin(0.5).setDepth(1990).setScrollFactor(0);
+    this.tweens.add({
+      targets: toast,
+      y: 64,
+      alpha: 0,
+      duration: 1250,
+      onComplete: () => toast.destroy(),
+    });
   }
 
   private createResourceHud(startX: number, startY: number): void {
@@ -1285,6 +1497,14 @@ export default class UIScene extends Phaser.Scene {
     const base = gameState.data.base;
     const overload = base.powerUsed > base.powerCapacity;
     set('power', `${base.powerUsed}/${base.powerCapacity}`, overload ? '#ef4444' : '#38bdf8');
+    const upkeepCount = Math.max(0, Math.floor(base.diagnosticUpkeepNodes || 0));
+    const inputCount = Math.max(0, Math.floor(base.diagnosticInputNodes || 0));
+    const powerCount = Math.max(0, Math.floor(base.diagnosticPowerNodes || 0));
+    const total = upkeepCount + inputCount + powerCount;
+    if (this.minimapDiagText) {
+      this.minimapDiagText.setText(`维${upkeepCount} 输${inputCount} 电${powerCount}`);
+      this.minimapDiagText.setColor(total > 0 ? '#fda4af' : '#93c5fd');
+    }
   }
 
   private createRightStatusHud(rightX: number, startY: number): void {
@@ -1413,6 +1633,9 @@ export default class UIScene extends Phaser.Scene {
     this.mobileCloseButton = null;
     this.mobileCloseHit?.destroy();
     this.mobileCloseHit = null;
+    this.minimapDiagPanel?.destroy();
+    this.minimapDiagPanel = null;
+    this.minimapSelectedNode = null;
     this.mobileButtons = {};
     this.joystickZone = null;
     this.joystickBase = null;
