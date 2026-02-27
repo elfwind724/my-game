@@ -2949,36 +2949,7 @@ export default class GameScene extends Phaser.Scene {
       this.worldFeatureLayer.add([shadow, sprite]);
     };
 
-    // River biome: organic blobs instead of hard rectangles.
-    for (let y = 112; y <= 1400; y += 96) {
-      const cx = 392 + Math.sin(y * 0.009) * 14;
-      const water = this.add.ellipse(cx, y, 148 + Math.cos(y * 0.01) * 12, 158, 0x0ea5e9, 0.14);
-      const foam = this.add.ellipse(cx + 6, y, 114, 118, 0x93c5fd, 0.06);
-      this.worldFeatureLayer.add([water, foam]);
-    }
-    for (let x = 412; x <= 716; x += 70) {
-      const cy = 1110 + Math.sin(x * 0.03) * 10;
-      this.worldFeatureLayer.add(this.add.ellipse(x, cy, 128, 66, 0x0ea5e9, 0.12));
-      this.worldFeatureLayer.add(this.add.ellipse(x + 8, cy + 2, 96, 44, 0x93c5fd, 0.05));
-    }
-    for (let x = 356; x <= 560; x += 54) {
-      const cy = 336 + Math.sin(x * 0.06) * 8;
-      this.worldFeatureLayer.add(this.add.ellipse(x, cy, 112, 58, 0x0ea5e9, 0.12));
-      this.worldFeatureLayer.add(this.add.ellipse(x + 8, cy, 84, 40, 0x93c5fd, 0.05));
-    }
-    this.worldFeatureLayer.add(this.add.ellipse(392, 122, 156, 50, 0x7dd3fc, 0.08));
-    this.worldFeatureLayer.add(this.add.ellipse(392, 1392, 164, 54, 0x7dd3fc, 0.08));
-    this.worldFeatureLayer.add(this.add.ellipse(706, 1112, 100, 36, 0x7dd3fc, 0.07));
-    for (let i = 0; i < 15; i += 1) {
-      this.worldFeatureLayer.add(this.add.ellipse(
-        Phaser.Math.Between(318, 700),
-        Phaser.Math.Between(150, 1360),
-        Phaser.Math.Between(18, 34),
-        Phaser.Math.Between(6, 12),
-        0xbfe8ff,
-        0.13
-      ));
-    }
+    // River color overlays removed to keep the background clean with custom images.
     addShadowedStructure('deco_river_pier', 428, 468, 1.0, 0xb08968);
     addShadowedStructure('deco_river_pier', 504, 898, 1.04, 0xa67c52);
     addShadowedStructure('deco_bridge_broken', 448, 286, 0.82, 0x9a7c5a);
@@ -2991,23 +2962,6 @@ export default class GameScene extends Phaser.Scene {
     const forestArea = this.add.ellipse(1605, 410, 640, 660, 0x14532d, 0.1);
     forestArea.setStrokeStyle(1, 0x22c55e, 0.14);
     this.worldFeatureLayer.add(forestArea);
-    for (let i = 0; i < 30; i += 1) {
-      const key = Phaser.Math.Between(0, 4) > 0 && this.textures.exists('deco_pine') ? 'deco_pine' : 'deco_tree';
-      this.worldFeatureLayer.add(this.add.image(
-        Phaser.Math.Between(1320, 1890),
-        Phaser.Math.Between(120, 742),
-        key
-      ).setScale(Phaser.Math.FloatBetween(0.78, 1.12)));
-    }
-    for (let i = 0; i < 10; i += 1) {
-      this.worldFeatureLayer.add(this.add.circle(
-        Phaser.Math.Between(1330, 1860),
-        Phaser.Math.Between(150, 740),
-        Phaser.Math.Between(8, 16),
-        0x166534,
-        0.34
-      ));
-    }
     addShadowedStructure('forest_cabin', 1486, 286, 0.86, 0xd1d5db);
     addShadowedStructure('forest_cabin', 1762, 442, 0.78, 0xbdd7c2);
     addShadowedStructure('deco_billboard', 1638, 214, 0.58, 0xa3e635);

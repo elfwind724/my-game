@@ -125,6 +125,26 @@ export default class UIScene extends Phaser.Scene {
   private joystickUpHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
   private uiFontFamily: string = 'PingFang SC, "Microsoft YaHei", "Noto Sans SC", "Heiti SC", "Source Han Sans SC", sans-serif';
   private hudFontBoost: number = 1;
+  private readonly onHotkeyToggleBase = (event: KeyboardEvent): void => {
+    if (event?.repeat) return;
+    if (this.levelUpPanel?.getIsOpen()) return;
+    this.basePanel.toggle();
+  };
+  private readonly onHotkeyToggleLeisure = (event: KeyboardEvent): void => {
+    if (event?.repeat) return;
+    if (this.levelUpPanel?.getIsOpen()) return;
+    this.leisurePanel.toggle();
+  };
+  private readonly onHotkeyToggleGearVault = (event: KeyboardEvent): void => {
+    if (event?.repeat) return;
+    if (this.levelUpPanel?.getIsOpen()) return;
+    this.gearVaultPanel.toggle();
+  };
+  private readonly onHotkeyToggleLootCodex = (event: KeyboardEvent): void => {
+    if (event?.repeat) return;
+    if (this.levelUpPanel?.getIsOpen()) return;
+    this.lootCodexPanel.toggle();
+  };
 
   constructor() {
     super({ key: 'UIScene' });
@@ -393,23 +413,7 @@ export default class UIScene extends Phaser.Scene {
       if (this.collectionPanel?.getIsOpen()) { this.collectionPanel.toggle(); return; }
     });
 
-    // Ensure base panel can always toggle from UI scene
-    this.input.keyboard?.on('keydown-T', () => {
-      if (this.levelUpPanel?.getIsOpen()) return;
-      this.basePanel.toggle();
-    });
-    this.input.keyboard?.on('keydown-H', () => {
-      if (this.levelUpPanel?.getIsOpen()) return;
-      this.leisurePanel.toggle();
-    });
-    this.input.keyboard?.on('keydown-V', () => {
-      if (this.levelUpPanel?.getIsOpen()) return;
-      this.gearVaultPanel.toggle();
-    });
-    this.input.keyboard?.on('keydown-J', () => {
-      if (this.levelUpPanel?.getIsOpen()) return;
-      this.lootCodexPanel.toggle();
-    });
+    this.registerKeyboardHotkeys();
   }
 
   private isMobileViewport(): boolean {
@@ -1586,6 +1590,29 @@ export default class UIScene extends Phaser.Scene {
     this.questHudText.setText(lines.join('\n'));
   }
 
+  private registerKeyboardHotkeys(): void {
+    const keyboard = this.input.keyboard;
+    if (!keyboard) return;
+    // Ensure no duplicate listeners survive scene restart / hot-reload.
+    keyboard.off('keydown-T', this.onHotkeyToggleBase);
+    keyboard.off('keydown-H', this.onHotkeyToggleLeisure);
+    keyboard.off('keydown-V', this.onHotkeyToggleGearVault);
+    keyboard.off('keydown-J', this.onHotkeyToggleLootCodex);
+    keyboard.on('keydown-T', this.onHotkeyToggleBase);
+    keyboard.on('keydown-H', this.onHotkeyToggleLeisure);
+    keyboard.on('keydown-V', this.onHotkeyToggleGearVault);
+    keyboard.on('keydown-J', this.onHotkeyToggleLootCodex);
+  }
+
+  private unregisterKeyboardHotkeys(): void {
+    const keyboard = this.input.keyboard;
+    if (!keyboard) return;
+    keyboard.off('keydown-T', this.onHotkeyToggleBase);
+    keyboard.off('keydown-H', this.onHotkeyToggleLeisure);
+    keyboard.off('keydown-V', this.onHotkeyToggleGearVault);
+    keyboard.off('keydown-J', this.onHotkeyToggleLootCodex);
+  }
+
   shutdown(): void {
     events.off(GameEvents.PLAYER_HEALTH_CHANGE);
     events.off(GameEvents.PLAYER_EXP_CHANGE);
@@ -1618,6 +1645,7 @@ export default class UIScene extends Phaser.Scene {
     events.off('glasses-equipped');
     events.off(GameEvents.BUILD_MODE_TOGGLED);
     this.events.off(Phaser.Scenes.Events.SHUTDOWN, this.shutdown, this);
+    this.unregisterKeyboardHotkeys();
     if (this.joystickMoveHandler) {
       this.input.off('pointermove', this.joystickMoveHandler);
       this.joystickMoveHandler = null;

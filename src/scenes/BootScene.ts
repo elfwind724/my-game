@@ -188,6 +188,10 @@ export default class BootScene extends Phaser.Scene {
       smoothing?: boolean;
       yOffset?: number;
       overlay?: string;
+      trimWhiteFromEdges?: boolean;
+      whiteThreshold?: number;
+      trimAlphaBounds?: boolean;
+      alphaMin?: number;
     }
   ): boolean {
     const source = this.getSourceImage(sourceKey);
@@ -206,25 +210,112 @@ export default class BootScene extends Phaser.Scene {
     const srcH = Math.max(1, Math.floor((source as any).height || 0));
     if (srcW < 2 || srcH < 2) return false;
 
+    let sourceToDraw: CanvasImageSource = source;
+    let cropX = 0;
+    let cropY = 0;
+    let cropW = srcW;
+    let cropH = srcH;
+    if (options?.trimWhiteFromEdges || options?.trimAlphaBounds) {
+      const workCanvas = document.createElement('canvas');
+      workCanvas.width = srcW;
+      workCanvas.height = srcH;
+      const workCtx = workCanvas.getContext('2d');
+      if (workCtx) {
+        workCtx.clearRect(0, 0, srcW, srcH);
+        workCtx.drawImage(source, 0, 0, srcW, srcH);
+        try {
+          const imageData = workCtx.getImageData(0, 0, srcW, srcH);
+          if (options?.trimWhiteFromEdges) {
+            this.trimNearWhiteFromEdges(imageData.data, srcW, srcH, options?.whiteThreshold ?? 236);
+            workCtx.putImageData(imageData, 0, 0);
+          }
+          if (options?.trimAlphaBounds) {
+            const bounds = this.findAlphaBounds(imageData.data, srcW, srcH, options?.alphaMin ?? 10);
+            if (bounds) {
+              cropX = bounds.x;
+              cropY = bounds.y;
+              cropW = Math.max(1, bounds.w);
+              cropH = Math.max(1, bounds.h);
+            }
+          }
+          sourceToDraw = workCanvas;
+        } catch {
+          // Keep original source when pixel readback fails.
+          sourceToDraw = source;
+        }
+      }
+    }
+
     const innerW = Math.max(1, width - padding * 2);
     const innerH = Math.max(1, height - padding * 2);
     const scale = fit === 'cover'
-      ? Math.max(innerW / srcW, innerH / srcH)
-      : Math.min(innerW / srcW, innerH / srcH);
-    const drawW = Math.max(1, Math.round(srcW * scale));
-    const drawH = Math.max(1, Math.round(srcH * scale));
+      ? Math.max(innerW / cropW, innerH / cropH)
+      : Math.min(innerW / cropW, innerH / cropH);
+    const drawW = Math.max(1, Math.round(cropW * scale));
+    const drawH = Math.max(1, Math.round(cropH * scale));
     const dx = Math.round(padding + (innerW - drawW) * 0.5);
     const dy = Math.round(padding + (innerH - drawH) * 0.5 + (options?.yOffset ?? 0));
 
     ctx.clearRect(0, 0, width, height);
     ctx.imageSmoothingEnabled = options?.smoothing ?? true;
-    ctx.drawImage(source, 0, 0, srcW, srcH, dx, dy, drawW, drawH);
+    ctx.drawImage(sourceToDraw, cropX, cropY, cropW, cropH, dx, dy, drawW, drawH);
     if (options?.overlay) {
       ctx.fillStyle = options.overlay;
       ctx.fillRect(0, 0, width, height);
     }
     canvas.refresh();
     return true;
+  }
+
+  private trimNearWhiteFromEdges(
+    data: Uint8ClampedArray,
+    width: number,
+    height: number,
+    whiteThreshold: number
+  ): void {
+    const threshold = Phaser.Math.Clamp(Math.floor(whiteThreshold), 200, 250);
+    const marked = new Uint8Array(width * height);
+    const queue = new Uint32Array(width * height);
+    let head = 0;
+    let tail = 0;
+    const isNearWhite = (idx: number): boolean => {
+      const base = idx * 4;
+      const a = data[base + 3];
+      if (a <= 6) return false;
+      const r = data[base];
+      const g = data[base + 1];
+      const b = data[base + 2];
+      return r >= threshold && g >= threshold && b >= threshold;
+    };
+    const tryPush = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= width || y >= height) return;
+      const idx = y * width + x;
+      if (marked[idx]) return;
+      if (!isNearWhite(idx)) return;
+      marked[idx] = 1;
+      queue[tail++] = idx;
+    };
+    for (let x = 0; x < width; x += 1) {
+      tryPush(x, 0);
+      tryPush(x, height - 1);
+    }
+    for (let y = 0; y < height; y += 1) {
+      tryPush(0, y);
+      tryPush(width - 1, y);
+    }
+    while (head < tail) {
+      const idx = queue[head++];
+      const x = idx % width;
+      const y = Math.floor(idx / width);
+      tryPush(x + 1, y);
+      tryPush(x - 1, y);
+      tryPush(x, y + 1);
+      tryPush(x, y - 1);
+    }
+    for (let i = 0; i < marked.length; i += 1) {
+      if (!marked[i]) continue;
+      data[i * 4 + 3] = 0;
+    }
   }
 
   private preloadAssetOverrides(): void {
@@ -446,35 +537,17 @@ export default class BootScene extends Phaser.Scene {
     if (!citySources.length && !forestSources.length && !snowSources.length) return false;
 
     const allSources = [...citySources, ...forestSources, ...snowSources];
-    const pickPool = (zone: 'base' | 'river' | 'forest' | 'city' | 'cave' | 'wasteland'): CanvasImageSource[] => {
-      if (zone === 'city') return citySources.length ? citySources : allSources;
-      if (zone === 'forest') return forestSources.length ? forestSources : allSources;
-      if (zone === 'base') return citySources.length ? citySources : allSources;
-      return snowSources.length ? snowSources : (forestSources.length ? forestSources : allSources);
+    const pickRandom = (pool: CanvasImageSource[]): CanvasImageSource | null => {
+      if (!pool.length) return null;
+      return Phaser.Utils.Array.GetRandom(pool);
     };
-
-    const isInsideBaseArea = (x: number, y: number) => x > 780 && x < 1220 && y > 530 && y < 970;
-    const isInsideRiver = (x: number, y: number) => {
-      const main = x >= 300 && x <= 480 && y >= 100 && y <= 1410;
-      const branch = x >= 380 && x <= 720 && y >= 1020 && y <= 1190;
-      const upper = x >= 350 && x <= 590 && y >= 180 && y <= 470;
-      return main || branch || upper;
-    };
-    const getZoneAt = (x: number, y: number): 'base' | 'river' | 'forest' | 'city' | 'cave' | 'wasteland' => {
-      if (isInsideBaseArea(x, y)) return 'base';
-      if (isInsideRiver(x, y)) return 'river';
-      if (x >= 1470 && x <= 1860 && y >= 980 && y <= 1400) return 'cave';
-      if (x >= 1260 && x <= 1910 && y >= 100 && y <= 760) return 'forest';
-      if (x >= 80 && x <= 620 && y >= 100 && y <= 730) return 'city';
-      return 'wasteland';
-    };
-
-    const drawCoverPatch = (
+    const drawCover = (
       src: CanvasImageSource,
       dx: number,
       dy: number,
       dw: number,
-      dh: number
+      dh: number,
+      jitter = 0.16
     ) => {
       const srcW = Math.max(64, Math.floor((src as any).width || 0));
       const srcH = Math.max(64, Math.floor((src as any).height || 0));
@@ -493,8 +566,8 @@ export default class BootScene extends Phaser.Scene {
       sh = Phaser.Math.Clamp(sh, 48, srcH);
       const sxBase = Math.max(0, Math.floor((srcW - sw) * 0.5));
       const syBase = Math.max(0, Math.floor((srcH - sh) * 0.5));
-      const jitterX = Math.floor((srcW - sw) * 0.28);
-      const jitterY = Math.floor((srcH - sh) * 0.28);
+      const jitterX = Math.floor((srcW - sw) * jitter);
+      const jitterY = Math.floor((srcH - sh) * jitter);
       const sx = Phaser.Math.Clamp(
         sxBase + Phaser.Math.Between(-jitterX, jitterX),
         0,
@@ -507,56 +580,46 @@ export default class BootScene extends Phaser.Scene {
       );
       ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
     };
-
-    const tintByZone: Record<'base' | 'river' | 'forest' | 'city' | 'cave' | 'wasteland', string> = {
-      base: 'rgba(28, 44, 66, 0.18)',
-      river: 'rgba(26, 136, 196, 0.14)',
-      forest: 'rgba(18, 74, 40, 0.14)',
-      city: 'rgba(26, 32, 48, 0.14)',
-      cave: 'rgba(80, 108, 148, 0.11)',
-      wasteland: 'rgba(96, 110, 128, 0.11)',
+    const drawZone = (
+      dx: number,
+      dy: number,
+      dw: number,
+      dh: number,
+      pools: CanvasImageSource[],
+      tint: string
+    ) => {
+      const main = pickRandom(pools.length ? pools : allSources);
+      if (main) {
+        drawCover(main, dx, dy, dw, dh, 0.08);
+      } else {
+        ctx.fillStyle = '#111a2b';
+        ctx.fillRect(dx, dy, dw, dh);
+      }
+      if (pools.length > 1) {
+        const overlaySource = pickRandom(pools);
+        if (overlaySource) {
+          ctx.save();
+          ctx.globalAlpha = 0.12;
+          drawCover(overlaySource, dx, dy, dw, dh, 0.22);
+          ctx.restore();
+        }
+      }
+      ctx.fillStyle = tint;
+      ctx.fillRect(dx, dy, dw, dh);
     };
 
     ctx.fillStyle = '#0a1220';
     ctx.fillRect(0, 0, width, height);
     ctx.imageSmoothingEnabled = true;
-    const tileW = 224;
-    const tileH = 168;
-    for (let y = 0; y < height; y += tileH) {
-      for (let x = 0; x < width; x += tileW) {
-        const drawW = Math.min(tileW, width - x);
-        const drawH = Math.min(tileH, height - y);
-        const zone = getZoneAt(x + drawW * 0.5, y + drawH * 0.5);
-        const pool = pickPool(zone);
-        if (pool.length) {
-          const src = Phaser.Utils.Array.GetRandom(pool);
-          drawCoverPatch(src, x, y, drawW, drawH);
-        } else {
-          ctx.fillStyle = '#111a2b';
-          ctx.fillRect(x, y, drawW, drawH);
-        }
-        ctx.fillStyle = tintByZone[zone];
-        ctx.fillRect(x, y, drawW, drawH);
-      }
-    }
 
-    // Keep the gameplay-readable road / river silhouettes on top of photos.
-    ctx.fillStyle = 'rgba(26, 126, 182, 0.28)';
-    ctx.fillRect(292, 90, 168, 1320);
-    ctx.fillStyle = 'rgba(40, 156, 216, 0.22)';
-    ctx.fillRect(380, 1020, 346, 176);
-    ctx.fillStyle = 'rgba(40, 156, 216, 0.19)';
-    ctx.fillRect(352, 176, 224, 298);
-    for (let i = 0; i < 42; i += 1) {
-      const rx = 308 + Math.random() * 410;
-      const ry = 120 + Math.random() * 1290;
-      const rw = 10 + Math.random() * 24;
-      const rh = 2 + Math.random() * 7;
-      ctx.fillStyle = 'rgba(205, 235, 255, 0.16)';
-      ctx.beginPath();
-      ctx.ellipse(rx, ry, rw, rh, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
+    // Coherent biome blocks: no small random tiles.
+    drawZone(0, 0, width, height, snowSources.length ? snowSources : allSources, 'rgba(56, 68, 84, 0.28)');
+    drawZone(0, 0, 780, 760, citySources.length ? citySources : allSources, 'rgba(18, 26, 38, 0.2)');
+    drawZone(1220, 0, 780, 820, forestSources.length ? forestSources : allSources, 'rgba(14, 56, 36, 0.2)');
+    drawZone(1320, 860, 680, 640, snowSources.length ? snowSources : allSources, 'rgba(70, 84, 102, 0.17)');
+    drawZone(760, 500, 480, 520, citySources.length ? citySources : allSources, 'rgba(24, 36, 52, 0.22)');
+
+    // Keep roads readable, but no explicit water overlays.
 
     ctx.fillStyle = 'rgba(12, 18, 30, 0.78)';
     ctx.fillRect(width / 2 - 36, 0, 72, height);
@@ -1960,27 +2023,39 @@ export default class BootScene extends Phaser.Scene {
   private generateStructureSprites(): void {
     this.drawSourceToTexture('user_workbench_src', 'workbench', 64, 64, {
       fit: 'contain',
-      padding: 2,
+      padding: 1,
       smoothing: true,
       force: true,
+      trimWhiteFromEdges: true,
+      trimAlphaBounds: true,
+      whiteThreshold: 232,
     });
     this.drawSourceToTexture('user_medical_station_src', 'medical_station', 64, 64, {
       fit: 'contain',
-      padding: 2,
+      padding: 1,
       smoothing: true,
       force: true,
+      trimWhiteFromEdges: true,
+      trimAlphaBounds: true,
+      whiteThreshold: 232,
     });
     this.drawSourceToTexture('user_room_quarters_src', 'room_quarters', 64, 64, {
       fit: 'contain',
-      padding: 2,
+      padding: 1,
       smoothing: true,
       force: true,
+      trimWhiteFromEdges: true,
+      trimAlphaBounds: true,
+      whiteThreshold: 232,
     });
     this.drawSourceToTexture('user_bunk_bed_src', 'bunk_bed', 64, 64, {
       fit: 'contain',
-      padding: 2,
+      padding: 1,
       smoothing: true,
       force: true,
+      trimWhiteFromEdges: true,
+      trimAlphaBounds: true,
+      whiteThreshold: 232,
     });
 
     this.drawTexture('wall', 64, 64, (g) => {
@@ -2859,23 +2934,7 @@ export default class BootScene extends Phaser.Scene {
         if (t > 0.16) ctx.fillRect(x, y, s, s);
       }
 
-      // River trunk + branch (aligned with gameplay water lanes).
-      ctx.fillStyle = 'rgba(28, 132, 191, 0.35)';
-      ctx.fillRect(292, 90, 168, 1320);
-      ctx.fillStyle = 'rgba(36, 162, 225, 0.26)';
-      ctx.fillRect(380, 1020, 346, 176);
-      ctx.fillStyle = 'rgba(36, 162, 225, 0.22)';
-      ctx.fillRect(352, 176, 224, 298);
-      for (let i = 0; i < 54; i += 1) {
-        const rx = 308 + Math.random() * 410;
-        const ry = 120 + Math.random() * 1290;
-        const rw = 10 + Math.random() * 22;
-        const rh = 2 + Math.random() * 6;
-        ctx.fillStyle = 'rgba(205, 235, 255, 0.12)';
-        ctx.beginPath();
-        ctx.ellipse(rx, ry, rw, rh, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // No water tint overlays; keep terrain fully image-driven.
 
       // Main road network: center avenue + mid horizontal boulevard + branch roads.
       ctx.fillStyle = 'rgba(12, 18, 30, 0.94)';

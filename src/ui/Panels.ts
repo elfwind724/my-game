@@ -22,6 +22,7 @@ class SlidePanel {
   protected isOpen: boolean = false;
   protected panelWidth: number;
   protected side: 'left' | 'right';
+  private lastToggleAt: number = -9999;
 
   constructor(scene: Phaser.Scene, width: number, side: 'left' | 'right' = 'right') {
     this.scene = scene;
@@ -78,6 +79,10 @@ class SlidePanel {
   }
 
   toggle(): void {
+    const now = this.scene.time?.now ?? Date.now();
+    // Guard against duplicated key bindings / double-dispatch within the same frame.
+    if (now - this.lastToggleAt < 120) return;
+    this.lastToggleAt = now;
     // Recover from stale states caused by async tween callbacks.
     if (this.isOpen && !this.container) this.isOpen = false;
     if (!this.isOpen && this.container) {
@@ -909,6 +914,24 @@ export class BasePanel extends SlidePanel {
         });
       });
     };
+    const emitAutoBuildState = () => {
+      events.emit('base-autobuild-updated', {
+        enabled: gameState.data.autoBuild.enabled,
+        ruleCount: gameState.data.autoBuild.rules.filter((rule) => rule.enabled && rule.targetCount > 0).length,
+        builders: Math.max(0, Math.floor(gameState.data.autoBuild.desiredBuilderCount || 0)),
+      });
+    };
+    const toggleAutoBuild = () => {
+      const nextEnabled = !gameState.data.autoBuild.enabled;
+      gameState.data.autoBuild.enabled = nextEnabled;
+      if (nextEnabled) {
+        gameState.data.autoBuild.autoAssignBuilders = true;
+      }
+      emitAutoBuildState();
+      events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+      showTip(nextEnabled ? '自动建造已开启' : '自动建造已关闭', nextEnabled ? '#67e8f9' : '#94a3b8');
+      this.refresh();
+    };
 
     let summaryRightY = summaryTop + summaryPaddingY;
 
@@ -962,17 +985,34 @@ export class BasePanel extends SlidePanel {
         const assignedResult = BaseSystem.autoAssignBaseCompanions();
         events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
         events.emit('update-resources', gameState.data.resources);
-        events.emit('base-autobuild-updated', {
-          enabled: gameState.data.autoBuild.enabled,
-          ruleCount: gameState.data.autoBuild.rules.filter((rule) => rule.enabled && rule.targetCount > 0).length,
-          builders: Math.max(0, Math.floor(gameState.data.autoBuild.desiredBuilderCount || 0)),
-        });
+        emitAutoBuildState();
         showTip(assignedResult.message);
       }
       this.refresh();
     });
     container.add(dutyAutoBtn);
-    summaryRightY += dutyAutoBtn.height + unit(3);
+    summaryRightY += dutyAutoBtn.height + unit(5);
+
+    const autoBuildBtn = this.scene.add.text(
+      rightX,
+      summaryRightY,
+      autoBuild.enabled ? '自动建造: 开' : '自动建造: 关',
+      {
+        fontSize: fsMeta(11),
+        color: autoBuild.enabled ? '#67e8f9' : '#94a3b8',
+        fontFamily: uiFont,
+        fontStyle: 'bold',
+        backgroundColor: '#0f1d32',
+        padding: { x: unit(6), y: unit(3) },
+      }
+    ).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    if (autoBuildBtn.input) (autoBuildBtn.input as any).priorityID = 3;
+    autoBuildBtn.on('pointerdown', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, ev: Phaser.Types.Input.EventData) => {
+      ev.stopPropagation();
+      toggleAutoBuild();
+    });
+    container.add(autoBuildBtn);
+    summaryRightY += autoBuildBtn.height + unit(3);
 
     const summaryPanelH = Math.max(
       summaryLeftY - summaryTop + summaryPaddingY,
@@ -1009,11 +1049,16 @@ export class BasePanel extends SlidePanel {
     );
     const activeTasks = constructionTasks.filter((task) => task.status === 'active').length;
     const queueTasks = Math.max(0, constructionTasks.length - activeTasks);
-    const compactOps = this.scene.add.text(leftX, sy, `自动建造: ${autoBuild.enabled ? '开' : '关'} · 并发${autoBuild.maxConcurrent} · 施工${activeTasks}/${autoBuild.maxConcurrent} · 队列${queueTasks}`, {
+    const compactOps = this.scene.add.text(leftX, sy, `自动建造: ${autoBuild.enabled ? '开' : '关'} · 并发${autoBuild.maxConcurrent} · 施工${activeTasks}/${autoBuild.maxConcurrent} · 队列${queueTasks}（点击切换）`, {
       fontSize: fsTiny(10),
       color: '#67e8f9',
       fontFamily: uiFont,
       wordWrap: { width: this.panelWidth - unit(32) },
+    }).setInteractive({ useHandCursor: true });
+    if (compactOps.input) (compactOps.input as any).priorityID = 3;
+    compactOps.on('pointerdown', (_p: Phaser.Input.Pointer, _lx: number, _ly: number, ev: Phaser.Types.Input.EventData) => {
+      ev.stopPropagation();
+      toggleAutoBuild();
     });
     container.add(compactOps);
     sy += compactOps.height + unit(4);
