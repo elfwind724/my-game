@@ -8413,19 +8413,20 @@ export default class GameScene extends Phaser.Scene {
     const startX = 1000 - (cols * tileSize) / 2;
     const startY = 750 - (rows * tileSize) / 2;
     const centerX = startX + cols * tileSize * 0.5;
-    const hallY = startY + tileSize * 2.02;
 
-    // Ground: cross-lane path + district boards, keep geometry readable.
+    // Ground: fully use user-provided base tile texture.
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
-        const crossPath = (row >= 2 && row <= 4) || (col >= 3 && col <= 4);
-        const tex = crossPath ? 'village_path' : 'village_ground';
-        const tile = this.add.image(startX + col * tileSize + tileSize / 2, startY + row * tileSize + tileSize / 2, tex).setDepth(-4);
+        const tile = this.add.image(
+          startX + col * tileSize + tileSize / 2,
+          startY + row * tileSize + tileSize / 2,
+          'village_ground'
+        ).setDepth(-4);
         this.villageLayer.add(tile);
       }
     }
-    const plaza = this.add.rectangle(centerX, startY + tileSize * 3.54, 356, 246, 0x2a2119, 0.18).setDepth(-5);
-    plaza.setStrokeStyle(1, 0xf59e0b, 0.2);
+    const plaza = this.add.rectangle(centerX, startY + tileSize * 3.54, 356, 246, 0x101826, 0.14).setDepth(-5);
+    plaza.setStrokeStyle(1, 0x3b82f6, 0.2);
     this.villageLayer.add(plaza);
 
     const districtPads = [
@@ -8439,41 +8440,36 @@ export default class GameScene extends Phaser.Scene {
       this.villageLayer.add(lane);
     });
 
-    const placeStructure = (key: string, x: number, y: number, scale: number, tint = 0xffffff, depth = -2) => {
+    const placeStructure = (key: string, x: number, y: number, scale: number, depth = -2) => {
       if (!this.textures.exists(key)) return;
       const shadow = this.add.ellipse(x, y + 14, 74 * scale, 15 * scale, 0x000000, 0.2).setDepth(depth - 1);
-      const sprite = this.add.image(x, y, key).setScale(scale).setTint(tint).setDepth(depth);
+      const sprite = this.add.image(x, y, key).setScale(scale).setDepth(depth);
       this.villageLayer.add([shadow, sprite]);
     };
 
-    // Command layer + main hall.
-    placeStructure('base_command_center', centerX, startY + tileSize * 0.72, 0.7, 0xd7c4a2, -3);
-    const hall = this.add.image(centerX, hallY, 'store_front').setDepth(-2).setScale(0.98);
-    this.villageLayer.add(hall);
-    const signBoard = this.add.image(centerX, hallY - 84, 'store_sign_board').setDepth(-1).setScale(1.02);
-    this.villageLayer.add(signBoard);
-    this.villageLayer.add(this.add.text(centerX, hallY - 84, '影目AR眼镜体验中心', {
-      fontSize: this.worldFs(17, 16),
-      color: '#f8fafc',
+    // Remove old "影目房子" and keep base as functional construction hub.
+    const missionCoreShadow = this.add.ellipse(centerX, startY + tileSize * 3.3, 208, 44, 0x000000, 0.24).setDepth(-3);
+    const missionCore = this.add.rectangle(centerX, startY + tileSize * 3.16, 196, 84, 0x13263f, 0.72).setDepth(-2);
+    missionCore.setStrokeStyle(2, 0x38bdf8, 0.46);
+    this.villageLayer.add([missionCoreShadow, missionCore]);
+    this.villageLayer.add(this.add.text(centerX, startY + tileSize * 2.68, '基地中枢', {
+      fontSize: this.worldFs(16, 15),
+      color: '#e2f3ff',
       fontFamily: uiFont,
       fontStyle: 'bold',
-      stroke: '#0f172a',
-      strokeThickness: 4,
-    }).setOrigin(0.5).setDepth(0));
+      stroke: '#0b1220',
+      strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(-1));
 
-    // Core district buildings only.
-    placeStructure('base_residence_block', centerX - 220, startY + tileSize * 2.8, 0.82, 0xc9d5b2);
-    placeStructure('base_workshop_block', centerX + 220, startY + tileSize * 2.8, 0.82, 0xcfb99c);
-    placeStructure('base_clinic_block', centerX, startY + tileSize * 4.9, 0.78, 0xd4cfbf);
-    placeStructure('base_drone_hangar', centerX, startY + tileSize * 5.56, 0.56, 0xbec8bf);
+    // Construction facilities from user asset pack.
+    placeStructure('room_quarters', centerX - 220, startY + tileSize * 2.92, 1.05);
+    placeStructure('workbench', centerX + 220, startY + tileSize * 2.92, 1.05);
+    placeStructure('medical_station', centerX, startY + tileSize * 4.96, 1.05);
+    placeStructure('bunk_bed', centerX, startY + tileSize * 5.58, 1.05);
 
-    // Light perimeter silhouettes.
-    placeStructure('house_tower_ruin', centerX - 402, startY + tileSize * 1.48, 0.48, 0x918a7f, -4);
-    placeStructure('house_tower_ruin', centerX + 402, startY + tileSize * 1.48, 0.48, 0x918a7f, -4);
-
-    // Core props.
-    this.villageLayer.add(this.add.image(centerX - 86, startY + tileSize * 3.22, 'store_counter').setDepth(-1));
-    this.villageLayer.add(this.add.image(centerX + 86, startY + tileSize * 3.22, 'store_counter').setDepth(-1));
+    // Keep only essential props.
+    this.villageLayer.add(this.add.image(centerX - 86, startY + tileSize * 3.22, 'store_counter').setDepth(-1).setScale(0.9));
+    this.villageLayer.add(this.add.image(centerX + 86, startY + tileSize * 3.22, 'store_counter').setDepth(-1).setScale(0.9));
     [
       { x: centerX - 146, y: startY + tileSize * 4.2, s: 0.86 },
       { x: centerX + 146, y: startY + tileSize * 4.2, s: 0.86 },
@@ -8483,24 +8479,9 @@ export default class GameScene extends Phaser.Scene {
       this.villageLayer.add([shadow, crate]);
     });
 
-    // Living-camp props: tents / crops / clothesline / dining table.
-    placeStructure('camp_tent', centerX - 280, startY + tileSize * 4.42, 0.76, 0xffffff, -2);
-    placeStructure('camp_tent', centerX + 280, startY + tileSize * 4.42, 0.76, 0xffffff, -2);
-    placeStructure('camp_garden_box', centerX - 230, startY + tileSize * 5.4, 0.92, 0xffffff, -2);
-    placeStructure('camp_garden_box', centerX + 230, startY + tileSize * 5.4, 0.92, 0xffffff, -2);
-    placeStructure('camp_table', centerX, startY + tileSize * 4.34, 0.86, 0xffffff, -2);
-    placeStructure('camp_clothesline', centerX - 4, startY + tileSize * 5.62, 0.86, 0xffffff, -2);
-    placeStructure('farm_plot', centerX - 324, startY + tileSize * 5.08, 0.62, 0xffffff, -3);
-    placeStructure('farm_plot', centerX + 324, startY + tileSize * 5.08, 0.62, 0xffffff, -3);
-
-    if (this.textures.exists('camp_string_lights')) {
-      const upperLights = this.add.image(centerX, hallY - 54, 'camp_string_lights').setDepth(-1);
-      const lowerLights = this.add.image(centerX, startY + tileSize * 4.92, 'camp_string_lights').setDepth(-1);
-      lowerLights.setScale(0.9);
-      this.villageLayer.add([upperLights, lowerLights]);
-      this.villageLayer.add(this.add.circle(centerX - 76, hallY - 48, 22, 0xffd27a, 0.1).setDepth(-2));
-      this.villageLayer.add(this.add.circle(centerX + 82, hallY - 48, 22, 0xffd27a, 0.1).setDepth(-2));
-    }
+    placeStructure('camp_garden_box', centerX - 230, startY + tileSize * 5.4, 0.92, -2);
+    placeStructure('camp_garden_box', centerX + 230, startY + tileSize * 5.4, 0.92, -2);
+    placeStructure('camp_table', centerX, startY + tileSize * 4.34, 0.86, -2);
 
     // Lamps + fire core.
     [

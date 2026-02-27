@@ -1446,23 +1446,23 @@ export default class UIScene extends Phaser.Scene {
       { key: 'bitcoin', icon: 'icon_bitcoin' },
       { key: 'power', icon: 'icon_power' },
     ];
-    const cellW = 68;
-    const cellH = 22;
+    const cellW = 72;
+    const cellH = 24;
     const cols = 5;
     entries.forEach((entry, idx) => {
       const row = Math.floor(idx / cols);
       const col = idx % cols;
       const x = startX + col * cellW;
       const y = startY + row * cellH;
-      const bg = this.add.rectangle(x, y, 64, 20, 0x151a23, 0.82)
+      const bg = this.add.rectangle(x, y, 68, 22, 0x151a23, 0.84)
         .setOrigin(0, 0)
         .setStrokeStyle(1, 0x4b5563, 0.75)
         .setDepth(1001);
       const icon = this.textures.exists(entry.icon)
-        ? this.add.image(x + 8, y + 9, entry.icon).setScale(0.8).setDepth(1002)
+        ? this.add.image(x + 10, y + 11, entry.icon).setScale(1).setDepth(1002)
         : this.add.rectangle(x + 10, y + 10, 10, 10, 0x64748b, 1).setDepth(1002);
-      const value = this.add.text(x + 16, y + 3, '0', {
-        fontSize: this.hudFs(12, 11),
+      const value = this.add.text(x + 23, y + 3, '0', {
+        fontSize: this.hudFs(13, 12),
         color: '#e2e8f0',
         fontFamily: this.uiFontFamily,
         fontStyle: 'bold',
@@ -1544,7 +1544,7 @@ export default class UIScene extends Phaser.Scene {
         .setDepth(1001)
         .setScrollFactor(0);
       const icon = this.textures.exists(row.icon)
-        ? this.add.image(rightX - lineW + 10, y + 10, row.icon).setScale(0.92).setDepth(1002).setScrollFactor(0)
+        ? this.add.image(rightX - lineW + 10, y + 10, row.icon).setScale(1).setDepth(1002).setScrollFactor(0)
         : this.add.rectangle(rightX - lineW + 10, y + 10, 10, 10, 0x64748b, 1).setDepth(1002).setScrollFactor(0);
       const value = this.add.text(rightX - lineW + 20, y + 4, row.text, {
         fontSize: this.hudFs(13, 12),

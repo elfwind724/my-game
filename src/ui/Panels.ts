@@ -36,7 +36,8 @@ class SlidePanel {
 
     this.container = this.scene.add.container(startX, 0);
     this.container.setScrollFactor(0);
-    this.container.setDepth(2800);
+    // Keep slide panels above in-world overlays (day events / directives / mini games).
+    this.container.setDepth(6200);
 
     // Background
     const bg = this.scene.add.rectangle(this.panelWidth / 2, h / 2, this.panelWidth, h, 0x0f172a, 0.95);
@@ -664,6 +665,7 @@ export class BasePanel extends SlidePanel {
   private wheelHandler: ((event: WheelEvent) => void) | null = null;
   private pointerMoveHandler: ((pointer: Phaser.Input.Pointer) => void) | null = null;
   private pointerUpHandler: (() => void) | null = null;
+  private showAutoBuildDetails = false;
 
   constructor(scene: Phaser.Scene) {
     super(scene, 440, 'right');
@@ -712,11 +714,12 @@ export class BasePanel extends SlidePanel {
     const scaleDisplayW = this.scene.scale.displaySize.width || gameW;
     const canvasDisplayW = this.scene.game.canvas?.getBoundingClientRect().width || scaleDisplayW;
     const displayW = Math.max(1, Math.min(scaleDisplayW, canvasDisplayW));
+    const mobile = this.isMobileViewport();
+    const portrait = this.isPortraitViewport();
     let boost = gameW / displayW;
-    if (this.isMobileViewport() && this.isPortraitViewport()) {
-      boost = Math.max(boost, 2.75);
-    }
-    return Phaser.Math.Clamp(boost, 1.85, 3.8);
+    if (mobile && portrait) boost = Math.max(boost, 1.45);
+    if (mobile && !portrait) boost = Math.max(boost, 1.12);
+    return Phaser.Math.Clamp(boost, 1.0, portrait ? 1.72 : mobile ? 1.28 : 1.2);
   }
 
   private cleanupScroll(): void {
@@ -787,12 +790,14 @@ export class BasePanel extends SlidePanel {
     const uiFont = this.getUIFontFamily();
     this.panelWidth = mobileViewport
       ? Math.min(w - 6, Math.max(600, Math.round(w * 0.98)))
-      : Math.min(760, Math.max(620, Math.round(w * 0.52)));
+      : Math.min(840, Math.max(690, Math.round(w * 0.64)));
     const fontBoost = this.getFontBoost();
-    const layoutBoost = Phaser.Math.Clamp(fontBoost * 0.92, 1.15, 2.1);
-    const fs = (base: number, min: number = mobilePortrait ? 23 : 19) => `${Math.max(min, Math.round(base * fontBoost))}px`;
-    const fsMeta = (base: number, min: number = mobilePortrait ? 20 : 16) => `${Math.max(min, Math.round(base * fontBoost))}px`;
-    const fsTiny = (base: number, min: number = mobilePortrait ? 18 : 14) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const layoutBoost = mobilePortrait
+      ? Phaser.Math.Clamp(fontBoost * 0.9, 1.12, 1.9)
+      : Phaser.Math.Clamp(fontBoost * 0.78, 0.92, 1.28);
+    const fs = (base: number, min: number = mobilePortrait ? 18 : 12) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const fsMeta = (base: number, min: number = mobilePortrait ? 15 : 10) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const fsTiny = (base: number, min: number = mobilePortrait ? 13 : 9) => `${Math.max(min, Math.round(base * fontBoost))}px`;
     const unit = (value: number) => Math.round(value * layoutBoost);
 
     BaseSystem.refreshBaseState();
@@ -834,107 +839,63 @@ export class BasePanel extends SlidePanel {
 
     let sy = unit(38);
     const foodColor = base.foodDeficit > 0 ? '#ef4444' : '#e2e8f0';
-    container.add(this.scene.add.text(unit(16), sy,
-      `🍖 ${res.food}(+${base.foodProduction}/-${base.foodConsumption}/日)  ⚡ ${base.powerUsed}/${base.powerCapacity}`, {
-      fontSize: fsMeta(13), color: foodColor, fontFamily: uiFont,
-    }));
-    sy += unit(18);
-    const popColor = compCount >= popCap ? '#ef4444' : '#94a3b8';
-    container.add(this.scene.add.text(unit(16), sy,
-      `👥 ${compCount}/${popCap}人  出战${partyCount} · 驻守${baseCount}`, {
-      fontSize: fsMeta(13), color: popColor, fontFamily: uiFont,
-    }));
-    sy += unit(18);
     const ecoPct = Math.round((base.ecologyIntegrity || 0) * 100);
     const upkeepPct = Math.round((base.ecologyUpkeepRatio || 0) * 100);
     const prodPct = Math.round((base.ecologyProductionRatio || 0) * 100);
     const ecoColor = ecoPct >= 80 ? '#4ade80' : ecoPct >= 60 ? '#fbbf24' : '#fb7185';
-    container.add(this.scene.add.text(unit(16), sy,
-      `生态链${ecoPct}% · 维护${upkeepPct}% · 产能${prodPct}% · 评分${base.ecologyTotalScore || 0}`, {
-      fontSize: fsMeta(13), color: ecoColor, fontFamily: uiFont,
-    }));
-    if ((base.ecologyWarnings || []).length > 0) {
-      sy += unit(16);
-      container.add(this.scene.add.text(unit(16), sy, `⚠ ${(base.ecologyWarnings || []).slice(0, 1).join('')}`, {
-        fontSize: fsMeta(12), color: '#fca5a5', fontFamily: uiFont,
-        wordWrap: { width: this.panelWidth - unit(180) },
-      }));
-    }
-    sy += unit(16);
     const defensePct = Math.round((base.structureIntegrity || 0) * 100);
     const coveragePct = Math.round((base.structureCoverage || 0) * 100);
     const defenseColor = base.structureBreachOpen ? '#fb7185' : defensePct >= 80 ? '#4ade80' : '#fbbf24';
-    container.add(this.scene.add.text(
-      unit(16),
-      sy,
-      `防线闭环${coveragePct}% · 完整度${defensePct}%${base.structureBreachOpen ? ' · 破口打开' : ''}`,
-      {
-        fontSize: fsMeta(13),
-        color: defenseColor,
-        fontFamily: uiFont,
-      }
-    ));
-    sy += unit(18);
+    const popColor = compCount >= popCap ? '#ef4444' : '#94a3b8';
     const dutyCounts = BaseSystem.getBaseDutyCounts();
-    const dutyPanelH = unit(mobilePortrait ? 76 : 64);
-    const dutyPanel = this.scene.add.rectangle(
-      this.panelWidth / 2,
-      sy + dutyPanelH / 2 - unit(5),
-      this.panelWidth - unit(24),
-      dutyPanelH,
-      0x0c1628,
-      0.85
-    ).setStrokeStyle(1, 0x1f3a5f, 0.9);
-    container.add(dutyPanel);
-    container.add(this.scene.add.text(
-      unit(16),
-      sy,
-      `自动分工: 建筑工${dutyCounts.builder} / 拾荒者${dutyCounts.scavenger} / 防御者${dutyCounts.defender} / 后勤${dutyCounts.support}`,
-      {
-        fontSize: fsMeta(13),
-        color: '#67e8f9',
-        fontFamily: uiFont,
-        fontStyle: 'bold',
-      }
-    ));
-    sy += unit(18);
-    const dutyBehaviors = BaseSystem.getAutoDutyBehaviorSummary();
-    dutyBehaviors.slice(0, 2).forEach((line) => {
-      container.add(this.scene.add.text(unit(16), sy, line, {
-        fontSize: fsTiny(11),
-        color: '#93c5fd',
-        fontFamily: uiFont,
-      }));
-      sy += unit(15);
-    });
-    container.add(this.scene.add.text(unit(16), sy, '自动派职开启后：空闲伙伴会自动分配职责并参与基地作业', {
-      fontSize: fsTiny(11),
-      color: '#a5f3fc',
-      fontFamily: uiFont,
-    }));
-    sy += unit(14);
-    container.add(this.scene.add.text(unit(16), sy, '金来源：河流淘金 / 山洞挖矿 / 城区搜刮 / 夜战掉落', {
-      fontSize: fsTiny(11),
-      color: '#fbbf24',
-      fontFamily: uiFont,
-    }));
-    sy += unit(5);
+    const minListHeightPx = Math.round(h * (mobilePortrait ? 0.46 : 0.42));
+    const topSectionLimit = Math.max(unit(206), h - minListHeightPx - unit(12));
+    const reserveForListHeader = unit(28);
 
-    // ─── Action buttons ────────────────────────────────────
-    const btnY = sy + unit(2);
-    const assignBtn = this.scene.add.text(this.panelWidth - unit(14), btnY, '分配岗位', {
-      fontSize: fsMeta(11), color: '#38bdf8', fontFamily: uiFont, fontStyle: 'bold',
-      backgroundColor: '#0f1d32', padding: { x: unit(6), y: unit(3) },
-    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
-    if (assignBtn.input) (assignBtn.input as any).priorityID = 3;
-    assignBtn.on('pointerdown', () => {
-      const assignedResult = BaseSystem.autoAssignBaseCompanions();
-      events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
-      events.emit('update-resources', gameState.data.resources);
+    const summaryOuterX = unit(12);
+    const summaryOuterW = this.panelWidth - unit(24);
+    const summaryPaddingX = unit(mobilePortrait ? 10 : 9);
+    const summaryPaddingY = unit(mobilePortrait ? 8 : 7);
+    const summaryGap = unit(8);
+    const rightColW = mobilePortrait ? unit(136) : unit(126);
+    const leftWrapW = Math.max(unit(220), summaryOuterW - summaryPaddingX * 2 - rightColW - summaryGap);
+    const leftX = summaryOuterX + summaryPaddingX;
+    const rightX = summaryOuterX + summaryOuterW - summaryPaddingX - rightColW;
+    const summaryTop = sy;
+
+    const summaryPanel = this.scene.add.rectangle(
+      this.panelWidth / 2,
+      summaryTop + unit(32),
+      summaryOuterW,
+      unit(64),
+      0x0c1628,
+      0.86
+    ).setStrokeStyle(1, 0x1f3a5f, 0.9);
+    container.add(summaryPanel);
+
+    let summaryLeftY = summaryTop + summaryPaddingY;
+    const addSummaryLine = (text: string, color: string, tiny = false) => {
+      const line = this.scene.add.text(leftX, summaryLeftY, text, {
+        fontSize: tiny ? fsTiny(10) : fsMeta(12),
+        color,
+        fontFamily: uiFont,
+        wordWrap: { width: leftWrapW },
+      });
+      container.add(line);
+      summaryLeftY += line.height + unit(4);
+    };
+
+    addSummaryLine(`🍖${res.food}(+${base.foodProduction}/-${base.foodConsumption})  ⚡${base.powerUsed}/${base.powerCapacity}  👥${compCount}/${popCap}`, foodColor);
+    addSummaryLine(`出战${partyCount} · 驻守${baseCount} · 评分${base.ecologyTotalScore || 0}`, popColor);
+    addSummaryLine(`生态链${ecoPct}% · 维护${upkeepPct}% · 产能${prodPct}%`, ecoColor);
+    addSummaryLine(`防线闭环${coveragePct}% · 完整度${defensePct}%${base.structureBreachOpen ? ' · 破口打开' : ''}`, defenseColor);
+    addSummaryLine(`自动分工 建筑工${dutyCounts.builder} / 拾荒者${dutyCounts.scavenger} / 防御者${dutyCounts.defender} / 后勤${dutyCounts.support}`, '#67e8f9', true);
+
+    const showTip = (message: string, color: string = '#67e8f9') => {
       this.scene.time.delayedCall(20, () => {
-        const tip = this.scene.add.text(this.scene.cameras.main.width - this.panelWidth + unit(16), unit(170), assignedResult.message, {
+        const tip = this.scene.add.text(this.scene.cameras.main.width - this.panelWidth + unit(16), unit(170), message, {
           fontSize: fs(11),
-          color: '#67e8f9',
+          color,
           fontFamily: uiFont,
           backgroundColor: '#0b1220',
           padding: { x: unit(6), y: unit(3) },
@@ -947,14 +908,29 @@ export class BasePanel extends SlidePanel {
           onComplete: () => tip.destroy(),
         });
       });
+    };
+
+    let summaryRightY = summaryTop + summaryPaddingY;
+
+    const assignBtn = this.scene.add.text(rightX, summaryRightY, '分配岗位', {
+      fontSize: fsMeta(11), color: '#38bdf8', fontFamily: uiFont, fontStyle: 'bold',
+      backgroundColor: '#0f1d32', padding: { x: unit(6), y: unit(3) },
+    }).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    if (assignBtn.input) (assignBtn.input as any).priorityID = 3;
+    assignBtn.on('pointerdown', () => {
+      const assignedResult = BaseSystem.autoAssignBaseCompanions();
+      events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+      events.emit('update-resources', gameState.data.resources);
+      showTip(assignedResult.message);
       this.refresh();
     });
     container.add(assignBtn);
+    summaryRightY += assignBtn.height + unit(5);
 
-    const garrisonBtn = this.scene.add.text(this.panelWidth - unit(14), btnY + unit(24), '一键驻守', {
+    const garrisonBtn = this.scene.add.text(rightX, summaryRightY, '一键驻守', {
       fontSize: fsMeta(11), color: '#fbbf24', fontFamily: uiFont, fontStyle: 'bold',
       backgroundColor: '#0f1d32', padding: { x: unit(6), y: unit(3) },
-    }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    }).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     if (garrisonBtn.input) (garrisonBtn.input as any).priorityID = 3;
     garrisonBtn.on('pointerdown', () => {
       events.emit('companion-bulk-status-changed', { status: 'base' as const });
@@ -962,10 +938,11 @@ export class BasePanel extends SlidePanel {
       this.refresh();
     });
     container.add(garrisonBtn);
+    summaryRightY += garrisonBtn.height + unit(5);
 
     const dutyAutoBtn = this.scene.add.text(
-      this.panelWidth - unit(14),
-      btnY + unit(48),
+      rightX,
+      summaryRightY,
       autoBuild.autoAssignDuties ? '自动派职: 开' : '自动派职: 关',
       {
         fontSize: fsMeta(11),
@@ -975,7 +952,7 @@ export class BasePanel extends SlidePanel {
         backgroundColor: '#0f1d32',
         padding: { x: unit(6), y: unit(3) },
       }
-    ).setOrigin(1, 0).setInteractive({ useHandCursor: true });
+    ).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     if (dutyAutoBtn.input) (dutyAutoBtn.input as any).priorityID = 3;
     dutyAutoBtn.on('pointerdown', () => {
       gameState.data.autoBuild.autoAssignDuties = !gameState.data.autoBuild.autoAssignDuties;
@@ -990,29 +967,35 @@ export class BasePanel extends SlidePanel {
           ruleCount: gameState.data.autoBuild.rules.filter((rule) => rule.enabled && rule.targetCount > 0).length,
           builders: Math.max(0, Math.floor(gameState.data.autoBuild.desiredBuilderCount || 0)),
         });
-        this.scene.time.delayedCall(20, () => {
-          const tip = this.scene.add.text(this.scene.cameras.main.width - this.panelWidth + unit(16), unit(170), assignedResult.message, {
-            fontSize: fs(11),
-            color: '#67e8f9',
-            fontFamily: uiFont,
-            backgroundColor: '#0b1220',
-            padding: { x: unit(6), y: unit(3) },
-          }).setDepth(3000);
-          this.scene.tweens.add({
-            targets: tip,
-            alpha: 0,
-            y: tip.y - 14,
-            duration: 680,
-            onComplete: () => tip.destroy(),
-          });
-        });
+        showTip(assignedResult.message);
       }
       this.refresh();
     });
     container.add(dutyAutoBtn);
+    summaryRightY += dutyAutoBtn.height + unit(3);
 
-    // ─── Job slot summary bar ──────────────────────────────
-    sy += unit(18);
+    const summaryPanelH = Math.max(
+      summaryLeftY - summaryTop + summaryPaddingY,
+      summaryRightY - summaryTop + summaryPaddingY
+    );
+    summaryPanel.setSize(summaryOuterW, summaryPanelH);
+    summaryPanel.setPosition(this.panelWidth / 2, summaryTop + summaryPanelH / 2 - unit(2));
+
+    sy = summaryTop + summaryPanelH + unit(6);
+
+    const detailLabel = this.showAutoBuildDetails ? '收起运营详情' : '展开运营详情';
+    const summaryDetailBtn = this.scene.add.text(leftX, sy, detailLabel, {
+      fontSize: fsTiny(10), color: '#93c5fd', fontFamily: uiFont,
+      backgroundColor: '#0f1d32', padding: { x: unit(6), y: unit(2) },
+    }).setInteractive({ useHandCursor: true });
+    if (summaryDetailBtn.input) (summaryDetailBtn.input as any).priorityID = 3;
+    summaryDetailBtn.on('pointerdown', () => {
+      this.showAutoBuildDetails = !this.showAutoBuildDetails;
+      this.refresh();
+    });
+    container.add(summaryDetailBtn);
+    sy += summaryDetailBtn.height + unit(5);
+
     const slotParts: string[] = [];
     BASE_JOB_ORDER.forEach(job => {
       if (job === 'idle') return;
@@ -1021,281 +1004,75 @@ export class BasePanel extends SlidePanel {
       const used = base.jobAssigned[job] || 0;
       slotParts.push(`${BASE_JOB_LABELS[job]}${used}/${slots}`);
     });
-    if (slotParts.length > 0) {
-      container.add(this.scene.add.text(unit(16), sy, slotParts.join(' · '), {
-        fontSize: fsMeta(11), color: '#64748b', fontFamily: uiFont,
-      }));
-      sy += unit(16);
-    }
-
     const constructionTasks = (gameState.data.constructionTasks || []).filter(
       (task) => task && task.status !== 'done' && task.status !== 'failed'
     );
-    const commitAutoBuildConfig = (tip?: string) => {
-      events.emit('base-autobuild-updated', {
-        enabled: gameState.data.autoBuild.enabled,
-        ruleCount: gameState.data.autoBuild.rules.filter((rule) => rule.enabled && rule.targetCount > 0).length,
-        builders: Math.max(0, Math.floor(gameState.data.autoBuild.desiredBuilderCount || 0)),
-      });
-      if (tip) {
-        this.scene.time.delayedCall(20, () => {
-          const posX = this.scene.cameras.main.width - this.panelWidth + unit(160);
-          const posY = unit(170);
-          const text = this.scene.add.text(posX, posY, tip, {
-            fontSize: fs(10),
-            color: '#38bdf8',
-            fontFamily: uiFont,
-            backgroundColor: '#0b1220',
-            padding: { x: unit(6), y: unit(3) },
-          }).setDepth(3000);
-          this.scene.tweens.add({
-            targets: text,
-            alpha: 0,
-            y: posY - 16,
-            duration: 520,
-            onComplete: () => text.destroy(),
-          });
-        });
-      }
-      this.refresh();
-    };
-
-    sy += unit(6);
-    container.add(this.scene.add.text(unit(16), sy, '自动建造策略', {
-      fontSize: fs(12), color: '#67e8f9', fontFamily: uiFont, fontStyle: 'bold',
-    }));
     const activeTasks = constructionTasks.filter((task) => task.status === 'active').length;
     const queueTasks = Math.max(0, constructionTasks.length - activeTasks);
-    container.add(this.scene.add.text(unit(136), sy + unit(1), `施工 ${activeTasks}/${autoBuild.maxConcurrent}  队列${queueTasks}`, {
-      fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont,
-    }));
-    sy += unit(17);
-    container.add(this.scene.add.text(unit(16), sy, `工坊岗位 ${base.jobAssigned.workshop || 0}/${base.jobSlots.workshop || 0} · 施工目标 ${autoBuild.desiredBuilderCount}`, {
-      fontSize: fsMeta(11), color: '#64748b', fontFamily: uiFont,
-    }));
-    sy += unit(13);
-
-    const autoMainBtn = this.scene.add.text(unit(16), sy, autoBuild.enabled ? '自动建造: 开' : '自动建造: 关', {
-      fontSize: fsTiny(10),
-      color: autoBuild.enabled ? '#4ade80' : '#94a3b8',
-      fontFamily: uiFont,
-      backgroundColor: '#0b1a2f',
-      padding: { x: unit(6), y: unit(3) },
-    }).setInteractive({ useHandCursor: true });
-    if (autoMainBtn.input) (autoMainBtn.input as any).priorityID = 3;
-    autoMainBtn.on('pointerdown', () => {
-      gameState.data.autoBuild.enabled = !gameState.data.autoBuild.enabled;
-      commitAutoBuildConfig(gameState.data.autoBuild.enabled ? '自动建造已开启' : '自动建造已关闭');
-    });
-    container.add(autoMainBtn);
-
-    const nightBtn = this.scene.add.text(unit(120), sy, autoBuild.pauseAtNight ? '夜晚暂停' : '夜晚施工', {
-      fontSize: fsTiny(10),
-      color: autoBuild.pauseAtNight ? '#fbbf24' : '#38bdf8',
-      fontFamily: uiFont,
-      backgroundColor: '#0b1a2f',
-      padding: { x: unit(6), y: unit(3) },
-    }).setInteractive({ useHandCursor: true });
-    if (nightBtn.input) (nightBtn.input as any).priorityID = 3;
-    nightBtn.on('pointerdown', () => {
-      gameState.data.autoBuild.pauseAtNight = !gameState.data.autoBuild.pauseAtNight;
-      commitAutoBuildConfig(gameState.data.autoBuild.pauseAtNight ? '夜晚自动施工已暂停' : '夜晚自动施工已启用');
-    });
-    container.add(nightBtn);
-
-    const minusConcurrent = this.scene.add.text(unit(206), sy, '－', {
-      fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont,
-      backgroundColor: '#10223d', padding: { x: unit(6), y: unit(3) },
-    }).setInteractive({ useHandCursor: true });
-    const plusConcurrent = this.scene.add.text(unit(236), sy, '＋', {
-      fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont,
-      backgroundColor: '#10223d', padding: { x: unit(6), y: unit(3) },
-    }).setInteractive({ useHandCursor: true });
-    if (minusConcurrent.input) (minusConcurrent.input as any).priorityID = 3;
-    if (plusConcurrent.input) (plusConcurrent.input as any).priorityID = 3;
-    minusConcurrent.on('pointerdown', () => {
-      gameState.data.autoBuild.maxConcurrent = Math.max(1, gameState.data.autoBuild.maxConcurrent - 1);
-      commitAutoBuildConfig(`并发施工 ${gameState.data.autoBuild.maxConcurrent}`);
-    });
-    plusConcurrent.on('pointerdown', () => {
-      gameState.data.autoBuild.maxConcurrent = Math.min(4, gameState.data.autoBuild.maxConcurrent + 1);
-      commitAutoBuildConfig(`并发施工 ${gameState.data.autoBuild.maxConcurrent}`);
-    });
-    container.add(minusConcurrent);
-    container.add(plusConcurrent);
-    sy += unit(20);
-
-    const queueLabel = this.scene.add.text(unit(16), sy, `队列上限 ${autoBuild.queueCap}`, {
-      fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont,
-    });
-    container.add(queueLabel);
-    const queueMinus = this.scene.add.text(unit(84), sy - unit(1), '－', {
-      fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
-    }).setInteractive({ useHandCursor: true });
-    const queuePlus = this.scene.add.text(unit(102), sy - unit(1), '＋', {
-      fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
-    }).setInteractive({ useHandCursor: true });
-    if (queueMinus.input) (queueMinus.input as any).priorityID = 3;
-    if (queuePlus.input) (queuePlus.input as any).priorityID = 3;
-    queueMinus.on('pointerdown', () => {
-      gameState.data.autoBuild.queueCap = Math.max(2, gameState.data.autoBuild.queueCap - 1);
-      commitAutoBuildConfig(`施工队列上限 ${gameState.data.autoBuild.queueCap}`);
-    });
-    queuePlus.on('pointerdown', () => {
-      gameState.data.autoBuild.queueCap = Math.min(24, gameState.data.autoBuild.queueCap + 1);
-      commitAutoBuildConfig(`施工队列上限 ${gameState.data.autoBuild.queueCap}`);
-    });
-    container.add(queueMinus);
-    container.add(queuePlus);
-
-    const assignCrewBtn = this.scene.add.text(unit(136), sy, autoBuild.autoAssignBuilders ? '自动派工' : '手动派工', {
-      fontSize: fsTiny(10),
-      color: autoBuild.autoAssignBuilders ? '#4ade80' : '#94a3b8',
-      fontFamily: uiFont,
-      backgroundColor: '#0b1a2f',
-      padding: { x: unit(5), y: unit(2) },
-    }).setInteractive({ useHandCursor: true });
-    if (assignCrewBtn.input) (assignCrewBtn.input as any).priorityID = 3;
-    assignCrewBtn.on('pointerdown', () => {
-      gameState.data.autoBuild.autoAssignBuilders = !gameState.data.autoBuild.autoAssignBuilders;
-      commitAutoBuildConfig(gameState.data.autoBuild.autoAssignBuilders ? '施工自动派工已开启' : '施工自动派工已关闭');
-    });
-    container.add(assignCrewBtn);
-    sy += unit(16);
-
-    const crewModeBtn = this.scene.add.text(unit(16), sy, autoBuild.crewMode === 'workshop_only' ? '施工来源: 工坊专职' : '施工来源: 工坊+空闲', {
+    const compactOps = this.scene.add.text(leftX, sy, `自动建造: ${autoBuild.enabled ? '开' : '关'} · 并发${autoBuild.maxConcurrent} · 施工${activeTasks}/${autoBuild.maxConcurrent} · 队列${queueTasks}`, {
       fontSize: fsTiny(10),
       color: '#67e8f9',
       fontFamily: uiFont,
-      backgroundColor: '#0b1a2f',
-      padding: { x: unit(5), y: unit(2) },
-    }).setInteractive({ useHandCursor: true });
-    if (crewModeBtn.input) (crewModeBtn.input as any).priorityID = 3;
-    crewModeBtn.on('pointerdown', () => {
-      gameState.data.autoBuild.crewMode = gameState.data.autoBuild.crewMode === 'workshop_only' ? 'workshop_idle' : 'workshop_only';
-      commitAutoBuildConfig(gameState.data.autoBuild.crewMode === 'workshop_only' ? '施工仅工坊岗位参与' : '施工允许空闲伙伴参与');
+      wordWrap: { width: this.panelWidth - unit(32) },
     });
-    container.add(crewModeBtn);
-    const desiredCrewText = this.scene.add.text(unit(156), sy, `目标施工 ${autoBuild.desiredBuilderCount}`, {
-      fontSize: fsMeta(11), color: '#cbd5e1', fontFamily: uiFont,
-    });
-    container.add(desiredCrewText);
-    const crewMinus = this.scene.add.text(unit(224), sy - unit(1), '－', {
-      fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
-    }).setInteractive({ useHandCursor: true });
-    const crewPlus = this.scene.add.text(unit(240), sy - unit(1), '＋', {
-      fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
-    }).setInteractive({ useHandCursor: true });
-    if (crewMinus.input) (crewMinus.input as any).priorityID = 3;
-    if (crewPlus.input) (crewPlus.input as any).priorityID = 3;
-    crewMinus.on('pointerdown', () => {
-      gameState.data.autoBuild.desiredBuilderCount = Math.max(0, gameState.data.autoBuild.desiredBuilderCount - 1);
-      commitAutoBuildConfig(`施工岗位目标 ${gameState.data.autoBuild.desiredBuilderCount}`);
-    });
-    crewPlus.on('pointerdown', () => {
-      gameState.data.autoBuild.desiredBuilderCount = Math.min(12, gameState.data.autoBuild.desiredBuilderCount + 1);
-      commitAutoBuildConfig(`施工岗位目标 ${gameState.data.autoBuild.desiredBuilderCount}`);
-    });
-    container.add(crewMinus);
-    container.add(crewPlus);
-    sy += unit(20);
+    container.add(compactOps);
+    sy += compactOps.height + unit(4);
 
-    const focusRuleIds = ['wall', 'turret', 'generator', 'farm', 'storage', 'medical_station', 'room_quarters'];
-    const displayedRules = autoBuild.rules
-      .filter((rule) => focusRuleIds.includes(rule.buildingId))
-      .sort((a, b) => b.priority - a.priority)
-      .slice(0, mobilePortrait ? 4 : 6);
-    displayedRules.forEach((rule) => {
-      const ruleBuilding = BUILDING_DEFS[rule.buildingId];
-      if (!ruleBuilding) return;
-      const currentCount = gameState.data.buildings.filter((b) => b.id === rule.buildingId).length;
-      const pendingCount = constructionTasks.filter((task) => task.buildingId === rule.buildingId).length;
-      const rowY = sy;
-        const enabledFlag = rule.enabled ? '✓' : '□';
-        const rowColor = rule.enabled ? '#38bdf8' : '#64748b';
-        const toggleBtn = this.scene.add.text(unit(16), rowY, enabledFlag, {
-        fontSize: fsMeta(11), color: rowColor, fontFamily: uiFont,
-      }).setInteractive({ useHandCursor: true });
-      if (toggleBtn.input) (toggleBtn.input as any).priorityID = 3;
-      toggleBtn.on('pointerdown', () => {
-        rule.enabled = !rule.enabled;
-        commitAutoBuildConfig(`${ruleBuilding.nameCN}${rule.enabled ? '启用' : '停用'}自动建造`);
+    if (this.showAutoBuildDetails && sy + reserveForListHeader < topSectionLimit) {
+      const detailLines: string[] = [];
+      const warningLine = (base.ecologyWarnings || [])[0];
+      if (warningLine) detailLines.push(`⚠ ${warningLine}`);
+      if (slotParts.length > 0) detailLines.push(`岗位槽位: ${slotParts.join(' · ')}`);
+      detailLines.push(`金来源: 河流淘金 / 山洞挖矿 / 城区搜刮 / 夜战掉落`);
+      detailLines.push(`夜间策略: ${autoBuild.pauseAtNight ? '暂停施工' : '持续施工'} · ${autoBuild.autoAssignBuilders ? '自动派工' : '手动派工'}`);
+      BaseSystem.getAutoDutyBehaviorSummary().slice(0, 2).forEach((line) => detailLines.push(line));
+
+      const detailTop = sy;
+      const detailW = this.panelWidth - unit(24);
+      const detailPadding = unit(8);
+      const detailsMaxBottom = topSectionLimit - unit(4);
+      let detailY = detailTop + detailPadding;
+      const detailsMaxLines = mobilePortrait ? 5 : 4;
+      const shown = detailLines.slice(0, detailsMaxLines);
+      const detailContainer = this.scene.add.container(0, 0);
+
+      shown.forEach((line) => {
+        if (detailY + unit(16) > detailsMaxBottom) return;
+        const text = this.scene.add.text(unit(18), detailY, line, {
+          fontSize: fsTiny(10),
+          color: line.startsWith('⚠') ? '#fca5a5' : '#93c5fd',
+          fontFamily: uiFont,
+          wordWrap: { width: detailW - unit(20) },
+        });
+        detailContainer.add(text);
+        detailY += text.height + unit(3);
       });
-      container.add(toggleBtn);
 
-      container.add(this.scene.add.text(unit(30), rowY, `${ruleBuilding.nameCN} ${currentCount}/${rule.targetCount}`, {
-        fontSize: fsMeta(11), color: rowColor, fontFamily: uiFont,
-      }));
-      if (pendingCount > 0) {
-        container.add(this.scene.add.text(unit(128), rowY, `在建${pendingCount}`, {
-          fontSize: fsTiny(10), color: '#fbbf24', fontFamily: uiFont,
-        }));
+      if (detailLines.length > shown.length && detailY + unit(14) <= detailsMaxBottom) {
+        const more = this.scene.add.text(unit(18), detailY, `… 其余${detailLines.length - shown.length}项已折叠`, {
+          fontSize: fsTiny(10),
+          color: '#64748b',
+          fontFamily: uiFont,
+        });
+        detailContainer.add(more);
+        detailY += more.height + unit(2);
       }
-      container.add(this.scene.add.text(unit(164), rowY, `T${rule.maxTier}`, {
-        fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
-      }));
 
-      const minusBtn = this.scene.add.text(unit(188), rowY - unit(1), '－', {
-        fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
-      }).setInteractive({ useHandCursor: true });
-      const plusBtn = this.scene.add.text(unit(204), rowY - unit(1), '＋', {
-        fontSize: fsTiny(10), color: '#94a3b8', fontFamily: uiFont,
-      }).setInteractive({ useHandCursor: true });
-      if (minusBtn.input) (minusBtn.input as any).priorityID = 3;
-      if (plusBtn.input) (plusBtn.input as any).priorityID = 3;
-      minusBtn.on('pointerdown', () => {
-        rule.targetCount = Math.max(0, rule.targetCount - 1);
-        commitAutoBuildConfig(`${ruleBuilding.nameCN}目标 ${rule.targetCount}`);
-      });
-      plusBtn.on('pointerdown', () => {
-        rule.targetCount = Math.min(40, rule.targetCount + 1);
-        commitAutoBuildConfig(`${ruleBuilding.nameCN}目标 ${rule.targetCount}`);
-      });
-      container.add(minusBtn);
-      container.add(plusBtn);
-      sy += unit(14);
-    });
-
-    sy += unit(3);
-    container.add(this.scene.add.text(unit(16), sy, '施工队列', {
-      fontSize: fsTiny(10),
-      color: '#67e8f9',
-      fontFamily: uiFont,
-    }));
-    sy += unit(12);
-    const taskPreviewList = [...constructionTasks]
-      .sort((a, b) => {
-        if (a.status === b.status) return (a.queuedAt || 0) - (b.queuedAt || 0);
-        return a.status === 'active' ? -1 : 1;
-      })
-      .slice(0, mobilePortrait ? 2 : 3);
-    if (taskPreviewList.length <= 0) {
-      container.add(this.scene.add.text(unit(16), sy, '暂无施工任务', {
-        fontSize: fsTiny(9),
-        color: '#64748b',
-        fontFamily: uiFont,
-      }));
-      sy += unit(12);
-    } else {
-      taskPreviewList.forEach((task) => {
-        const buildingName = BUILDING_DEFS[task.buildingId]?.nameCN || task.buildingId;
-        const remainMs = Math.max(0, Number(task.durationMs || 0) - Number(task.progressMs || 0));
-        const remainSec = Math.ceil(remainMs / 1000);
-        const statusLabel = task.status === 'active' ? '施工中' : '排队中';
-        const statusColor = task.status === 'active' ? '#4ade80' : '#94a3b8';
-        container.add(this.scene.add.text(unit(16), sy, `${buildingName} · ${statusLabel}`, {
-          fontSize: fsTiny(9),
-          color: statusColor,
-          fontFamily: uiFont,
-        }));
-        container.add(this.scene.add.text(unit(156), sy, `剩余${remainSec}s`, {
-          fontSize: fsTiny(9),
-          color: '#cbd5e1',
-          fontFamily: uiFont,
-        }));
-        sy += unit(11);
-      });
+      const detailH = Math.max(unit(34), detailY - detailTop + detailPadding);
+      const detailBg = this.scene.add.rectangle(
+        this.panelWidth / 2,
+        detailTop + detailH / 2,
+        detailW,
+        detailH,
+        0x0b1220,
+        0.82
+      ).setStrokeStyle(1, 0x1e3a5f, 0.9);
+      container.add(detailBg);
+      container.add(detailContainer);
+      sy = detailTop + detailH + unit(6);
     }
+
+    sy = Math.min(sy, topSectionLimit);
 
     sy += unit(2);
     container.add(this.scene.add.rectangle(this.panelWidth / 2, sy, this.panelWidth - unit(24), 1, 0x1e3a5f, 0.8));
@@ -1308,7 +1085,7 @@ export class BasePanel extends SlidePanel {
 
     // ─── Scrollable companion list ─────────────────────────
     this.scrollAreaTop = sy;
-    this.scrollAreaHeight = Math.max(unit(120), h - sy - unit(10));
+    this.scrollAreaHeight = Math.max(minListHeightPx, h - sy - unit(10));
     this.scrollY = 0;
     this.maxScrollY = 0;
 

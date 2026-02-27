@@ -28,6 +28,54 @@ import {
 const KENNEY_RPG_SHEET_KEY = 'kenney_rpg_sheet';
 const KENNEY_RPG_SHEET_PATH = '/assets/kenney_roguelike-rpg-pack/Spritesheet/roguelikeSheet_transparent.png';
 const KENNEY_RPG_THEME_ENABLED = true;
+const USER_ASSET_OVERRIDES: Array<{ key: string; path: string }> = [
+  { key: 'bullet', path: '/assets/generated/user_upload/bullet.png' },
+  { key: 'bullet_scatter', path: '/assets/generated/user_upload/bullet_scatter.png' },
+  { key: 'bullet_pulse', path: '/assets/generated/user_upload/bullet_pulse.png' },
+  { key: 'bullet_flame', path: '/assets/generated/user_upload/bullet_flame.png' },
+  { key: 'bullet_pierce', path: '/assets/generated/user_upload/bullet_pierce.png' },
+  { key: 'bullet_cannon', path: '/assets/generated/user_upload/bullet_cannon.png' },
+  { key: 'bullet_frost', path: '/assets/generated/user_upload/bullet_frost.png' },
+  { key: 'bullet_chain', path: '/assets/generated/user_upload/bullet_chain.png' },
+  { key: 'companion', path: '/assets/generated/user_upload/companion.png' },
+  { key: 'companion_tank', path: '/assets/generated/user_upload/companion_tank.png' },
+  { key: 'companion_sniper', path: '/assets/generated/user_upload/companion_sniper.png' },
+  { key: 'companion_medic', path: '/assets/generated/user_upload/companion_medic.png' },
+  { key: 'companion_engineer', path: '/assets/generated/user_upload/companion_engineer.png' },
+  { key: 'companion_raider', path: '/assets/generated/user_upload/companion_raider.png' },
+  { key: 'companion_support', path: '/assets/generated/user_upload/companion_support.png' },
+  { key: 'companion_custom_s', path: '/assets/generated/user_upload/companion_custom_s.png' },
+  { key: 'companion_custom_n', path: '/assets/generated/user_upload/companion_custom_n.png' },
+  { key: 'companion_custom_w', path: '/assets/generated/user_upload/companion_custom_w.png' },
+  { key: 'companion_custom_e', path: '/assets/generated/user_upload/companion_custom_e.png' },
+  { key: 'companion_custom_attack_w', path: '/assets/generated/user_upload/companion_custom_attack_w.png' },
+  { key: 'user_base_tile_src', path: '/assets/基地背景圖塊.jpg' },
+  { key: 'user_workbench_src', path: '/assets/工作臺.jpg' },
+  { key: 'user_bunk_bed_src', path: '/assets/雙層床位.jpg' },
+  { key: 'user_medical_station_src', path: '/assets/醫療站.jpg' },
+  { key: 'user_room_quarters_src', path: '/assets/宿舍房間.jpg' },
+];
+
+const WORLD_BIOME_CITY_ASSETS: Array<{ key: string; path: string }> = [
+  { key: 'bg_city_01', path: '/assets/废墟城市 01.jpg' },
+  { key: 'bg_city_02', path: '/assets/废墟城市 02.jpg' },
+  { key: 'bg_city_03', path: '/assets/废墟城市 03.jpg' },
+  { key: 'bg_city_04', path: '/assets/废墟城市 04.jpg' },
+  { key: 'bg_city_05', path: '/assets/废墟城市 05.jpg' },
+  { key: 'bg_city_06', path: '/assets/废墟城市 06.jpg' },
+  { key: 'bg_city_07', path: '/assets/废墟城市 07.jpg' },
+];
+
+const WORLD_BIOME_FOREST_ASSETS: Array<{ key: string; path: string }> = [
+  { key: 'bg_forest_01', path: '/assets/森林01.jpg' },
+  { key: 'bg_forest_02', path: '/assets/森林 02.jpg' },
+  { key: 'bg_forest_03', path: '/assets/森林 03.jpg' },
+];
+
+const WORLD_BIOME_SNOW_ASSETS: Array<{ key: string; path: string }> = [
+  { key: 'bg_snow_01', path: '/assets/雪地 01.jpg' },
+  { key: 'bg_snow_02', path: '/assets/雪地 02.jpg' },
+];
 
 export default class BootScene extends Phaser.Scene {
   constructor() {
@@ -55,6 +103,7 @@ export default class BootScene extends Phaser.Scene {
     this.preloadKenneyRpgSheet();
     this.preloadV2SpriteSheets();
     this.preloadCustomHeroRawSprites();
+    this.preloadWorldBiomeBackgrounds();
   }
 
   create(): void {
@@ -73,6 +122,7 @@ export default class BootScene extends Phaser.Scene {
     this.generateCharacterRoleSprites();
     this.generateProjectileSprites();
     this.generateProtocolUiTextures();
+    this.generateHudIconSet();
     this.generateMiniGameUiSkinTextures();
     this.generateMiniGameObjectAtlasTextures();
     this.generateStructureSprites();
@@ -111,13 +161,85 @@ export default class BootScene extends Phaser.Scene {
     canvas.refresh();
   }
 
+  private drawCanvasTextureForce(
+    key: string,
+    width: number,
+    height: number,
+    painter: (ctx: CanvasRenderingContext2D, w: number, h: number) => void
+  ): void {
+    if (this.textures.exists(key)) this.textures.remove(key);
+    const canvas = this.textures.createCanvas(key, width, height);
+    if (!canvas) return;
+    const ctx = canvas.getContext();
+    ctx.clearRect(0, 0, width, height);
+    painter(ctx, width, height);
+    canvas.refresh();
+  }
+
+  private drawSourceToTexture(
+    sourceKey: string,
+    targetKey: string,
+    width: number,
+    height: number,
+    options?: {
+      fit?: 'cover' | 'contain';
+      padding?: number;
+      force?: boolean;
+      smoothing?: boolean;
+      yOffset?: number;
+      overlay?: string;
+    }
+  ): boolean {
+    const source = this.getSourceImage(sourceKey);
+    if (!source) return false;
+    const fit = options?.fit ?? 'contain';
+    const padding = Phaser.Math.Clamp(Math.floor(options?.padding ?? 0), 0, Math.floor(Math.min(width, height) / 2));
+    const force = options?.force ?? true;
+
+    if (force && this.textures.exists(targetKey)) this.textures.remove(targetKey);
+    if (this.textures.exists(targetKey)) return true;
+
+    const canvas = this.textures.createCanvas(targetKey, width, height);
+    if (!canvas) return false;
+    const ctx = canvas.getContext();
+    const srcW = Math.max(1, Math.floor((source as any).width || 0));
+    const srcH = Math.max(1, Math.floor((source as any).height || 0));
+    if (srcW < 2 || srcH < 2) return false;
+
+    const innerW = Math.max(1, width - padding * 2);
+    const innerH = Math.max(1, height - padding * 2);
+    const scale = fit === 'cover'
+      ? Math.max(innerW / srcW, innerH / srcH)
+      : Math.min(innerW / srcW, innerH / srcH);
+    const drawW = Math.max(1, Math.round(srcW * scale));
+    const drawH = Math.max(1, Math.round(srcH * scale));
+    const dx = Math.round(padding + (innerW - drawW) * 0.5);
+    const dy = Math.round(padding + (innerH - drawH) * 0.5 + (options?.yOffset ?? 0));
+
+    ctx.clearRect(0, 0, width, height);
+    ctx.imageSmoothingEnabled = options?.smoothing ?? true;
+    ctx.drawImage(source, 0, 0, srcW, srcH, dx, dy, drawW, drawH);
+    if (options?.overlay) {
+      ctx.fillStyle = options.overlay;
+      ctx.fillRect(0, 0, width, height);
+    }
+    canvas.refresh();
+    return true;
+  }
+
   private preloadAssetOverrides(): void {
     const loadedKeys = new Set<string>();
+    for (const override of USER_ASSET_OVERRIDES) {
+      if (!override.key || !override.path) continue;
+      if (loadedKeys.has(override.key)) continue;
+      loadedKeys.add(override.key);
+      this.load.image(override.key, encodeURI(override.path));
+    }
     for (const override of ASSET_OVERRIDES) {
       if (!override.key || !override.path) continue;
       if (loadedKeys.has(override.key)) continue;
       loadedKeys.add(override.key);
-      this.load.image(override.key, override.path);
+      this.load.image(override.key, encodeURI(override.path));
     }
   }
 
@@ -139,6 +261,19 @@ export default class BootScene extends Phaser.Scene {
       if (!key || !path) return;
       if (this.textures.exists(key)) return;
       this.load.image(key, path);
+    });
+  }
+
+  private preloadWorldBiomeBackgrounds(): void {
+    const assets = [
+      ...WORLD_BIOME_CITY_ASSETS,
+      ...WORLD_BIOME_FOREST_ASSETS,
+      ...WORLD_BIOME_SNOW_ASSETS,
+    ];
+    assets.forEach((asset) => {
+      if (!asset.key || !asset.path) return;
+      if (this.textures.exists(asset.key)) return;
+      this.load.image(asset.key, encodeURI(asset.path));
     });
   }
 
@@ -254,6 +389,201 @@ export default class BootScene extends Phaser.Scene {
     const frame = texture?.get('__BASE') || texture?.get(0);
     const source = frame?.source?.image as CanvasImageSource | undefined;
     return source || null;
+  }
+
+  private getWorldBiomeSourceImages(keys: string[]): CanvasImageSource[] {
+    const out: CanvasImageSource[] = [];
+    keys.forEach((key) => {
+      const src = this.getSourceImage(key);
+      if (!src) return;
+      const w = Math.floor((src as any).width || 0);
+      const h = Math.floor((src as any).height || 0);
+      if (w < 32 || h < 32) return;
+      out.push(src);
+    });
+    return out;
+  }
+
+  private drawBiomeTileFromSources(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    sources: CanvasImageSource[],
+    tint?: string
+  ): boolean {
+    if (!sources.length) return false;
+    const cell = Math.max(24, Math.floor(Math.min(width, height) / 3));
+    ctx.imageSmoothingEnabled = true;
+    for (let y = 0; y < height; y += cell) {
+      for (let x = 0; x < width; x += cell) {
+        const src = Phaser.Utils.Array.GetRandom(sources);
+        const srcW = Math.max(32, Math.floor((src as any).width || 0));
+        const srcH = Math.max(32, Math.floor((src as any).height || 0));
+        const minSide = Math.max(48, Math.floor(Math.min(srcW, srcH) * 0.34));
+        const maxSide = Math.max(minSide + 4, Math.floor(Math.min(srcW, srcH) * 0.7));
+        const sw = Phaser.Math.Between(minSide, maxSide);
+        const sh = Phaser.Math.Between(minSide, maxSide);
+        const sx = Phaser.Math.Between(0, Math.max(0, srcW - sw));
+        const sy = Phaser.Math.Between(0, Math.max(0, srcH - sh));
+        ctx.drawImage(src, sx, sy, sw, sh, x, y, cell + 1, cell + 1);
+      }
+    }
+    if (tint) {
+      ctx.fillStyle = tint;
+      ctx.fillRect(0, 0, width, height);
+    }
+    return true;
+  }
+
+  private drawClassifiedWorldBaseMap(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number
+  ): boolean {
+    const citySources = this.getWorldBiomeSourceImages(WORLD_BIOME_CITY_ASSETS.map((it) => it.key));
+    const forestSources = this.getWorldBiomeSourceImages(WORLD_BIOME_FOREST_ASSETS.map((it) => it.key));
+    const snowSources = this.getWorldBiomeSourceImages(WORLD_BIOME_SNOW_ASSETS.map((it) => it.key));
+    if (!citySources.length && !forestSources.length && !snowSources.length) return false;
+
+    const allSources = [...citySources, ...forestSources, ...snowSources];
+    const pickPool = (zone: 'base' | 'river' | 'forest' | 'city' | 'cave' | 'wasteland'): CanvasImageSource[] => {
+      if (zone === 'city') return citySources.length ? citySources : allSources;
+      if (zone === 'forest') return forestSources.length ? forestSources : allSources;
+      if (zone === 'base') return citySources.length ? citySources : allSources;
+      return snowSources.length ? snowSources : (forestSources.length ? forestSources : allSources);
+    };
+
+    const isInsideBaseArea = (x: number, y: number) => x > 780 && x < 1220 && y > 530 && y < 970;
+    const isInsideRiver = (x: number, y: number) => {
+      const main = x >= 300 && x <= 480 && y >= 100 && y <= 1410;
+      const branch = x >= 380 && x <= 720 && y >= 1020 && y <= 1190;
+      const upper = x >= 350 && x <= 590 && y >= 180 && y <= 470;
+      return main || branch || upper;
+    };
+    const getZoneAt = (x: number, y: number): 'base' | 'river' | 'forest' | 'city' | 'cave' | 'wasteland' => {
+      if (isInsideBaseArea(x, y)) return 'base';
+      if (isInsideRiver(x, y)) return 'river';
+      if (x >= 1470 && x <= 1860 && y >= 980 && y <= 1400) return 'cave';
+      if (x >= 1260 && x <= 1910 && y >= 100 && y <= 760) return 'forest';
+      if (x >= 80 && x <= 620 && y >= 100 && y <= 730) return 'city';
+      return 'wasteland';
+    };
+
+    const drawCoverPatch = (
+      src: CanvasImageSource,
+      dx: number,
+      dy: number,
+      dw: number,
+      dh: number
+    ) => {
+      const srcW = Math.max(64, Math.floor((src as any).width || 0));
+      const srcH = Math.max(64, Math.floor((src as any).height || 0));
+      const dstRatio = dw / Math.max(1, dh);
+      const srcRatio = srcW / Math.max(1, srcH);
+      let sw = srcW;
+      let sh = srcH;
+      if (srcRatio > dstRatio) {
+        sh = srcH;
+        sw = Math.floor(sh * dstRatio);
+      } else {
+        sw = srcW;
+        sh = Math.floor(sw / Math.max(0.01, dstRatio));
+      }
+      sw = Phaser.Math.Clamp(sw, 48, srcW);
+      sh = Phaser.Math.Clamp(sh, 48, srcH);
+      const sxBase = Math.max(0, Math.floor((srcW - sw) * 0.5));
+      const syBase = Math.max(0, Math.floor((srcH - sh) * 0.5));
+      const jitterX = Math.floor((srcW - sw) * 0.28);
+      const jitterY = Math.floor((srcH - sh) * 0.28);
+      const sx = Phaser.Math.Clamp(
+        sxBase + Phaser.Math.Between(-jitterX, jitterX),
+        0,
+        Math.max(0, srcW - sw)
+      );
+      const sy = Phaser.Math.Clamp(
+        syBase + Phaser.Math.Between(-jitterY, jitterY),
+        0,
+        Math.max(0, srcH - sh)
+      );
+      ctx.drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh);
+    };
+
+    const tintByZone: Record<'base' | 'river' | 'forest' | 'city' | 'cave' | 'wasteland', string> = {
+      base: 'rgba(28, 44, 66, 0.18)',
+      river: 'rgba(26, 136, 196, 0.14)',
+      forest: 'rgba(18, 74, 40, 0.14)',
+      city: 'rgba(26, 32, 48, 0.14)',
+      cave: 'rgba(80, 108, 148, 0.11)',
+      wasteland: 'rgba(96, 110, 128, 0.11)',
+    };
+
+    ctx.fillStyle = '#0a1220';
+    ctx.fillRect(0, 0, width, height);
+    ctx.imageSmoothingEnabled = true;
+    const tileW = 224;
+    const tileH = 168;
+    for (let y = 0; y < height; y += tileH) {
+      for (let x = 0; x < width; x += tileW) {
+        const drawW = Math.min(tileW, width - x);
+        const drawH = Math.min(tileH, height - y);
+        const zone = getZoneAt(x + drawW * 0.5, y + drawH * 0.5);
+        const pool = pickPool(zone);
+        if (pool.length) {
+          const src = Phaser.Utils.Array.GetRandom(pool);
+          drawCoverPatch(src, x, y, drawW, drawH);
+        } else {
+          ctx.fillStyle = '#111a2b';
+          ctx.fillRect(x, y, drawW, drawH);
+        }
+        ctx.fillStyle = tintByZone[zone];
+        ctx.fillRect(x, y, drawW, drawH);
+      }
+    }
+
+    // Keep the gameplay-readable road / river silhouettes on top of photos.
+    ctx.fillStyle = 'rgba(26, 126, 182, 0.28)';
+    ctx.fillRect(292, 90, 168, 1320);
+    ctx.fillStyle = 'rgba(40, 156, 216, 0.22)';
+    ctx.fillRect(380, 1020, 346, 176);
+    ctx.fillStyle = 'rgba(40, 156, 216, 0.19)';
+    ctx.fillRect(352, 176, 224, 298);
+    for (let i = 0; i < 42; i += 1) {
+      const rx = 308 + Math.random() * 410;
+      const ry = 120 + Math.random() * 1290;
+      const rw = 10 + Math.random() * 24;
+      const rh = 2 + Math.random() * 7;
+      ctx.fillStyle = 'rgba(205, 235, 255, 0.16)';
+      ctx.beginPath();
+      ctx.ellipse(rx, ry, rw, rh, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = 'rgba(12, 18, 30, 0.78)';
+    ctx.fillRect(width / 2 - 36, 0, 72, height);
+    ctx.fillRect(210, height / 2 - 36, 1580, 72);
+    ctx.fillRect(192, 302, 290, 58);
+    ctx.fillRect(1330, 366, 370, 56);
+    ctx.fillRect(1320, 1080, 360, 56);
+    ctx.fillStyle = 'rgba(199, 214, 235, 0.42)';
+    for (let y = 16; y < height; y += 30) ctx.fillRect(width / 2 - 4, y, 8, 14);
+    for (let x = 240; x < 1760; x += 30) ctx.fillRect(x, height / 2 - 4, 14, 8);
+
+    const centerGlow = ctx.createRadialGradient(width / 2, height / 2, 80, width / 2, height / 2, 520);
+    centerGlow.addColorStop(0, 'rgba(255, 214, 143, 0.09)');
+    centerGlow.addColorStop(0.6, 'rgba(127, 200, 255, 0.048)');
+    centerGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = centerGlow;
+    ctx.fillRect(width / 2 - 540, height / 2 - 540, 1080, 1080);
+
+    const vignette = ctx.createRadialGradient(width / 2, height / 2, 520, width / 2, height / 2, 1150);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.26)');
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.018)';
+    for (let y = 0; y < height; y += 4) ctx.fillRect(0, y, width, 1);
+    return true;
   }
 
   private pickEdgeReferenceColors(
@@ -919,21 +1249,8 @@ export default class BootScene extends Phaser.Scene {
   }
 
   private generateProjectileSprites(): void {
-    // Always use handcrafted pixel-magic bullets.
-    // We intentionally override any pack-provided projectile tiles to keep readability consistent.
-    const projectileKeys = [
-      'bullet',
-      'bullet_scatter',
-      'bullet_pulse',
-      'bullet_flame',
-      'bullet_pierce',
-      'bullet_cannon',
-      'bullet_frost',
-      'bullet_chain',
-    ];
-    projectileKeys.forEach((key) => {
-      if (this.textures.exists(key)) this.textures.remove(key);
-    });
+    // Keep user-provided or pack-provided projectile textures when available.
+    // Only generate handcrafted fallbacks for missing keys.
 
     this.drawTexture('bullet', 16, 16, (g) => {
       g.fillStyle(0x071022);
@@ -1150,6 +1467,168 @@ export default class BootScene extends Phaser.Scene {
       g.fillStyle(0xbfdbfe, 0.92);
       g.fillRect(12, 12, 4, 2);
       g.fillRect(13, 10, 2, 6);
+    });
+  }
+
+  private generateHudIconSet(): void {
+    const size = 18;
+    const px = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string, w = 1, h = 1) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+    };
+    const basePlate = (ctx: CanvasRenderingContext2D, tint = '#0b1627') => {
+      px(ctx, 1, 1, tint, 16, 16);
+      px(ctx, 1, 1, '#35506d', 16, 1);
+      px(ctx, 1, 1, '#35506d', 1, 16);
+      px(ctx, 1, 16, '#162538', 16, 1);
+      px(ctx, 16, 1, '#162538', 1, 16);
+      px(ctx, 2, 2, '#4f6f8d', 1, 1);
+    };
+    const draw = (key: string, painter: (ctx: CanvasRenderingContext2D) => void) => {
+      this.drawCanvasTextureForce(key, size, size, (ctx) => {
+        ctx.clearRect(0, 0, size, size);
+        ctx.imageSmoothingEnabled = false;
+        painter(ctx);
+      });
+    };
+
+    draw('icon_wood', (ctx) => {
+      basePlate(ctx, '#1f1728');
+      px(ctx, 4, 6, '#5a371f', 10, 3);
+      px(ctx, 4, 10, '#6c4426', 10, 3);
+      px(ctx, 3, 7, '#d6a16f', 2, 1);
+      px(ctx, 13, 7, '#d6a16f', 2, 1);
+      px(ctx, 7, 7, '#bf8552', 4, 1);
+      px(ctx, 6, 11, '#d6a16f', 4, 1);
+    });
+
+    draw('icon_metal', (ctx) => {
+      basePlate(ctx, '#141b2a');
+      px(ctx, 3, 8, '#62748d', 12, 5);
+      px(ctx, 4, 7, '#89a2bc', 10, 1);
+      px(ctx, 5, 9, '#b9d0e8', 6, 1);
+      px(ctx, 12, 10, '#4d6178', 2, 2);
+    });
+
+    draw('icon_scrap', (ctx) => {
+      basePlate(ctx, '#151d2c');
+      px(ctx, 7, 5, '#6f8499', 4, 8);
+      px(ctx, 5, 7, '#6f8499', 8, 4);
+      px(ctx, 8, 8, '#c7d8ea', 2, 2);
+      px(ctx, 5, 5, '#495d73', 2, 2);
+      px(ctx, 11, 5, '#495d73', 2, 2);
+      px(ctx, 5, 11, '#495d73', 2, 2);
+      px(ctx, 11, 11, '#495d73', 2, 2);
+    });
+
+    draw('icon_food', (ctx) => {
+      basePlate(ctx, '#241d12');
+      px(ctx, 4, 8, '#9a6a35', 10, 5);
+      px(ctx, 5, 7, '#cb8a45', 8, 1);
+      px(ctx, 7, 5, '#41b55f', 4, 2);
+      px(ctx, 8, 9, '#e15f58', 2, 2);
+      px(ctx, 6, 10, '#efb153', 2, 2);
+      px(ctx, 11, 10, '#f0d06e', 2, 2);
+    });
+
+    draw('icon_water', (ctx) => {
+      basePlate(ctx, '#102233');
+      px(ctx, 7, 4, '#2f84ca', 4, 9);
+      px(ctx, 8, 3, '#54b4ff', 2, 1);
+      px(ctx, 8, 5, '#8ad8ff', 2, 6);
+      px(ctx, 7, 12, '#2f84ca', 4, 1);
+    });
+
+    draw('icon_medical', (ctx) => {
+      basePlate(ctx, '#27111a');
+      px(ctx, 7, 5, '#f05d72', 4, 8);
+      px(ctx, 5, 7, '#f05d72', 8, 4);
+      px(ctx, 8, 6, '#ffd9e0', 2, 1);
+      px(ctx, 8, 11, '#ffd9e0', 2, 1);
+    });
+
+    draw('icon_ammo', (ctx) => {
+      basePlate(ctx, '#241b14');
+      px(ctx, 4, 6, '#d2a15f', 3, 6);
+      px(ctx, 8, 5, '#dbad65', 3, 7);
+      px(ctx, 12, 6, '#d2a15f', 3, 6);
+      px(ctx, 4, 5, '#f4d193', 3, 1);
+      px(ctx, 8, 4, '#f4d193', 3, 1);
+      px(ctx, 12, 5, '#f4d193', 3, 1);
+      px(ctx, 4, 12, '#6e5235', 3, 1);
+      px(ctx, 8, 12, '#6e5235', 3, 1);
+      px(ctx, 12, 12, '#6e5235', 3, 1);
+    });
+
+    const corePainter = (ctx: CanvasRenderingContext2D) => {
+      basePlate(ctx, '#1a1233');
+      px(ctx, 6, 4, '#6b4ad3', 6, 10);
+      px(ctx, 7, 5, '#8d6cff', 4, 8);
+      px(ctx, 8, 7, '#c7b5ff', 2, 4);
+      px(ctx, 7, 8, '#c7b5ff', 4, 2);
+      px(ctx, 8, 8, '#f2ecff', 1, 1);
+    };
+    draw('icon_core', corePainter);
+    draw('icon_energyCore', corePainter);
+
+    draw('icon_bitcoin', (ctx) => {
+      basePlate(ctx, '#2c1f0c');
+      px(ctx, 4, 4, '#d99614', 10, 10);
+      px(ctx, 5, 5, '#f2b938', 8, 8);
+      px(ctx, 8, 6, '#fff0ad', 1, 6);
+      px(ctx, 10, 6, '#fff0ad', 1, 6);
+      px(ctx, 8, 7, '#ffe07e', 3, 1);
+      px(ctx, 8, 10, '#ffe07e', 3, 1);
+      px(ctx, 8, 12, '#ffe07e', 3, 1);
+    });
+
+    draw('icon_power', (ctx) => {
+      basePlate(ctx, '#221d11');
+      px(ctx, 8, 3, '#f5b21d', 3, 4);
+      px(ctx, 7, 7, '#f5b21d', 3, 4);
+      px(ctx, 9, 10, '#f5b21d', 3, 4);
+      px(ctx, 8, 4, '#ffe48f', 2, 1);
+      px(ctx, 8, 8, '#ffe48f', 2, 1);
+    });
+
+    draw('icon_glasses', (ctx) => {
+      basePlate(ctx, '#0f1f33');
+      px(ctx, 3, 7, '#1e3852', 12, 4);
+      px(ctx, 4, 6, '#2e5378', 4, 6);
+      px(ctx, 10, 6, '#2e5378', 4, 6);
+      px(ctx, 5, 7, '#7ad7ff', 2, 3);
+      px(ctx, 11, 7, '#7ad7ff', 2, 3);
+      px(ctx, 8, 8, '#0b121d', 2, 2);
+    });
+
+    draw('icon_bullet_tree', (ctx) => {
+      basePlate(ctx, '#0f1c2d');
+      px(ctx, 8, 4, '#2a455f', 2, 10);
+      px(ctx, 5, 8, '#2a455f', 8, 2);
+      px(ctx, 4, 5, '#56c5ff', 3, 3);
+      px(ctx, 11, 5, '#56c5ff', 3, 3);
+      px(ctx, 8, 11, '#56c5ff', 3, 3);
+      px(ctx, 5, 6, '#c9f0ff', 1, 1);
+      px(ctx, 12, 6, '#c9f0ff', 1, 1);
+      px(ctx, 9, 12, '#c9f0ff', 1, 1);
+    });
+
+    draw('icon_group', (ctx) => {
+      basePlate(ctx, '#101f32');
+      px(ctx, 5, 10, '#4e6781', 8, 4);
+      px(ctx, 5, 5, '#89b7e4', 3, 4);
+      px(ctx, 10, 4, '#89b7e4', 3, 5);
+      px(ctx, 11, 5, '#d8ecff', 1, 1);
+      px(ctx, 6, 6, '#d8ecff', 1, 1);
+    });
+
+    draw('icon_protocol', (ctx) => {
+      basePlate(ctx, '#0f1d31');
+      px(ctx, 4, 4, '#2f5679', 10, 10);
+      px(ctx, 5, 5, '#173149', 8, 8);
+      px(ctx, 8, 6, '#7ce1ff', 2, 6);
+      px(ctx, 6, 8, '#7ce1ff', 6, 2);
+      px(ctx, 8, 8, '#ddf8ff', 2, 2);
     });
   }
 
@@ -1479,6 +1958,31 @@ export default class BootScene extends Phaser.Scene {
   }
 
   private generateStructureSprites(): void {
+    this.drawSourceToTexture('user_workbench_src', 'workbench', 64, 64, {
+      fit: 'contain',
+      padding: 2,
+      smoothing: true,
+      force: true,
+    });
+    this.drawSourceToTexture('user_medical_station_src', 'medical_station', 64, 64, {
+      fit: 'contain',
+      padding: 2,
+      smoothing: true,
+      force: true,
+    });
+    this.drawSourceToTexture('user_room_quarters_src', 'room_quarters', 64, 64, {
+      fit: 'contain',
+      padding: 2,
+      smoothing: true,
+      force: true,
+    });
+    this.drawSourceToTexture('user_bunk_bed_src', 'bunk_bed', 64, 64, {
+      fit: 'contain',
+      padding: 2,
+      smoothing: true,
+      force: true,
+    });
+
     this.drawTexture('wall', 64, 64, (g) => {
       // Steel wall module: full tile with beams and rivets.
       g.fillStyle(0x121a27);
@@ -2308,7 +2812,8 @@ export default class BootScene extends Phaser.Scene {
   }
 
   private generateTerrainTextures(): void {
-    this.drawCanvasTexture('world_base_map', 2000, 1500, (ctx, w, h) => {
+    this.drawCanvasTextureForce('world_base_map', 2000, 1500, (ctx, w, h) => {
+      if (this.drawClassifiedWorldBaseMap(ctx, w, h)) return;
       ctx.fillStyle = '#070c16';
       ctx.fillRect(0, 0, w, h);
 
@@ -2409,6 +2914,8 @@ export default class BootScene extends Phaser.Scene {
     });
 
     this.drawCanvasTexture('zone_city_tile', 128, 128, (ctx, w, h) => {
+      const sources = this.getWorldBiomeSourceImages(WORLD_BIOME_CITY_ASSETS.map((it) => it.key));
+      if (this.drawBiomeTileFromSources(ctx, w, h, sources, 'rgba(12, 18, 28, 0.24)')) return;
       ctx.fillStyle = '#1a2130';
       ctx.fillRect(0, 0, w, h);
       for (let i = 0; i < 160; i++) {
@@ -2434,6 +2941,8 @@ export default class BootScene extends Phaser.Scene {
     });
 
     this.drawCanvasTexture('zone_jungle_tile', 128, 128, (ctx, w, h) => {
+      const sources = this.getWorldBiomeSourceImages(WORLD_BIOME_FOREST_ASSETS.map((it) => it.key));
+      if (this.drawBiomeTileFromSources(ctx, w, h, sources, 'rgba(9, 42, 22, 0.22)')) return;
       ctx.fillStyle = '#102818';
       ctx.fillRect(0, 0, w, h);
       for (let i = 0; i < 240; i++) {
@@ -2454,6 +2963,8 @@ export default class BootScene extends Phaser.Scene {
     });
 
     this.drawCanvasTexture('zone_wasteland_tile', 128, 128, (ctx, w, h) => {
+      const sources = this.getWorldBiomeSourceImages(WORLD_BIOME_SNOW_ASSETS.map((it) => it.key));
+      if (this.drawBiomeTileFromSources(ctx, w, h, sources, 'rgba(26, 32, 44, 0.24)')) return;
       ctx.fillStyle = '#2b2117';
       ctx.fillRect(0, 0, w, h);
       for (let i = 0; i < 190; i++) {
@@ -2474,6 +2985,8 @@ export default class BootScene extends Phaser.Scene {
     });
 
     this.drawCanvasTexture('zone_industry_tile', 128, 128, (ctx, w, h) => {
+      const sources = this.getWorldBiomeSourceImages(WORLD_BIOME_CITY_ASSETS.map((it) => it.key));
+      if (this.drawBiomeTileFromSources(ctx, w, h, sources, 'rgba(17, 24, 39, 0.34)')) return;
       ctx.fillStyle = '#171a26';
       ctx.fillRect(0, 0, w, h);
       for (let i = 0; i < 180; i++) {
@@ -2494,6 +3007,14 @@ export default class BootScene extends Phaser.Scene {
     });
 
     this.drawCanvasTexture('zone_road_tile', 128, 128, (ctx, w, h) => {
+      const citySources = this.getWorldBiomeSourceImages(WORLD_BIOME_CITY_ASSETS.map((it) => it.key));
+      const snowSources = this.getWorldBiomeSourceImages(WORLD_BIOME_SNOW_ASSETS.map((it) => it.key));
+      const sources = [...citySources, ...snowSources];
+      if (this.drawBiomeTileFromSources(ctx, w, h, sources, 'rgba(10, 17, 28, 0.42)')) {
+        ctx.fillStyle = 'rgba(210, 224, 242, 0.35)';
+        for (let i = 0; i < 7; i += 1) ctx.fillRect(10 + i * 16, 60, 8, 4);
+        return;
+      }
       ctx.fillStyle = '#131722';
       ctx.fillRect(0, 0, w, h);
       for (let i = 0; i < 130; i++) {
@@ -2736,6 +3257,20 @@ export default class BootScene extends Phaser.Scene {
   }
 
   private generateVillageTextures(): void {
+    if (this.textures.exists('user_base_tile_src')) {
+      const makeBaseTile = (targetKey: string, overlay?: string) => {
+        this.drawSourceToTexture('user_base_tile_src', targetKey, 64, 64, {
+          fit: 'cover',
+          smoothing: true,
+          force: true,
+          overlay,
+        });
+      };
+      makeBaseTile('village_ground');
+      makeBaseTile('village_path', 'rgba(12, 18, 28, 0.08)');
+      return;
+    }
+
     this.drawCanvasTexture('village_ground', 64, 64, (ctx, w, h) => {
       ctx.fillStyle = '#1a2430';
       ctx.fillRect(0, 0, w, h);
