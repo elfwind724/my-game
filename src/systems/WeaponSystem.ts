@@ -402,9 +402,9 @@ export class WeaponSystem {
             }
         };
 
-        if (weaponType === 'pistol' && shotIndex % cadence(4) === 0) {
+        if (weaponType === 'pistol' && shotIndex % cadence(5) === 0) {
             emitArc(
-                5 + Math.min(4, patternPower),
+                3 + Math.min(3, patternPower),
                 30 + patternPower * 6,
                 1.3,
                 0.94,
@@ -415,14 +415,14 @@ export class WeaponSystem {
                     swayFrequency: 0.013 + (index / Math.max(1, total)) * 0.002,
                 })
             );
-            if (patternPower >= 2 && shotIndex % cadence(6) === 0) {
-                emitRadial(8 + Math.min(5, patternPower), 1.12, 0.8, 'chain', 1.04);
+            if (patternPower >= 2 && shotIndex % cadence(8) === 0) {
+                emitRadial(6 + Math.min(3, patternPower), 1.12, 0.8, 'chain', 1.04);
             }
             return;
         }
-        if (weaponType === 'shotgun' && shotIndex % cadence(2) === 0) {
+        if (weaponType === 'shotgun' && shotIndex % cadence(3) === 0) {
             emitArc(
-                10 + Math.min(5, patternPower),
+                6 + Math.min(3, patternPower),
                 86 + patternPower * 7,
                 1.02,
                 0.72,
@@ -457,9 +457,9 @@ export class WeaponSystem {
             }
             return;
         }
-        if (weaponType === 'flamethrower' && shotIndex % cadence(6) === 0) {
+        if (weaponType === 'flamethrower' && shotIndex % cadence(8) === 0) {
             emitArc(
-                11 + Math.min(6, patternPower),
+                6 + Math.min(4, patternPower),
                 108 + patternPower * 8,
                 0.94,
                 0.74,

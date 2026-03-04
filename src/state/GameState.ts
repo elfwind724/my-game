@@ -379,7 +379,7 @@ const DEFAULT_STATS: PlayerStats = {
   maxHealth: 100,
   damage: 10,
   fireRate: 400,
-  moveSpeed: 200,
+  moveSpeed: 300,
   armor: 0,
   critChance: 5,
   critDamage: 150,
