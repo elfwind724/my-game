@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser';
 import { events, GameEvents } from '../utils/EventBus';
-import { ENEMY_DEFS } from '../data/enemies';
+import { getEnemiesForWeek, getEnemyForWeek } from '../data/enemies';
 import { gameState } from '../state/GameState';
 import {
     ENEMY_V2_TEXTURE_KEYS,
@@ -76,6 +76,21 @@ export class EnemySystem {
     }
 
     public spawnEnemy(wave: number, day: number): void {
+        const week = Math.max(1, Math.ceil(day / 7));
+        const availableTypes = getEnemiesForWeek(week);
+        if (availableTypes.length === 0) return;
+
+        const totalWeight = availableTypes.reduce((sum, t) => sum + t.spawnWeight, 0);
+        let roll = Math.random() * totalWeight;
+        let selectedDef = availableTypes[0];
+        for (const t of availableTypes) {
+            roll -= t.spawnWeight;
+            if (roll <= 0) { selectedDef = t; break; }
+        }
+
+        const scaled = getEnemyForWeek(selectedDef.id, week);
+        if (!scaled) return;
+
         const side = Phaser.Math.Between(0, 3);
         let x: number, y: number;
         switch (side) {
@@ -94,54 +109,60 @@ export class EnemySystem {
         const cY = Phaser.Math.Clamp(y, 50, 1450);
         const diffMult = 1 + (wave - 1) * 0.1 + (day - 1) * 0.15;
 
-        let enemyType = 'zombie';
-        let baseHealth = 30;
-        let baseSpeed = 60;
-        const roll = Math.random();
-        if (wave >= 3 && roll < 0.2) { enemyType = 'runner'; baseHealth = 20; baseSpeed = 100; }
-        else if (wave >= 5 && roll < 0.15) { enemyType = 'tank'; baseHealth = 80; baseSpeed = 35; }
+        let texture = 'zombie';
+        if (scaled.size >= 25) texture = 'tank';
+        else if (scaled.size <= 11) texture = 'runner';
+        if (this.scene.textures.exists(scaled.id)) texture = scaled.id;
 
-        const enemy = this.enemies.get(cX, cY, enemyType) as Phaser.Physics.Arcade.Sprite;
+        const enemy = this.enemies.get(cX, cY, texture) as Phaser.Physics.Arcade.Sprite;
         if (!enemy) return;
 
-        const v2Archetype = mapLegacyEnemyTypeToV2Archetype(enemyType);
+        const v2Archetype = mapLegacyEnemyTypeToV2Archetype(texture);
         const v2TextureKey = ENEMY_V2_TEXTURE_KEYS[v2Archetype];
         const useV2Texture = this.scene.textures.exists(v2TextureKey);
 
         enemy.enableBody(true, cX, cY, true, true);
         enemy.setActive(true).setVisible(true);
-        enemy.setTexture(useV2Texture ? v2TextureKey : enemyType);
+        enemy.setTexture(useV2Texture ? v2TextureKey : texture);
+        enemy.setTint(scaled.color);
         enemy.setCollideWorldBounds(true);
 
         if (enemy.body) {
             const body = enemy.body as Phaser.Physics.Arcade.Body;
-            body.setSize(24, 24);
-            body.setOffset((enemy.width - 24) / 2, (enemy.height - 24) / 2);
+            const bodySize = Math.max(16, scaled.size);
+            body.setSize(bodySize, bodySize);
+            body.setOffset((enemy.width - bodySize) / 2, (enemy.height - bodySize) / 2);
             body.setBounce(0.1, 0.1);
         }
 
+        const spriteScale = Math.max(1.2, Math.min(scaled.size / 12, 3.2));
+        enemy.setScale(spriteScale);
+
         const ed: any = enemy;
-        ed.health = Math.floor(baseHealth * diffMult);
-        ed.speed = Math.min(baseSpeed + 20, baseSpeed + (wave - 1) * 2);
-        ed.enemyType = enemyType;
-        ed.behavior = enemyType === 'runner' ? 'run' : enemyType === 'tank' ? 'heavy' : 'chase';
+        ed.health = Math.floor(scaled.baseHealth * diffMult);
+        ed.maxHealth = ed.health;
+        ed.speed = Math.min(scaled.speed + 20, scaled.speed + (wave - 1) * 2);
+        ed.damage = Math.floor(scaled.baseDamage * diffMult);
+        ed.enemyType = scaled.id;
+        ed.enemyDef = scaled;
+        ed.behavior = scaled.behavior;
+        ed.special = scaled.special;
+        ed.lootTable = scaled.lootTable;
+        ed.xpValue = scaled.xpValue;
+        ed.isBoss = scaled.isBoss || false;
         ed.enemyAnimArchetype = v2Archetype;
         ed.dead = false;
 
-        // Loot + damage mapping (ensure resource drops work)
-        const mapId = enemyType === 'zombie' ? 'controlled' : enemyType === 'tank' ? 'heavy' : enemyType;
-        const def = ENEMY_DEFS[mapId];
-        if (def) {
-            ed.lootTable = def.lootTable;
-            ed.xpValue = def.xpValue;
-            ed.damage = Math.floor(def.baseDamage * diffMult);
+        if (scaled.behavior === 'stealth') enemy.setAlpha(0.3);
+        if (scaled.behavior === 'elite') {
+            const buffs = ['speed', 'armor', 'damage'];
+            const buff = buffs[Math.floor(Math.random() * buffs.length)];
+            if (buff === 'speed') ed.speed *= 1.5;
+            else if (buff === 'armor') ed.health *= 1.5;
+            else ed.damage *= 1.5;
         }
 
-        if (enemyType === 'tank') enemy.setScale(3);
-        else enemy.setScale(2);
-
-        const effectColor = enemyType === 'runner' ? 0xfbbf24 : enemyType === 'tank' ? 0x8b5cf6 : 0xef4444;
-        const effect = this.scene.add.circle(cX, cY, 20, effectColor, 0.5);
+        const effect = this.scene.add.circle(cX, cY, 20, scaled.color, 0.5);
         this.scene.tweens.add({ targets: effect, alpha: 0, scale: 2, duration: 300, onComplete: () => effect.destroy() });
     }
 
@@ -687,6 +708,42 @@ export class EnemySystem {
         const week = Math.max(1, gameState.data.currentWeek || 1);
         const rageMul = bd.isEnraged ? 1.2 : 1;
         const bossType = (boss as any).bossType;
+
+        if (bossType === 'AI核心·吞噬者' || bd.special === 'pull_in') {
+            const attackType = Phaser.Math.RND.pick(['pull_in', 'aoe', 'pull_in']);
+            if (attackType === 'pull_in') {
+                const text = this.scene.add.text(boss.x, boss.y - 40, '引力吞噬!', {
+                    fontSize: '18px', color: '#00ff00', fontStyle: 'bold',
+                    stroke: '#000000', strokeThickness: 3,
+                }).setOrigin(0.5).setDepth(1900);
+                this.scene.tweens.add({ targets: text, y: text.y - 20, alpha: 0, duration: 800, onComplete: () => text.destroy() });
+
+                const pullRadius = 200;
+                const pullRing = this.scene.add.circle(boss.x, boss.y, pullRadius, 0x00ff00, 0.15).setDepth(8);
+                this.scene.tweens.add({
+                    targets: pullRing, scale: 0.3, alpha: 0.4, duration: 600, yoyo: true,
+                    onComplete: () => pullRing.destroy(),
+                });
+
+                const dist = Phaser.Math.Distance.Between(boss.x, boss.y, this.player.x, this.player.y);
+                if (dist < pullRadius) {
+                    const pullAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, boss.x, boss.y);
+                    const pullStrength = Math.min(80, (pullRadius - dist) * 0.5);
+                    this.scene.tweens.add({
+                        targets: this.player,
+                        x: this.player.x + Math.cos(pullAngle) * pullStrength,
+                        y: this.player.y + Math.sin(pullAngle) * pullStrength,
+                        duration: 400, ease: 'Quad.easeOut',
+                    });
+                    if (dist < 60) {
+                        events.emit(GameEvents.PLAYER_HIT, { damage: Math.max(10, Math.round(baseDamage * 0.5 * rageMul)) });
+                    }
+                }
+                this.scene.cameras.main.shake(150, 0.01);
+                return;
+            }
+        }
+
         const attackType = Phaser.Math.RND.pick(['summon', 'aoe', 'charge']);
 
         if (attackType === 'summon' || bossType === 'AI核心·死灵') {

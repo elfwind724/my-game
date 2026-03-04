@@ -558,6 +558,36 @@ export class WeaponSystem {
             );
             return;
         }
+        if (weaponType === 'pistol' && this.currentWeapon === ('frost' as any) && shotIndex % cadence(3) === 0) {
+            emitRadial(
+                5 + Math.min(4, patternPower),
+                0.85,
+                0.9,
+                'none',
+                0.8,
+                6
+            );
+            if (patternPower >= 2 && shotIndex % cadence(6) === 0) {
+                emitArc(4 + patternPower, 60, 1.1, 0.7, 'none', 0.9);
+            }
+            return;
+        }
+        if (weaponType === 'pistol' && this.currentWeapon === ('chain' as any) && shotIndex % cadence(3) === 0) {
+            emitArc(
+                4 + Math.min(3, patternPower),
+                50 + patternPower * 6,
+                1.3,
+                0.85,
+                'chain',
+                1.1,
+                (index) => ({
+                    swayAmplitude: (15 + patternPower * 2) * orbitAmpMul,
+                    swayFrequency: 0.016,
+                    swayPhase: index * Math.PI * 0.7,
+                })
+            );
+            return;
+        }
         if (patternPower >= 2 && shotIndex % cadence(7) === 0) {
             emitRadial(
                 8 + Math.min(6, patternPower),
