@@ -145,16 +145,21 @@ export class EnemySystem {
         this.scene.tweens.add({ targets: effect, alpha: 0, scale: 2, duration: 300, onComplete: () => effect.destroy() });
     }
 
+    private enemyUpdateFrame: number = 0;
+
     public update(): void {
+        this.enemyUpdateFrame++;
         let hasBossActive = false;
-        this.enemies.children.each((child) => {
-            const enemy = child as Phaser.Physics.Arcade.Sprite;
-            if (!enemy.active) return true;
+        const children = this.enemies.children.getArray();
+        const len = children.length;
+        for (let ci = 0; ci < len; ci++) {
+            const enemy = children[ci] as Phaser.Physics.Arcade.Sprite;
+            if (!enemy || !enemy.active) continue;
 
             const ed = enemy as any;
             if (ed.dead) {
                 enemy.setVelocity(0, 0);
-                return true;
+                continue;
             }
             const speed = ed.speed || 60;
             const behavior = ed.behavior || 'chase';
@@ -162,7 +167,7 @@ export class EnemySystem {
             if (ed.isBoss) {
                 hasBossActive = true;
                 this.updateBossBehavior(enemy);
-                return true;
+                continue;
             }
 
             const distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
@@ -189,7 +194,7 @@ export class EnemySystem {
                         enemy.setFlipX(structureTarget.x < enemy.x);
                     }
                 }
-                return true;
+                continue;
             }
 
             this.updateShieldRegen(enemy);
@@ -302,8 +307,7 @@ export class EnemySystem {
             if (!this.isV2DirectionalAnimated(enemy)) {
                 enemy.setFlipX(this.player.x < enemy.x);
             }
-            return true;
-        });
+        }
 
         if (!hasBossActive) {
             if (this.bossHealthBar) { this.bossHealthBar.destroy(); this.bossHealthBar = null; }

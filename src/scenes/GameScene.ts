@@ -921,6 +921,11 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Ensure physics is running (may have been paused on previous death)
+    this.physics.resume();
+    (this as any)._lastToggleBaseAt = 0;
+    (this as any)._lastToggleLeisureAt = 0;
+
     const mobileViewport = this.isMobileViewport();
     const mobilePortrait = mobileViewport && this.scale.height > this.scale.width;
     this.mobileViewport = mobileViewport;
@@ -8857,12 +8862,18 @@ export default class GameScene extends Phaser.Scene {
     });
     this.input.keyboard!.on('keydown-T', () => {
       if (this.currentFacility) return;
-      if (this.scene.isActive('UIScene')) return;
+      if (this.isGameOver) return;
+      const now = this.time.now;
+      if (now - (this as any)._lastToggleBaseAt < 400) return;
+      (this as any)._lastToggleBaseAt = now;
       events.emit('toggle-base');
     });
     this.input.keyboard!.on('keydown-H', () => {
       if (this.currentFacility) return;
-      if (this.scene.isActive('UIScene')) return;
+      if (this.isGameOver) return;
+      const now = this.time.now;
+      if (now - (this as any)._lastToggleLeisureAt < 400) return;
+      (this as any)._lastToggleLeisureAt = now;
       events.emit('toggle-leisure');
     });
 
@@ -16207,6 +16218,10 @@ export default class GameScene extends Phaser.Scene {
 
   private restartGame(): void {
     gameState.save();
+    // Resume physics before restart (it was paused on death)
+    this.physics.resume();
+    // Stop CRT overlay to prevent stacking
+    try { this.scene.stop('CRTScene'); } catch (_e) { /* ignore */ }
     this.scene.stop('UIScene');
     this.scene.restart();
   }
