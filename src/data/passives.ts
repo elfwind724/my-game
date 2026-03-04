@@ -122,6 +122,34 @@ export const PASSIVE_DEFS: Record<string, PassiveDef> = {
     rarity: 'common',
     effects: [{ stat: 'moveSpeed', valuePerLevel: 10, isPercentage: true }],
   },
+  aura_field: {
+    id: 'aura_field',
+    name: 'Aura Field',
+    nameCN: '领域扩展',
+    description: '+15% AOE area per level',
+    descriptionCN: '每级范围效果 +15%',
+    icon: '🌀',
+    color: 0xc084fc,
+    rarity: 'uncommon',
+    effects: [
+      { stat: 'range', valuePerLevel: 15, isPercentage: true },
+      { stat: 'damage', valuePerLevel: 5, isPercentage: true },
+    ],
+  },
+  bounty_hunter: {
+    id: 'bounty_hunter',
+    name: 'Bounty Hunter',
+    nameCN: '赏金猎人',
+    description: '+12% XP and loot per level',
+    descriptionCN: '每级经验和掉落 +12%',
+    icon: '💰',
+    color: 0xf59e0b,
+    rarity: 'rare',
+    effects: [
+      { stat: 'xpMultiplier', valuePerLevel: 12, isPercentage: true },
+      { stat: 'critChance', valuePerLevel: 5, isPercentage: false },
+    ],
+  },
 };
 
 export function getAllPassives(): PassiveDef[] {

@@ -795,12 +795,15 @@ export default class GameScene extends Phaser.Scene {
   private interactionDebounceUntil: number = 0;
   private weaponMasteryKills: Record<WeaponType, number> = {
     pistol: 0, shotgun: 0, rifle: 0, flamethrower: 0, laser: 0, rocket: 0,
+    orbit: 0, holy_water: 0, lightning_ring: 0, boomerang: 0,
   };
   private weaponMasteryLevels: Record<WeaponType, number> = {
     pistol: 1, shotgun: 1, rifle: 1, flamethrower: 1, laser: 1, rocket: 1,
+    orbit: 1, holy_water: 1, lightning_ring: 1, boomerang: 1,
   };
   private weaponMasteryNextKills: Record<WeaponType, number> = {
     pistol: 14, shotgun: 14, rifle: 14, flamethrower: 14, laser: 14, rocket: 14,
+    orbit: 14, holy_water: 14, lightning_ring: 14, boomerang: 14,
   };
   private arOverdriveCharge: number = 0;
   private arOverdriveActiveUntil: number = 0;
@@ -918,6 +921,11 @@ export default class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Ensure physics is running (may have been paused on previous death)
+    this.physics.resume();
+    (this as any)._lastToggleBaseAt = 0;
+    (this as any)._lastToggleLeisureAt = 0;
+
     const mobileViewport = this.isMobileViewport();
     const mobilePortrait = mobileViewport && this.scale.height > this.scale.width;
     this.mobileViewport = mobileViewport;
@@ -1284,20 +1292,20 @@ export default class GameScene extends Phaser.Scene {
     // Physics groups
     this.enemies = this.physics.add.group();
     const bulletPoolSize = this.ultraLowPerfMode
-      ? (mobilePortrait ? 440 : 520)
+      ? (mobilePortrait ? 300 : 400)
       : this.lowPerfMode
-        ? (mobilePortrait ? 560 : 660)
-        : mobileViewport ? (mobilePortrait ? 700 : 820) : 1200;
+        ? (mobilePortrait ? 400 : 500)
+        : mobileViewport ? (mobilePortrait ? 500 : 600) : 800;
     const vsBulletPoolSize = this.ultraLowPerfMode
-      ? (mobilePortrait ? 700 : 840)
+      ? (mobilePortrait ? 500 : 600)
       : this.lowPerfMode
-        ? (mobilePortrait ? 860 : 1020)
-        : mobileViewport ? (mobilePortrait ? 1100 : 1300) : 2000;
+        ? (mobilePortrait ? 600 : 700)
+        : mobileViewport ? (mobilePortrait ? 800 : 900) : 1200;
     const companionBulletPoolSize = this.ultraLowPerfMode
-      ? 160
+      ? 100
       : this.lowPerfMode
-        ? (mobilePortrait ? 180 : 220)
-        : mobileViewport ? (mobilePortrait ? 220 : 260) : 400;
+        ? (mobilePortrait ? 120 : 160)
+        : mobileViewport ? (mobilePortrait ? 160 : 200) : 300;
     this.bullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Sprite, maxSize: bulletPoolSize, defaultKey: 'bullet' });
     this.vsBullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Sprite, maxSize: vsBulletPoolSize, defaultKey: 'bullet' });
     this.companionBullets = this.physics.add.group({ classType: Phaser.Physics.Arcade.Sprite, maxSize: companionBulletPoolSize, defaultKey: 'bullet' });
@@ -8854,12 +8862,18 @@ export default class GameScene extends Phaser.Scene {
     });
     this.input.keyboard!.on('keydown-T', () => {
       if (this.currentFacility) return;
-      if (this.scene.isActive('UIScene')) return;
+      if (this.isGameOver) return;
+      const now = this.time.now;
+      if (now - (this as any)._lastToggleBaseAt < 400) return;
+      (this as any)._lastToggleBaseAt = now;
       events.emit('toggle-base');
     });
     this.input.keyboard!.on('keydown-H', () => {
       if (this.currentFacility) return;
-      if (this.scene.isActive('UIScene')) return;
+      if (this.isGameOver) return;
+      const now = this.time.now;
+      if (now - (this as any)._lastToggleLeisureAt < 400) return;
+      (this as any)._lastToggleLeisureAt = now;
       events.emit('toggle-leisure');
     });
 
@@ -9172,17 +9186,21 @@ export default class GameScene extends Phaser.Scene {
     }
     this.updateConstructionAutomation(delta);
 
-    // Homing bullets
-    this.updateHomingBullets();
-    if (!this.lowPerfMode || this.frameCounter % 2 === 0) {
+    // Homing bullets (every other frame is sufficient)
+    if (this.frameCounter % 2 === 0) {
+      this.updateHomingBullets();
+    }
+    if (this.frameCounter % 2 === 0) {
       this.updateBulletMotionPatterns(delta);
     }
 
-    // Bullet cleanup (prevents pool exhaustion / stuck bullets)
-    if (!this.lowPerfMode || this.frameCounter % 2 === 0) {
+    // Bullet cleanup (every 3rd frame)
+    if (this.frameCounter % 3 === 0) {
       this.cleanupBullets();
     }
-    this.updateBulletTrails(delta);
+    if (this.frameCounter % 2 === 0) {
+      this.updateBulletTrails(delta);
+    }
 
     // Build preview
     if (this.isBuildMode) {
@@ -9205,15 +9223,19 @@ export default class GameScene extends Phaser.Scene {
       this.updateLighting();
     }
 
-    // Animation
-    this.updateV2CharacterAnimations();
-    if (this.player?.active) {
+    // Animation (every other frame is visually indistinguishable)
+    if (this.frameCounter % 2 === 0) {
+      this.updateV2CharacterAnimations();
+    }
+    if (this.player?.active && this.frameCounter % 2 === 0) {
       this.animationSystem.updateSquashAndStretch(this.player);
     }
 
-    // Interaction hints
-    this.updateInteractionHints();
-    this.updateExplorationEdgeIndicators();
+    // Interaction hints (every 3rd frame)
+    if (this.frameCounter % 3 === 0) {
+      this.updateInteractionHints();
+      this.updateExplorationEdgeIndicators();
+    }
 
     // Combo decay
     this.comboTimer -= delta;
@@ -9222,27 +9244,31 @@ export default class GameScene extends Phaser.Scene {
       if (this.comboText) this.comboText.setVisible(false);
     }
     if (this.time.now >= this.nextGearResonanceCheckAt) {
-      this.nextGearResonanceCheckAt = this.time.now + 1000;
+      this.nextGearResonanceCheckAt = this.time.now + 2000;
       this.updateGearResonanceState();
     }
-    this.updateBattleMomentumState();
+    if (this.frameCounter % 3 === 0) {
+      this.updateBattleMomentumState();
+      this.updateOverdriveState();
+      this.updateLevelSurgeState();
+      this.updateProtocolAuraState();
+      this.updatePowerTierState();
+    }
     this.updateComboDisplay();
-    this.updateOverdriveState();
-    this.updateLevelSurgeState();
-    this.updateProtocolAuraState();
-    this.updatePowerTierState();
 
-    // Speed lines when moving fast
-    const body = this.player.body as Phaser.Physics.Arcade.Body;
-    if (body) {
-      const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
-      if (!this.lowPerfMode && speed > 150 && Math.random() < 0.3) {
-        const line = this.add.rectangle(
-          this.player.x - body.velocity.x * 0.1 + Phaser.Math.Between(-10, 10),
-          this.player.y - body.velocity.y * 0.1 + Phaser.Math.Between(-10, 10),
-          2, 8, 0x0ea5e9, 0.3
-        ).setDepth(3);
-        this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
+    // Speed lines when moving fast (throttled to avoid object leak)
+    if (!this.lowPerfMode && this.frameCounter % 4 === 0) {
+      const body = this.player.body as Phaser.Physics.Arcade.Body;
+      if (body) {
+        const speed = Math.sqrt(body.velocity.x ** 2 + body.velocity.y ** 2);
+        if (speed > 180 && Math.random() < 0.25) {
+          const line = this.add.rectangle(
+            this.player.x - body.velocity.x * 0.1 + Phaser.Math.Between(-10, 10),
+            this.player.y - body.velocity.y * 0.1 + Phaser.Math.Between(-10, 10),
+            2, 8, 0x0ea5e9, 0.3
+          ).setDepth(3);
+          this.tweens.add({ targets: line, alpha: 0, duration: 150, onComplete: () => line.destroy() });
+        }
       }
     }
 
@@ -10948,6 +10974,10 @@ export default class GameScene extends Phaser.Scene {
           flamethrower: '烈焰射线',
           laser: '穿透光束',
           rocket: '能量炮',
+          orbit: '环绕刀刃',
+          holy_water: '圣水',
+          lightning_ring: '闪电环',
+          boomerang: '回旋镖',
         };
         this.showFloatingText(
           this.player.x,
@@ -16188,6 +16218,10 @@ export default class GameScene extends Phaser.Scene {
 
   private restartGame(): void {
     gameState.save();
+    // Resume physics before restart (it was paused on death)
+    this.physics.resume();
+    // Stop CRT overlay to prevent stacking
+    try { this.scene.stop('CRTScene'); } catch (_e) { /* ignore */ }
     this.scene.stop('UIScene');
     this.scene.restart();
   }

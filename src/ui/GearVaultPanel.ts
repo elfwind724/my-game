@@ -19,6 +19,10 @@ const WEAPON_LABELS: Record<GearWeaponType, string> = {
   flamethrower: '烈焰射线',
   laser: '穿透光束',
   rocket: '能量炮',
+  orbit: '环绕刀刃',
+  holy_water: '圣水',
+  lightning_ring: '闪电环',
+  boomerang: '回旋镖',
 };
 
 const WEAPON_BODY_PART_LABELS: Record<GearWeaponType, string> = {
@@ -28,6 +32,10 @@ const WEAPON_BODY_PART_LABELS: Record<GearWeaponType, string> = {
   flamethrower: '肩挂位',
   laser: '目镜位',
   rocket: '重装位',
+  orbit: '环绕位',
+  holy_water: '辅助位',
+  lightning_ring: '光环位',
+  boomerang: '投掷位',
 };
 
 export class GearVaultPanel {

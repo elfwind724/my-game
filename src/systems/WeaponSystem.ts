@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { gameState } from '../state/GameState';
 import { getWeaponAtLevel } from '../data/weapons';
 
-export type WeaponType = 'pistol' | 'shotgun' | 'rifle' | 'flamethrower' | 'laser' | 'rocket';
+export type WeaponType = 'pistol' | 'shotgun' | 'rifle' | 'flamethrower' | 'laser' | 'rocket' | 'orbit' | 'holy_water' | 'lightning_ring' | 'boomerang';
 
 export interface WeaponConfig {
     name: string;
@@ -116,6 +116,57 @@ export const WEAPON_DEFINITIONS: Record<WeaponType, WeaponConfig> = {
         color: 0xa855f7,
         auto: false,
         special: 'explode'
+    },
+    orbit: {
+        name: 'Orbit Blade',
+        nameCN: '环绕刀刃',
+        damage: 18,
+        fireRate: 280,
+        range: 200,
+        spread: 360,
+        projectileCount: 3,
+        speed: 320,
+        color: 0xf472b6,
+        auto: true,
+    },
+    holy_water: {
+        name: 'Holy Water',
+        nameCN: '圣水',
+        damage: 12,
+        fireRate: 600,
+        range: 300,
+        spread: 45,
+        projectileCount: 1,
+        speed: 180,
+        color: 0x60a5fa,
+        auto: true,
+        special: 'burn'
+    },
+    lightning_ring: {
+        name: 'Lightning Ring',
+        nameCN: '闪电环',
+        damage: 20,
+        fireRate: 500,
+        range: 250,
+        spread: 360,
+        projectileCount: 4,
+        speed: 500,
+        color: 0xfbbf24,
+        auto: true,
+        special: 'chain'
+    },
+    boomerang: {
+        name: 'Boomerang',
+        nameCN: '回旋镖',
+        damage: 22,
+        fireRate: 450,
+        range: 350,
+        spread: 15,
+        projectileCount: 1,
+        speed: 400,
+        color: 0x34d399,
+        auto: true,
+        special: 'pierce'
     }
 };
 
@@ -130,6 +181,10 @@ export class WeaponSystem {
         flamethrower: 0,
         laser: 0,
         rocket: 0,
+        orbit: 0,
+        holy_water: 0,
+        lightning_ring: 0,
+        boomerang: 0,
     };
     private bullets: Phaser.Physics.Arcade.Group;
     private obstacleGroups: Phaser.GameObjects.Group[];
@@ -347,9 +402,9 @@ export class WeaponSystem {
             }
         };
 
-        if (weaponType === 'pistol' && shotIndex % cadence(4) === 0) {
+        if (weaponType === 'pistol' && shotIndex % cadence(5) === 0) {
             emitArc(
-                5 + Math.min(4, patternPower),
+                3 + Math.min(3, patternPower),
                 30 + patternPower * 6,
                 1.3,
                 0.94,
@@ -360,14 +415,14 @@ export class WeaponSystem {
                     swayFrequency: 0.013 + (index / Math.max(1, total)) * 0.002,
                 })
             );
-            if (patternPower >= 2 && shotIndex % cadence(6) === 0) {
-                emitRadial(8 + Math.min(5, patternPower), 1.12, 0.8, 'chain', 1.04);
+            if (patternPower >= 2 && shotIndex % cadence(8) === 0) {
+                emitRadial(6 + Math.min(3, patternPower), 1.12, 0.8, 'chain', 1.04);
             }
             return;
         }
-        if (weaponType === 'shotgun' && shotIndex % cadence(2) === 0) {
+        if (weaponType === 'shotgun' && shotIndex % cadence(3) === 0) {
             emitArc(
-                10 + Math.min(5, patternPower),
+                6 + Math.min(3, patternPower),
                 86 + patternPower * 7,
                 1.02,
                 0.72,
@@ -402,9 +457,9 @@ export class WeaponSystem {
             }
             return;
         }
-        if (weaponType === 'flamethrower' && shotIndex % cadence(6) === 0) {
+        if (weaponType === 'flamethrower' && shotIndex % cadence(8) === 0) {
             emitArc(
-                11 + Math.min(6, patternPower),
+                6 + Math.min(4, patternPower),
                 108 + patternPower * 8,
                 0.94,
                 0.74,
@@ -444,6 +499,65 @@ export class WeaponSystem {
                 emitRadial(6 + Math.min(4, patternPower), 1.02, 0.74, 'explode', 1.04, 5);
             }
         }
+        if (weaponType === 'orbit' && shotIndex % cadence(2) === 0) {
+            emitRadial(
+                6 + Math.min(4, patternPower),
+                0.9,
+                0.85,
+                'pierce',
+                0.7,
+                8,
+            );
+            if (patternPower >= 2 && shotIndex % cadence(4) === 0) {
+                emitRadial(10 + patternPower, 1.1, 0.65, 'chain', 0.85, 6);
+            }
+            return;
+        }
+        if (weaponType === 'holy_water' && shotIndex % cadence(3) === 0) {
+            emitArc(
+                4 + Math.min(3, patternPower),
+                90 + patternPower * 10,
+                0.6,
+                0.9,
+                'burn',
+                0.6,
+                (_index, total) => ({
+                    swayAmplitude: (20 + patternPower * 3) * orbitAmpMul,
+                    swayFrequency: 0.025 + (total * 0.0003),
+                })
+            );
+            return;
+        }
+        if (weaponType === 'lightning_ring' && shotIndex % cadence(2) === 0) {
+            emitRadial(
+                8 + Math.min(6, patternPower),
+                1.2,
+                0.78,
+                'chain',
+                1.1,
+                5
+            );
+            if (patternPower >= 1 && shotIndex % cadence(4) === 0) {
+                emitRadial(12 + patternPower, 0.9, 0.6, 'chain', 1.3, 3);
+            }
+            return;
+        }
+        if (weaponType === 'boomerang' && shotIndex % cadence(3) === 0) {
+            emitArc(
+                3 + Math.min(3, patternPower),
+                40 + patternPower * 5,
+                1.4,
+                1.0,
+                'pierce',
+                1.2,
+                (index, total) => ({
+                    swayAmplitude: (25 + patternPower * 4) * orbitAmpMul,
+                    swayFrequency: 0.015 + (index / Math.max(1, total)) * 0.003,
+                    swayPhase: index * Math.PI * 0.5,
+                })
+            );
+            return;
+        }
         if (patternPower >= 2 && shotIndex % cadence(7) === 0) {
             emitRadial(
                 8 + Math.min(6, patternPower),
@@ -464,6 +578,10 @@ export class WeaponSystem {
             flamethrower: 'flame',
             laser: 'pierce',
             rocket: 'cannon',
+            orbit: 'orbit',
+            holy_water: 'holy_water',
+            lightning_ring: 'lightning_ring',
+            boomerang: 'boomerang',
         };
         const slotId = slotMap[type];
         const slot = gameState.data.weapons.find(w => w.id === slotId);
@@ -674,6 +792,10 @@ export class WeaponSystem {
       if (weaponType === 'flamethrower') return 'bullet_flame';
       if (weaponType === 'laser') return 'bullet_pierce';
       if (weaponType === 'rocket') return 'bullet_cannon';
+      if (weaponType === 'orbit') return 'bullet_orbit';
+      if (weaponType === 'holy_water') return 'bullet_holy';
+      if (weaponType === 'lightning_ring') return 'bullet_chain';
+      if (weaponType === 'boomerang') return 'bullet_boomerang';
       return 'bullet';
     }
 

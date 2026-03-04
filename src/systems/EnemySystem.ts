@@ -145,16 +145,21 @@ export class EnemySystem {
         this.scene.tweens.add({ targets: effect, alpha: 0, scale: 2, duration: 300, onComplete: () => effect.destroy() });
     }
 
+    private enemyUpdateFrame: number = 0;
+
     public update(): void {
+        this.enemyUpdateFrame++;
         let hasBossActive = false;
-        this.enemies.children.each((child) => {
-            const enemy = child as Phaser.Physics.Arcade.Sprite;
-            if (!enemy.active) return true;
+        const children = this.enemies.children.getArray();
+        const len = children.length;
+        for (let ci = 0; ci < len; ci++) {
+            const enemy = children[ci] as Phaser.Physics.Arcade.Sprite;
+            if (!enemy || !enemy.active) continue;
 
             const ed = enemy as any;
             if (ed.dead) {
                 enemy.setVelocity(0, 0);
-                return true;
+                continue;
             }
             const speed = ed.speed || 60;
             const behavior = ed.behavior || 'chase';
@@ -162,7 +167,7 @@ export class EnemySystem {
             if (ed.isBoss) {
                 hasBossActive = true;
                 this.updateBossBehavior(enemy);
-                return true;
+                continue;
             }
 
             const distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
@@ -189,15 +194,21 @@ export class EnemySystem {
                         enemy.setFlipX(structureTarget.x < enemy.x);
                     }
                 }
-                return true;
+                continue;
             }
+
+            this.updateShieldRegen(enemy);
 
             switch (behavior) {
                 case 'chase':
                 case 'run':
-                case 'elite':
-                    this.scene.physics.moveToObject(enemy, this.player, speed);
+                case 'elite': {
+                    const chaseSpeed = ed.special === 'enrage_on_hit'
+                        ? speed * (1 + (ed.enrageStacks || 0) * 0.06)
+                        : speed;
+                    this.scene.physics.moveToObject(enemy, this.player, chaseSpeed);
                     break;
+                }
 
                 case 'heavy':
                     this.scene.physics.moveToObject(enemy, this.player, speed * 0.7);
@@ -205,15 +216,41 @@ export class EnemySystem {
 
                 case 'ranged': {
                     const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
-                    if (dist > 200) {
+                    if (ed.special === 'acid_pool') {
+                        if (dist > 180) {
+                            this.scene.physics.moveToObject(enemy, this.player, speed);
+                        } else if (dist < 120) {
+                            const awayAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+                            enemy.setVelocity(Math.cos(awayAngle) * speed, Math.sin(awayAngle) * speed);
+                        } else {
+                            enemy.setVelocity(0, 0);
+                            this.spitterAcidPool(enemy);
+                            this.rangedAttack(enemy);
+                        }
+                    } else if (ed.special === 'summon_minions') {
+                        if (dist > 250) {
+                            this.scene.physics.moveToObject(enemy, this.player, speed * 0.8);
+                        } else {
+                            enemy.setVelocity(0, 0);
+                            this.necromancerSummon(enemy);
+                        }
+                    } else if (ed.special === 'lob_attack') {
+                        if (dist > 220) {
+                            this.scene.physics.moveToObject(enemy, this.player, speed);
+                        } else if (dist < 140) {
+                            const awayAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+                            enemy.setVelocity(Math.cos(awayAngle) * speed, Math.sin(awayAngle) * speed);
+                        } else {
+                            enemy.setVelocity(0, 0);
+                            this.bomberLobAttack(enemy);
+                        }
+                    } else if (dist > 200) {
                         this.scene.physics.moveToObject(enemy, this.player, speed);
                     } else if (dist < 150) {
-                        // Move away from player
                         const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, enemy.x, enemy.y);
                         enemy.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
                     } else {
                         enemy.setVelocity(0, 0);
-                        // Fire projectile
                         this.rangedAttack(enemy);
                     }
                     break;
@@ -224,7 +261,6 @@ export class EnemySystem {
                     break;
 
                 case 'heal': {
-                    // Stay near other enemies and heal them
                     const nearestAlly = this.findNearestEnemy(enemy.x, enemy.y, 300, enemy);
                     if (nearestAlly) {
                         const allyDist = Phaser.Math.Distance.Between(enemy.x, enemy.y, nearestAlly.x, nearestAlly.y);
@@ -242,11 +278,23 @@ export class EnemySystem {
 
                 case 'stealth': {
                     this.scene.physics.moveToObject(enemy, this.player, speed);
-                    const distToPlayer = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
-                    if (distToPlayer > 200) {
-                        enemy.setAlpha(0.15); // Nearly invisible
+                    const stealthDist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+                    if (stealthDist > 200) {
+                        enemy.setAlpha(0.15);
                     } else {
-                        enemy.setAlpha(0.6); // More visible when close
+                        enemy.setAlpha(0.6);
+                    }
+
+                    if (ed.special === 'life_drain' && stealthDist < 50) {
+                        const now = this.scene.time.now;
+                        if (!ed.lastDrain || now - ed.lastDrain > 1500) {
+                            ed.lastDrain = now;
+                            const drainAmount = Math.min(ed.damage || 10, 15);
+                            events.emit(GameEvents.PLAYER_HIT, { damage: drainAmount });
+                            ed.health = Math.min((ed.health || 18) + Math.floor(drainAmount * 0.5), (ed.maxHealth || 40));
+                            const drainFx = this.scene.add.circle(enemy.x, enemy.y, 15, 0x00ff00, 0.4).setDepth(9);
+                            this.scene.tweens.add({ targets: drainFx, alpha: 0, scale: 2, duration: 400, onComplete: () => drainFx.destroy() });
+                        }
                     }
                     break;
                 }
@@ -259,12 +307,181 @@ export class EnemySystem {
             if (!this.isV2DirectionalAnimated(enemy)) {
                 enemy.setFlipX(this.player.x < enemy.x);
             }
-            return true;
-        });
+        }
 
         if (!hasBossActive) {
             if (this.bossHealthBar) { this.bossHealthBar.destroy(); this.bossHealthBar = null; }
             if (this.bossNameText) { this.bossNameText.destroy(); this.bossNameText = null; }
+        }
+    }
+
+    public applySpecialOnHit(enemy: Phaser.Physics.Arcade.Sprite, damage: number): void {
+        const ed = enemy as any;
+        if (ed.special === 'enrage_on_hit') {
+            ed.enrageStacks = Math.min(10, (ed.enrageStacks || 0) + 1);
+            const bonus = ed.enrageStacks * 0.08;
+            ed.speed = Math.min(200, (ed.baseSpeed || ed.speed || 75) * (1 + bonus));
+            ed.damage = Math.floor((ed.baseDamage || ed.damage || 14) * (1 + bonus * 0.5));
+            enemy.setTint(Phaser.Display.Color.GetColor(
+                Math.min(255, 200 + ed.enrageStacks * 5),
+                Math.max(0, 100 - ed.enrageStacks * 10),
+                0
+            ));
+            if (ed.enrageStacks >= 5 && !ed.enrageAlert) {
+                ed.enrageAlert = true;
+                const alert = this.scene.add.text(enemy.x, enemy.y - 30, '狂暴!', {
+                    fontSize: '14px', color: '#ff4400', fontStyle: 'bold',
+                    stroke: '#000000', strokeThickness: 2,
+                }).setOrigin(0.5).setDepth(1500);
+                this.scene.tweens.add({ targets: alert, y: alert.y - 20, alpha: 0, duration: 800, onComplete: () => alert.destroy() });
+            }
+        }
+
+        if (ed.special === 'shield_regen' && !ed.shieldBroken) {
+            ed.shieldHp = Math.max(0, (ed.shieldHp ?? ed.health * 0.5) - damage);
+            if (ed.shieldHp <= 0) {
+                ed.shieldBroken = true;
+                ed.shieldRegenTimer = this.scene.time.now + 5000;
+                enemy.clearTint();
+                const breakFx = this.scene.add.circle(enemy.x, enemy.y, 25, 0x3366cc, 0.5).setDepth(10);
+                this.scene.tweens.add({ targets: breakFx, alpha: 0, scale: 2, duration: 400, onComplete: () => breakFx.destroy() });
+            }
+        }
+
+        if (ed.special === 'explode_on_death' && (ed.health || 0) <= 0) {
+            this.triggerExplosion(enemy);
+        }
+    }
+
+    private triggerExplosion(enemy: Phaser.Physics.Arcade.Sprite): void {
+        const ed = enemy as any;
+        const explosionRadius = 80;
+        const explosionDamage = Math.max(15, (ed.damage || 30) * 0.8);
+
+        const blast = this.scene.add.circle(enemy.x, enemy.y, explosionRadius, 0xff6600, 0.6).setDepth(50);
+        this.scene.tweens.add({
+            targets: blast, alpha: 0, scale: 1.5, duration: 400,
+            onComplete: () => blast.destroy(),
+        });
+        this.scene.cameras.main.shake(150, 0.01);
+
+        const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+        if (dist < explosionRadius) {
+            events.emit(GameEvents.PLAYER_HIT, { damage: Math.round(explosionDamage) });
+        }
+    }
+
+    private spitterAcidPool(enemy: Phaser.Physics.Arcade.Sprite): void {
+        const ed = enemy as any;
+        const now = this.scene.time.now;
+        if (!ed.lastAcidPool) ed.lastAcidPool = 0;
+        if (now - ed.lastAcidPool < 3000) return;
+        ed.lastAcidPool = now;
+
+        const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+        const poolX = enemy.x + Math.cos(angle) * 60;
+        const poolY = enemy.y + Math.sin(angle) * 60;
+
+        const pool = this.scene.add.circle(poolX, poolY, 30, 0x33cc33, 0.35).setDepth(5);
+        let tickCount = 0;
+        const poolTimer = this.scene.time.addEvent({
+            delay: 500,
+            repeat: 7,
+            callback: () => {
+                tickCount++;
+                const pDist = Phaser.Math.Distance.Between(poolX, poolY, this.player.x, this.player.y);
+                if (pDist < 35) {
+                    events.emit(GameEvents.PLAYER_HIT, { damage: Math.max(3, (ed.damage || 8) * 0.3) });
+                }
+                pool.setAlpha(Math.max(0, 0.35 - tickCount * 0.04));
+                if (tickCount >= 7) {
+                    pool.destroy();
+                    poolTimer.destroy();
+                }
+            },
+        });
+    }
+
+    private necromancerSummon(enemy: Phaser.Physics.Arcade.Sprite): void {
+        const ed = enemy as any;
+        const now = this.scene.time.now;
+        if (!ed.lastSummon) ed.lastSummon = 0;
+        if (now - ed.lastSummon < 6000) return;
+        ed.lastSummon = now;
+
+        const text = this.scene.add.text(enemy.x, enemy.y - 30, '唤醒!', {
+            fontSize: '14px', color: '#aa33ff', fontStyle: 'bold',
+            stroke: '#000000', strokeThickness: 2,
+        }).setOrigin(0.5).setDepth(1500);
+        this.scene.tweens.add({ targets: text, y: text.y - 20, alpha: 0, duration: 800, onComplete: () => text.destroy() });
+
+        const week = Math.max(1, gameState.data.currentWeek || 1);
+        for (let i = 0; i < 2; i++) {
+            this.scene.time.delayedCall(i * 300, () => {
+                const mAngle = (i / 2) * Math.PI * 2 + Math.random() * Math.PI;
+                const mx = enemy.x + Math.cos(mAngle) * 30;
+                const my = enemy.y + Math.sin(mAngle) * 30;
+                const minion = this.enemies.create(mx, my, 'zombie') as Phaser.Physics.Arcade.Sprite;
+                if (minion) {
+                    minion.setTint(0x9933ff);
+                    minion.setScale(1.5);
+                    (minion as any).health = Math.floor(15 + week * 5);
+                    (minion as any).speed = 70 + week * 3;
+                    (minion as any).damage = Math.floor(5 + week * 2);
+                    (minion as any).enemyType = 'summoned';
+                    (minion as any).behavior = 'chase';
+                    (minion as any).xpValue = 2;
+                    const spawnFx = this.scene.add.circle(mx, my, 15, 0x9933ff, 0.5).setDepth(8);
+                    this.scene.tweens.add({ targets: spawnFx, alpha: 0, scale: 2, duration: 300, onComplete: () => spawnFx.destroy() });
+                }
+            });
+        }
+    }
+
+    private bomberLobAttack(enemy: Phaser.Physics.Arcade.Sprite): void {
+        const ed = enemy as any;
+        const now = this.scene.time.now;
+        if (!ed.lastLob) ed.lastLob = 0;
+        if (now - ed.lastLob < 2500) return;
+        ed.lastLob = now;
+
+        const targetX = this.player.x + Phaser.Math.Between(-40, 40);
+        const targetY = this.player.y + Phaser.Math.Between(-40, 40);
+
+        const projectile = this.scene.add.circle(enemy.x, enemy.y, 6, 0xff9933, 0.9).setDepth(12);
+        this.scene.tweens.add({
+            targets: projectile,
+            x: targetX, y: targetY,
+            duration: 800,
+            ease: 'Quad.easeOut',
+            onComplete: () => {
+                projectile.destroy();
+                const blast = this.scene.add.circle(targetX, targetY, 40, 0xff6633, 0.5).setDepth(10);
+                this.scene.tweens.add({
+                    targets: blast, alpha: 0, scale: 1.5, duration: 400,
+                    onComplete: () => blast.destroy(),
+                });
+                const dist = Phaser.Math.Distance.Between(targetX, targetY, this.player.x, this.player.y);
+                if (dist < 45) {
+                    events.emit(GameEvents.PLAYER_HIT, { damage: Math.max(10, (ed.damage || 22) * 0.6) });
+                }
+            },
+        });
+    }
+
+    private updateShieldRegen(enemy: Phaser.Physics.Arcade.Sprite): void {
+        const ed = enemy as any;
+        if (ed.special !== 'shield_regen') return;
+        const now = this.scene.time.now;
+        if (ed.shieldBroken && ed.shieldRegenTimer && now > ed.shieldRegenTimer) {
+            ed.shieldBroken = false;
+            ed.shieldHp = (ed.maxHealth || ed.health) * 0.3;
+            enemy.setTint(0x3366cc);
+            const regenFx = this.scene.add.circle(enemy.x, enemy.y, 20, 0x66aaff, 0.4).setDepth(9);
+            this.scene.tweens.add({ targets: regenFx, alpha: 0, scale: 2, duration: 500, onComplete: () => regenFx.destroy() });
+        }
+        if (!ed.shieldBroken) {
+            enemy.setTint(0x3366cc);
         }
     }
 

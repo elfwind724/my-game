@@ -191,7 +191,7 @@ export interface ConstructionTaskData {
   startedAt?: number;
 }
 
-export type GearWeaponType = 'pistol' | 'shotgun' | 'rifle' | 'flamethrower' | 'laser' | 'rocket';
+export type GearWeaponType = 'pistol' | 'shotgun' | 'rifle' | 'flamethrower' | 'laser' | 'rocket' | 'orbit' | 'holy_water' | 'lightning_ring' | 'boomerang';
 export type GearRarity = 'common' | 'magic' | 'rare' | 'epic' | 'legendary' | 'mythic';
 export type BitcoinPerkId =
   | 'arsenal_overclock'
@@ -379,7 +379,7 @@ const DEFAULT_STATS: PlayerStats = {
   maxHealth: 100,
   damage: 10,
   fireRate: 400,
-  moveSpeed: 200,
+  moveSpeed: 300,
   armor: 0,
   critChance: 5,
   critDamage: 150,
@@ -543,6 +543,10 @@ const EMPTY_EQUIPPED_GEAR_SLOTS: Record<GearWeaponType, string | null> = {
   flamethrower: null,
   laser: null,
   rocket: null,
+  orbit: null,
+  holy_water: null,
+  lightning_ring: null,
+  boomerang: null,
 };
 
 const EMPTY_BITCOIN_PERKS: Record<BitcoinPerkId, boolean> = {

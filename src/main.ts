@@ -55,8 +55,8 @@ const config: Phaser.Types.Core.GameConfig = {
   },
   fps: {
     target: lowEndMobilePerf ? 45 : prefersMobilePerf ? 50 : 60,
-    forceSetTimeOut: prefersMobilePerf,
-    smoothStep: !(prefersMobilePerf || lowEndMobilePerf),
+    forceSetTimeOut: lowEndMobilePerf,
+    smoothStep: !lowEndMobilePerf,
   },
   scene: [BootScene, MenuScene, GameScene, UIScene, CRTScene],
   physics: {

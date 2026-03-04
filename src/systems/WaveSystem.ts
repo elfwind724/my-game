@@ -54,9 +54,12 @@ export class WaveSystem {
     return { enemyCountMul: 1.16, spawnIntervalMul: 0.88, enemySurviveMul: 1.22, enemyOffenseMul: 1.14, enemySpeedMul: 1.08 };
   }
 
+  private nightWarmupUntil: number = 0;
+
   startNightWaves(): void {
     this.currentWave = 0;
     this.bossSpawnCount = 0;
+    this.nightWarmupUntil = this.scene.time.now + 2000;
     if (this.bloodMoonBossTimer) {
       this.bloodMoonBossTimer.remove();
       this.bloodMoonBossTimer = null;
@@ -115,11 +118,11 @@ export class WaveSystem {
     const pace = this.getDayBalanceProfile(state.currentDay);
 
     // Base enemy count scales with day and week
-    let baseCount = 22 + state.currentDay * 4 + week * 6 + pressure * 8;
+    let baseCount = 18 + state.currentDay * 3 + week * 5 + pressure * 5;
     if (isBloodMoon) {
-      baseCount = Math.floor(baseCount * (3.6 + week * 0.95));
+      baseCount = Math.floor(baseCount * (2.2 + week * 0.5));
     }
-    baseCount = Math.max(8, Math.floor(baseCount * pace.enemyCountMul));
+    baseCount = Phaser.Math.Clamp(Math.floor(baseCount * pace.enemyCountMul), 8, isBloodMoon ? 200 : 120);
     this.enemiesInWave = baseCount;
     this.enemiesKilledInWave = 0;
     this.spawnedInWave = 0;
@@ -135,12 +138,12 @@ export class WaveSystem {
 
     this.showWaveAnnouncement();
 
-    // Spawn enemies over time
+    // Spawn enemies over time (gradual ramp-up prevents start-of-night lag)
     const spawnInterval = Math.max(
-      isBloodMoon ? 75 : 120,
-      (isBloodMoon ? 180 : 320) - pressure * 32 - week * 14
+      isBloodMoon ? 200 : 280,
+      (isBloodMoon ? 350 : 500) - pressure * 15 - week * 8
     );
-    const pacedSpawnInterval = Math.max(isBloodMoon ? 70 : 110, Math.round(spawnInterval * pace.spawnIntervalMul));
+    const pacedSpawnInterval = Math.max(isBloodMoon ? 180 : 250, Math.round(spawnInterval * pace.spawnIntervalMul));
     this.waveSpawnTimer = this.scene.time.addEvent({
       delay: pacedSpawnInterval,
       callback: this.spawnNextEnemy,
@@ -162,6 +165,12 @@ export class WaveSystem {
       }
       return;
     }
+
+    // Cap active enemies to prevent performance degradation
+    const activeEnemies = this.enemies.countActive(true);
+    const isWarmup = this.scene.time.now < this.nightWarmupUntil;
+    const maxActive = isWarmup ? 8 : (gameState.data.isBloodMoon ? 60 : 40);
+    if (activeEnemies >= maxActive) return;
 
     const week = gameState.data.currentWeek;
     const availableTypes = getEnemiesForWeek(week);

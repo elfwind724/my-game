@@ -8,10 +8,10 @@ import Phaser from 'phaser';
 export default class CRTScene extends Phaser.Scene {
   private scanlineGraphics!: Phaser.GameObjects.Graphics;
   private vignetteGraphics!: Phaser.GameObjects.Graphics;
-  private scanlineOffset: number = 0;
   private flickerTimer: number = 0;
   private noiseGraphics!: Phaser.GameObjects.Graphics;
   private compactViewport: boolean = false;
+  private frameSkip: number = 0;
 
   constructor() {
     super({ key: 'CRTScene' });
@@ -57,27 +57,23 @@ export default class CRTScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    const w = this.cameras.main.width;
-    const h = this.cameras.main.height;
+    this.frameSkip++;
 
-    // Animate scanline scroll (subtle)
-    this.scanlineOffset += delta * 0.02;
-    if (this.scanlineOffset > 4) this.scanlineOffset -= 4;
-
-    // Occasional flicker
+    // Occasional flicker (no per-frame work needed)
     this.flickerTimer -= delta;
     if (this.flickerTimer <= 0) {
-      this.flickerTimer = Phaser.Math.Between(3000, 8000);
-      // Brief brightness flicker
+      this.flickerTimer = Phaser.Math.Between(4000, 12000);
       this.scanlineGraphics.setAlpha(this.compactViewport ? 0.03 : 0.065);
       this.time.delayedCall(50, () => {
         this.scanlineGraphics.setAlpha(this.compactViewport ? 0.018 : 0.045);
       });
     }
 
-    // Update noise grain (very subtle)
     if (this.compactViewport) return;
-    this.updateNoise(w, h);
+    // Only update noise every 8th frame to save GPU
+    if (this.frameSkip % 8 === 0) {
+      this.updateNoise(this.cameras.main.width, this.cameras.main.height);
+    }
   }
 
   private drawScanlines(w: number, h: number): void {
@@ -127,13 +123,12 @@ export default class CRTScene extends Phaser.Scene {
   private updateNoise(w: number, h: number): void {
     this.noiseGraphics.clear();
 
-    // Sparse random noise dots
-    const dotCount = 30;
+    const dotCount = 12;
     for (let i = 0; i < dotCount; i++) {
       const x = Phaser.Math.Between(0, w);
       const y = Phaser.Math.Between(0, h);
       const brightness = Phaser.Math.Between(0, 1) === 0 ? 0x000000 : 0xffffff;
-      this.noiseGraphics.fillStyle(brightness, Phaser.Math.FloatBetween(0.3, 1));
+      this.noiseGraphics.fillStyle(brightness, Phaser.Math.FloatBetween(0.3, 0.8));
       this.noiseGraphics.fillRect(x, y, 1, 1);
     }
   }
