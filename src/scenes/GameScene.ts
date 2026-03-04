@@ -864,7 +864,9 @@ export default class GameScene extends Phaser.Scene {
   private isMobileViewport(): boolean {
     if (typeof window === 'undefined') return false;
     const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-    return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) || window.innerWidth <= 900;
+    const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(ua) && !/Windows|Macintosh|Linux x86/i.test(ua);
+    if (isMobileDevice) return true;
+    return window.innerWidth <= 768;
   }
 
   private isMobilePortraitViewport(): boolean {

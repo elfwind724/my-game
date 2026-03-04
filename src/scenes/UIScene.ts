@@ -373,9 +373,9 @@ export default class UIScene extends Phaser.Scene {
       const compactHud = w <= 900;
       const controlsText = compactHud
         ? (portraitLayout
-          ? '竖屏HUD: B建造 C制造 Q任务 T基地 V仓库\nE交互 X交易 R拆除 G图鉴'
-          : 'B建造 C制造 Q任务 T基地 H休闲 V仓库\nE交互 X交易 R拆除 G图鉴')
-        : 'WASD:移动 | B:建造 | C:制造 | Q:任务 | T:基地 | H:休闲 | V:仓库 | E:交互 | X:交易 | R:拆除 | G:图鉴';
+          ? '竖屏HUD: B建造 C合成 Q任务 T基地 V仓库\nE交互 X交易 R拆除 G图鉴'
+          : 'B建造 C合成 Q任务 T基地 H休闲 V仓库\nE交互 X交易 R拆除 G图鉴')
+        : 'WASD:移动 | B:建造 | C:合成 | Q:任务 | T:基地 | H:休闲 | V:仓库 | E:交互 | X:交易 | R:拆除 | G:图鉴';
       const lineCount = controlsText.includes('\n') ? 2 : 1;
       const panelH = lineCount === 2 ? 46 : 26;
       this.add.rectangle(w - 200, h - 15 - panelH * 0.5, 390, panelH, 0x0b1220, 0.72)
@@ -809,13 +809,13 @@ export default class UIScene extends Phaser.Scene {
         this.craftingPanel.openCategory('building', { buildOnly: true });
       }
     }, '建造×', () => this.buildModeActive || this.craftingPanel.getIsOpen());
-    addButton('craft', 1, 0, '制造', () => {
+    addButton('craft', 1, 0, '合成', () => {
       if (this.craftingPanel.getIsOpen()) {
         this.craftingPanel.togglePanel({ buildOnly: false, category: 'weapon' });
       } else {
         this.craftingPanel.openCategory('weapon', { buildOnly: false });
       }
-    }, '制造×', () => this.craftingPanel.getIsOpen());
+    }, '合成×', () => this.craftingPanel.getIsOpen());
     addButton('base', 0, 1, '伙伴', () => this.basePanel.toggle(), '伙伴×', () => this.basePanel.getIsOpen());
     addButton('quest', 1, 1, '任务', () => this.questPanel.toggle(), '任务×', () => this.questPanel.getIsOpen());
     addButton('interact', 0, 2, '交互E', () => events.emit('mobile-interact'));

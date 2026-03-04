@@ -6,23 +6,23 @@ import GameScene from './scenes/GameScene';
 import UIScene from './scenes/UIScene';
 import CRTScene from './scenes/CRTScene';
 
-const hasTouchInput = typeof navigator !== 'undefined' && (navigator.maxTouchPoints || 0) > 1;
 const mobileUA = (() => {
   if (typeof window === 'undefined') return false;
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-  return /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+  return /Android|iPhone|iPad|iPod/i.test(ua) && !/Windows|Macintosh|Linux x86/i.test(ua);
 })();
 const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 1280;
 const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 720;
 
 const STAGE_DESKTOP = { width: 1280, height: 720 };
-const STAGE_MOBILE_PORTRAIT = { width: 560, height: 1212 }; // portrait: larger on-screen world/UI without stretch
-const STAGE_MOBILE_PORTRAIT_WIDE = { width: 640, height: 1138 }; // wide portrait (~9:16)
+const STAGE_MOBILE_PORTRAIT = { width: 560, height: 1212 };
+const STAGE_MOBILE_PORTRAIT_WIDE = { width: 640, height: 1138 };
 const STAGE_MOBILE_LANDSCAPE = { width: 1560, height: 720 };
 
 const resolveStageForViewport = (vw: number, vh: number) => {
   const portrait = vh > vw;
-  const mobileLikeViewport = portrait || vw <= 1024 || hasTouchInput || mobileUA;
+  if (!mobileUA && vw >= 1024) return STAGE_DESKTOP;
+  const mobileLikeViewport = portrait || vw <= 768 || mobileUA;
   if (!mobileLikeViewport) return STAGE_DESKTOP;
   if (portrait) {
     const portraitAspect = vw / Math.max(1, vh);
