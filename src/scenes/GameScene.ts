@@ -795,12 +795,15 @@ export default class GameScene extends Phaser.Scene {
   private interactionDebounceUntil: number = 0;
   private weaponMasteryKills: Record<WeaponType, number> = {
     pistol: 0, shotgun: 0, rifle: 0, flamethrower: 0, laser: 0, rocket: 0,
+    orbit: 0, holy_water: 0, lightning_ring: 0, boomerang: 0,
   };
   private weaponMasteryLevels: Record<WeaponType, number> = {
     pistol: 1, shotgun: 1, rifle: 1, flamethrower: 1, laser: 1, rocket: 1,
+    orbit: 1, holy_water: 1, lightning_ring: 1, boomerang: 1,
   };
   private weaponMasteryNextKills: Record<WeaponType, number> = {
     pistol: 14, shotgun: 14, rifle: 14, flamethrower: 14, laser: 14, rocket: 14,
+    orbit: 14, holy_water: 14, lightning_ring: 14, boomerang: 14,
   };
   private arOverdriveCharge: number = 0;
   private arOverdriveActiveUntil: number = 0;
@@ -10948,6 +10951,10 @@ export default class GameScene extends Phaser.Scene {
           flamethrower: '烈焰射线',
           laser: '穿透光束',
           rocket: '能量炮',
+          orbit: '环绕刀刃',
+          holy_water: '圣水',
+          lightning_ring: '闪电环',
+          boomerang: '回旋镖',
         };
         this.showFloatingText(
           this.player.x,

@@ -986,6 +986,184 @@ export default class BootScene extends Phaser.Scene {
       g.fillRect(10, 42, 11, 4);
       g.fillRect(27, 42, 11, 4);
     });
+
+    this.drawTexture('swarm', 24, 24, (g) => {
+      g.fillStyle(0x000000, 0.3);
+      g.fillEllipse(12, 22, 12, 3);
+      g.fillStyle(0x3d5c0f);
+      g.fillRect(8, 4, 8, 6);
+      g.fillRect(7, 10, 10, 7);
+      g.fillRect(8, 17, 3, 5);
+      g.fillRect(13, 17, 3, 5);
+      g.fillStyle(0x84cc16);
+      g.fillRect(9, 5, 6, 4);
+      g.fillStyle(0xef4444);
+      g.fillRect(9, 6, 2, 1);
+      g.fillRect(13, 6, 2, 1);
+      g.fillStyle(0x65a30d);
+      g.fillRect(8, 11, 8, 5);
+      g.fillStyle(0x3f6212);
+      g.fillRect(8, 17, 3, 4);
+      g.fillRect(13, 17, 3, 4);
+    });
+
+    this.drawTexture('shield_bearer', 36, 36, (g) => {
+      g.fillStyle(0x000000, 0.4);
+      g.fillEllipse(18, 33, 22, 5);
+      g.fillStyle(0x0c2461);
+      g.fillRect(12, 6, 12, 8);
+      g.fillRect(10, 14, 16, 12);
+      g.fillRect(12, 26, 5, 8);
+      g.fillRect(19, 26, 5, 8);
+      g.fillStyle(0x3b82f6);
+      g.fillRect(13, 7, 10, 6);
+      g.fillStyle(0xef4444);
+      g.fillRect(14, 9, 2, 2);
+      g.fillRect(20, 9, 2, 2);
+      g.fillStyle(0x1e40af);
+      g.fillRect(11, 15, 14, 10);
+      g.fillStyle(0x1d4ed8);
+      g.fillRect(12, 17, 12, 6);
+      g.fillStyle(0x60a5fa);
+      g.fillRect(3, 10, 6, 18);
+      g.fillRect(4, 11, 4, 16);
+      g.fillStyle(0xbfdbfe);
+      g.fillRect(5, 13, 2, 12);
+      g.fillStyle(0x0f172a);
+      g.fillRect(11, 34, 7, 2);
+      g.fillRect(18, 34, 7, 2);
+    });
+
+    this.drawTexture('berserker', 32, 32, (g) => {
+      g.fillStyle(0x000000, 0.4);
+      g.fillEllipse(16, 29, 17, 5);
+      g.fillStyle(0x1a0505);
+      g.fillRect(10, 4, 12, 7);
+      g.fillRect(9, 11, 14, 11);
+      g.fillRect(8, 12, 2, 8);
+      g.fillRect(22, 12, 2, 8);
+      g.fillRect(10, 22, 5, 8);
+      g.fillRect(17, 22, 5, 8);
+      g.fillStyle(0xfca5a5);
+      g.fillRect(11, 5, 10, 5);
+      g.fillStyle(0xef4444);
+      g.fillRect(12, 6, 3, 2);
+      g.fillRect(17, 6, 3, 2);
+      g.fillStyle(0xb91c1c);
+      g.fillRect(10, 12, 12, 9);
+      g.fillStyle(0xdc2626);
+      g.fillRect(11, 14, 10, 1);
+      g.fillStyle(0xfbbf24);
+      g.fillRect(8, 15, 3, 4);
+      g.fillRect(21, 15, 3, 4);
+      g.fillStyle(0x991b1b);
+      g.fillRect(10, 22, 5, 6);
+      g.fillRect(17, 22, 5, 6);
+      g.fillStyle(0x0f172a);
+      g.fillRect(9, 28, 7, 2);
+      g.fillRect(16, 28, 7, 2);
+    });
+
+    this.drawTexture('spitter', 32, 32, (g) => {
+      g.fillStyle(0x000000, 0.35);
+      g.fillEllipse(16, 29, 15, 5);
+      g.fillStyle(0x052e16);
+      g.fillRect(10, 5, 12, 7);
+      g.fillRect(9, 12, 14, 10);
+      g.fillRect(10, 22, 5, 8);
+      g.fillRect(17, 22, 5, 8);
+      g.fillStyle(0x22c55e);
+      g.fillRect(11, 6, 10, 5);
+      g.fillStyle(0xfacc15);
+      g.fillRect(12, 7, 2, 2);
+      g.fillRect(18, 7, 2, 2);
+      g.fillStyle(0x15803d);
+      g.fillRect(10, 13, 12, 8);
+      g.fillStyle(0x4ade80);
+      g.fillRect(14, 18, 4, 3);
+      g.fillStyle(0x16a34a);
+      g.fillRect(10, 22, 5, 6);
+      g.fillRect(17, 22, 5, 6);
+      g.fillStyle(0x0f172a);
+      g.fillRect(9, 28, 7, 2);
+      g.fillRect(16, 28, 7, 2);
+    });
+
+    this.drawTexture('necromancer', 36, 36, (g) => {
+      g.fillStyle(0x000000, 0.4);
+      g.fillEllipse(18, 33, 18, 5);
+      g.fillStyle(0x1b0530);
+      g.fillRect(11, 2, 14, 4);
+      g.fillRect(12, 6, 12, 7);
+      g.fillRect(10, 13, 16, 12);
+      g.fillRect(12, 25, 5, 9);
+      g.fillRect(19, 25, 5, 9);
+      g.fillStyle(0xc084fc);
+      g.fillRect(13, 7, 10, 5);
+      g.fillStyle(0xa855f7);
+      g.fillRect(14, 8, 3, 2);
+      g.fillRect(19, 8, 3, 2);
+      g.fillStyle(0x581c87);
+      g.fillRect(11, 14, 14, 10);
+      g.fillStyle(0x7e22ce);
+      g.fillRect(12, 16, 12, 6);
+      g.fillStyle(0xd8b4fe);
+      g.fillRect(17, 3, 6, 2);
+      g.fillRect(13, 3, 2, 8);
+      g.fillStyle(0x3b0764);
+      g.fillRect(12, 25, 5, 7);
+      g.fillRect(19, 25, 5, 7);
+      g.fillStyle(0x0f172a);
+      g.fillRect(11, 32, 7, 2);
+      g.fillRect(18, 32, 7, 2);
+    });
+
+    this.drawTexture('parasite', 24, 24, (g) => {
+      g.fillStyle(0x000000, 0.3);
+      g.fillEllipse(12, 22, 12, 3);
+      g.fillStyle(0x3d2808);
+      g.fillRect(8, 5, 8, 5);
+      g.fillRect(7, 10, 10, 7);
+      g.fillRect(8, 17, 3, 5);
+      g.fillRect(13, 17, 3, 5);
+      g.fillStyle(0xd97706);
+      g.fillRect(9, 6, 6, 3);
+      g.fillStyle(0xef4444);
+      g.fillRect(10, 7, 1, 1);
+      g.fillRect(13, 7, 1, 1);
+      g.fillStyle(0x92400e);
+      g.fillRect(8, 11, 8, 5);
+      g.fillStyle(0x451a03);
+      g.fillRect(8, 17, 3, 4);
+      g.fillRect(13, 17, 3, 4);
+    });
+
+    this.drawTexture('bomber', 32, 32, (g) => {
+      g.fillStyle(0x000000, 0.4);
+      g.fillEllipse(16, 29, 16, 5);
+      g.fillStyle(0x3d1c0c);
+      g.fillRect(10, 4, 12, 7);
+      g.fillRect(9, 11, 14, 11);
+      g.fillRect(10, 22, 5, 8);
+      g.fillRect(17, 22, 5, 8);
+      g.fillStyle(0xfb923c);
+      g.fillRect(11, 5, 10, 5);
+      g.fillStyle(0xef4444);
+      g.fillRect(12, 6, 2, 2);
+      g.fillRect(18, 6, 2, 2);
+      g.fillStyle(0x9a3412);
+      g.fillRect(10, 12, 12, 9);
+      g.fillStyle(0xfbbf24);
+      g.fillRect(13, 14, 6, 5);
+      g.fillStyle(0xef4444);
+      g.fillRect(14, 15, 4, 3);
+      g.fillStyle(0x78350f);
+      g.fillRect(10, 22, 5, 6);
+      g.fillRect(17, 22, 5, 6);
+      g.fillStyle(0x0f172a);
+      g.fillRect(9, 28, 7, 2);
+      g.fillRect(16, 28, 7, 2);
+    });
   }
 
   private generateCompanionSprite(): void {
@@ -1422,6 +1600,51 @@ export default class BootScene extends Phaser.Scene {
       g.fillStyle(0xffffff);
       g.fillRect(8, 5, 1, 1);
       g.fillRect(7, 9, 1, 1);
+    });
+
+    this.drawTexture('bullet_orbit', 16, 16, (g) => {
+      g.fillStyle(0x2d0a3f);
+      g.fillRect(3, 3, 10, 10);
+      g.fillStyle(0xf472b6);
+      g.fillRect(4, 6, 8, 4);
+      g.fillRect(6, 4, 4, 8);
+      g.fillStyle(0xfda4af);
+      g.fillRect(5, 5, 6, 6);
+      g.fillStyle(0xfff1f2);
+      g.fillRect(7, 7, 2, 2);
+      g.fillStyle(0xf472b6);
+      g.fillRect(3, 3, 2, 2);
+      g.fillRect(11, 3, 2, 2);
+      g.fillRect(3, 11, 2, 2);
+      g.fillRect(11, 11, 2, 2);
+    });
+
+    this.drawTexture('bullet_holy', 16, 16, (g) => {
+      g.fillStyle(0x0c2461);
+      g.fillRect(5, 2, 6, 12);
+      g.fillRect(2, 5, 12, 6);
+      g.fillStyle(0x60a5fa);
+      g.fillRect(6, 3, 4, 10);
+      g.fillRect(3, 6, 10, 4);
+      g.fillStyle(0xbfdbfe);
+      g.fillRect(7, 4, 2, 8);
+      g.fillRect(4, 7, 8, 2);
+      g.fillStyle(0xeff6ff);
+      g.fillRect(7, 7, 2, 2);
+    });
+
+    this.drawTexture('bullet_boomerang', 16, 16, (g) => {
+      g.fillStyle(0x064e3b);
+      g.fillRect(3, 5, 10, 6);
+      g.fillStyle(0x34d399);
+      g.fillRect(4, 6, 8, 4);
+      g.fillStyle(0x6ee7b7);
+      g.fillRect(3, 7, 3, 2);
+      g.fillRect(10, 7, 3, 2);
+      g.fillRect(6, 5, 4, 1);
+      g.fillRect(6, 10, 4, 1);
+      g.fillStyle(0xd1fae5);
+      g.fillRect(7, 7, 2, 2);
     });
   }
 
