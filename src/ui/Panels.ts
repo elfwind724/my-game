@@ -10,6 +10,7 @@ import { CompanionPersonalitySystem } from '../systems/CompanionPersonalitySyste
 import { BUILDING_DEFS, BUILD_CATEGORIES, getBuildingUpgradeHint } from '../data/buildings';
 import type { BuildingFilterCategory } from '../data/buildings';
 import type { BuildingDef } from '../data/buildings';
+import { getCurrentCompanionMilestone, getNextCompanionMilestone } from '../data/companionMilestones';
 import { events, GameEvents } from '../utils/EventBus';
 import { BASE_JOB_LABELS, BASE_JOB_ORDER } from '../data/base';
 
@@ -751,6 +752,13 @@ export class BasePanel extends SlidePanel {
     return name.length > 0 ? name : '未命名伙伴';
   }
 
+  private clampText(text: string, maxChars: number): string {
+    if (typeof text !== 'string') return '';
+    const safe = text.trim();
+    if (safe.length <= maxChars) return safe;
+    return `${safe.slice(0, Math.max(0, maxChars - 1))}…`;
+  }
+
   private normalizeProfile(profile: Partial<CompanionProfile> | undefined): CompanionProfile {
     const safeTraits = Array.isArray(profile?.traits)
       ? profile!.traits.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
@@ -800,9 +808,9 @@ export class BasePanel extends SlidePanel {
     const layoutBoost = mobilePortrait
       ? Phaser.Math.Clamp(fontBoost * 0.9, 1.12, 1.9)
       : Phaser.Math.Clamp(fontBoost * 0.78, 0.92, 1.28);
-    const fs = (base: number, min: number = mobilePortrait ? 18 : 12) => `${Math.max(min, Math.round(base * fontBoost))}px`;
-    const fsMeta = (base: number, min: number = mobilePortrait ? 15 : 10) => `${Math.max(min, Math.round(base * fontBoost))}px`;
-    const fsTiny = (base: number, min: number = mobilePortrait ? 13 : 9) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const fs = (base: number, min: number = mobilePortrait ? 18 : 13) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const fsMeta = (base: number, min: number = mobilePortrait ? 15 : 11) => `${Math.max(min, Math.round(base * fontBoost))}px`;
+    const fsTiny = (base: number, min: number = mobilePortrait ? 13 : 10) => `${Math.max(min, Math.round(base * fontBoost))}px`;
     const unit = (value: number) => Math.round(value * layoutBoost);
 
     BaseSystem.refreshBaseState();
@@ -887,7 +895,7 @@ export class BasePanel extends SlidePanel {
         wordWrap: { width: leftWrapW },
       });
       container.add(line);
-      summaryLeftY += line.height + unit(4);
+      summaryLeftY += line.height + unit(3);
     };
 
     addSummaryLine(`🍖${res.food}(+${base.foodProduction}/-${base.foodConsumption})  ⚡${base.powerUsed}/${base.powerCapacity}  👥${compCount}/${popCap}`, foodColor);
@@ -935,9 +943,17 @@ export class BasePanel extends SlidePanel {
 
     let summaryRightY = summaryTop + summaryPaddingY;
 
+    const actionBtnStyle = {
+      fontSize: fsTiny(10),
+      fontFamily: uiFont,
+      fontStyle: 'bold',
+      backgroundColor: '#0f1d32',
+      padding: { x: unit(6), y: unit(3) },
+    };
+
     const assignBtn = this.scene.add.text(rightX, summaryRightY, '分配岗位', {
-      fontSize: fsMeta(11), color: '#38bdf8', fontFamily: uiFont, fontStyle: 'bold',
-      backgroundColor: '#0f1d32', padding: { x: unit(6), y: unit(3) },
+      ...actionBtnStyle,
+      color: '#38bdf8',
     }).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     if (assignBtn.input) (assignBtn.input as any).priorityID = 3;
     assignBtn.on('pointerdown', () => {
@@ -951,8 +967,8 @@ export class BasePanel extends SlidePanel {
     summaryRightY += assignBtn.height + unit(5);
 
     const garrisonBtn = this.scene.add.text(rightX, summaryRightY, '一键驻守', {
-      fontSize: fsMeta(11), color: '#fbbf24', fontFamily: uiFont, fontStyle: 'bold',
-      backgroundColor: '#0f1d32', padding: { x: unit(6), y: unit(3) },
+      ...actionBtnStyle,
+      color: '#fbbf24',
     }).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     if (garrisonBtn.input) (garrisonBtn.input as any).priorityID = 3;
     garrisonBtn.on('pointerdown', () => {
@@ -968,12 +984,8 @@ export class BasePanel extends SlidePanel {
       summaryRightY,
       autoBuild.autoAssignDuties ? '自动派职: 开' : '自动派职: 关',
       {
-        fontSize: fsMeta(11),
+        ...actionBtnStyle,
         color: autoBuild.autoAssignDuties ? '#4ade80' : '#94a3b8',
-        fontFamily: uiFont,
-        fontStyle: 'bold',
-        backgroundColor: '#0f1d32',
-        padding: { x: unit(6), y: unit(3) },
       }
     ).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     if (dutyAutoBtn.input) (dutyAutoBtn.input as any).priorityID = 3;
@@ -998,12 +1010,8 @@ export class BasePanel extends SlidePanel {
       summaryRightY,
       autoBuild.enabled ? '自动建造: 开' : '自动建造: 关',
       {
-        fontSize: fsMeta(11),
+        ...actionBtnStyle,
         color: autoBuild.enabled ? '#67e8f9' : '#94a3b8',
-        fontFamily: uiFont,
-        fontStyle: 'bold',
-        backgroundColor: '#0f1d32',
-        padding: { x: unit(6), y: unit(3) },
       }
     ).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     if (autoBuildBtn.input) (autoBuildBtn.input as any).priorityID = 3;
@@ -1167,15 +1175,17 @@ export class BasePanel extends SlidePanel {
     container.add(scrollCont);
     this.scrollContent = scrollCont;
 
-    const CARD_H = mobilePortrait ? unit(220) : unit(176);
+    const CARD_H = mobilePortrait ? unit(250) : unit(214);
     const CARD_GAP = unit(10);
     const CARD_W = this.panelWidth - unit(26);
     const rows: Phaser.GameObjects.Container[] = [];
     let cy = 0;
 
     companions.forEach((c) => {
-      const companionName = this.getSafeCompanionName(c);
+      const companionName = this.clampText(this.getSafeCompanionName(c), mobilePortrait ? 12 : 16);
       const profile = this.ensureRenderableProfile(c);
+      const currentMilestone = getCurrentCompanionMilestone(c.role, Math.max(1, c.level || 1));
+      const nextMilestone = getNextCompanionMilestone(c.role, Math.max(1, c.level || 1));
       const roleColor = ROLE_COLORS[c.role] || 0x6366f1;
       const roleLabel = ROLE_LABELS[c.role] || '?';
       const row = this.scene.add.container(0, cy);
@@ -1214,8 +1224,8 @@ export class BasePanel extends SlidePanel {
         fontSize: fs(mobilePortrait ? 20 : 17), color: '#f1f5f9', fontFamily: uiFont, fontStyle: 'bold',
       }));
 
-      const classTag = c.advancedClass ? ` · ${c.advancedClass}` : '';
-      row.add(this.scene.add.text(infoX, unit(31), `${profile.profession}${classTag}`, {
+      const classTag = c.advancedClass ? ` · ${this.clampText(c.advancedClass, mobilePortrait ? 5 : 7)}` : '';
+      row.add(this.scene.add.text(infoX, unit(31), `${this.clampText(profile.profession, mobilePortrait ? 8 : 10)}${classTag}`, {
         fontSize: fs(mobilePortrait ? 13 : 12), color: '#94a3b8', fontFamily: uiFont,
       }));
 
@@ -1238,9 +1248,9 @@ export class BasePanel extends SlidePanel {
         .filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
       if (tags.length <= 0) tags.push('可靠');
       let tagX = infoX;
-      tags.slice(0, mobilePortrait ? 2 : 3).forEach(t => {
+      tags.slice(0, 2).forEach(t => {
         const width = t.length * unit(10) + unit(12);
-        if (tagX + width > this.panelWidth - (mobilePortrait ? unit(160) : unit(130))) return;
+        if (tagX + width > this.panelWidth - (mobilePortrait ? unit(156) : unit(138))) return;
         const tagBg = this.scene.add.rectangle(tagX + width / 2, tagY + 7, width, 16, 0x1e3a5f, 0.7);
         tagBg.setStrokeStyle(1, 0x334155);
         row.add(tagBg);
@@ -1258,23 +1268,48 @@ export class BasePanel extends SlidePanel {
         row.add(this.scene.add.text(infoX, jobLineY, `岗位: ${BASE_JOB_LABELS[c.job]}  推荐: ${BASE_JOB_LABELS[recJob]}`, {
           fontSize: fs(mobilePortrait ? 12 : 11), color: '#4ade80', fontFamily: uiFont,
         }));
-        row.add(this.scene.add.text(infoX, jobLineY + unit(12), `职责: ${dutyLabel}`, {
+        row.add(this.scene.add.text(infoX, jobLineY + unit(13), `职责: ${this.clampText(dutyLabel, mobilePortrait ? 10 : 14)}`, {
           fontSize: fs(mobilePortrait ? 12 : 11), color: '#67e8f9', fontFamily: uiFont,
         }));
       } else {
-        row.add(this.scene.add.text(infoX, mobilePortrait ? unit(118) : unit(94), `签名: ${profile.signatureSkill}${c.advancedClass ? ` · ${c.advancedClass}` : ''}`, {
+        row.add(this.scene.add.text(infoX, mobilePortrait ? unit(118) : unit(94), `签名: ${this.clampText(profile.signatureSkill, mobilePortrait ? 10 : 16)}${c.advancedClass ? ` · ${this.clampText(c.advancedClass, 6)}` : ''}`, {
           fontSize: fs(mobilePortrait ? 12 : 11), color: '#93c5fd', fontFamily: uiFont,
         }));
       }
-      const combatSummary = BaseSystem.getCompanionCombatSummary(c)
+      const combatSummary = this.clampText(BaseSystem.getCompanionCombatSummary(c)
         .replace('战斗: ', '')
         .replace('伤害', '攻')
         .replace('生命', '血')
         .replace('射程', '程')
-        .replace('频率', '速');
+        .replace('频率', '速'), mobilePortrait ? 22 : 28);
       row.add(this.scene.add.text(infoX, mobilePortrait ? unit(142) : unit(122), combatSummary, {
         fontSize: fs(mobilePortrait ? 12 : 10), color: '#67e8f9', fontFamily: uiFont,
       }));
+      const milestoneY = mobilePortrait ? unit(158) : unit(138);
+      row.add(this.scene.add.text(
+        infoX,
+        milestoneY,
+        currentMilestone
+          ? `阶段: Lv.${currentMilestone.level} ${currentMilestone.titleCN}`
+          : '阶段: 基础训练',
+        {
+          fontSize: fs(mobilePortrait ? 11 : 10),
+          color: '#fef08a',
+          fontFamily: uiFont,
+        }
+      ));
+      if (nextMilestone) {
+        row.add(this.scene.add.text(
+          infoX,
+          milestoneY + unit(12),
+          `下阶: Lv.${nextMilestone.level} ${nextMilestone.titleCN}`,
+          {
+            fontSize: fs(mobilePortrait ? 11 : 10),
+            color: '#94a3b8',
+            fontFamily: uiFont,
+          }
+        ));
+      }
 
       const btnX = this.panelWidth - (mobilePortrait ? unit(20) : unit(18));
       const statusColor = c.status === 'party' ? '#0ea5e9' : '#eab308';
@@ -1294,7 +1329,7 @@ export class BasePanel extends SlidePanel {
       row.add(statusBtn);
 
       if (c.status === 'base') {
-        const jobBtn = this.scene.add.text(btnX, mobilePortrait ? unit(44) : 36, `📋 ${BASE_JOB_LABELS[c.job]}`, {
+        const jobBtn = this.scene.add.text(btnX, mobilePortrait ? unit(44) : 38, `📋 ${BASE_JOB_LABELS[c.job]}`, {
           fontSize: fs(mobilePortrait ? 12 : 11), color: '#a78bfa', fontFamily: uiFont,
           backgroundColor: '#1a1a2e', padding: { x: unit(5), y: unit(mobilePortrait ? 3 : 2) },
         }).setOrigin(1, 0).setInteractive({ useHandCursor: true });
@@ -1320,7 +1355,7 @@ export class BasePanel extends SlidePanel {
 
       row.add(this.scene.add.text(
         btnX - unit(2),
-        mobilePortrait ? unit(76) : 11,
+        mobilePortrait ? unit(78) : 66,
           `${genderIcon}${profile.age}`,
           {
             fontSize: fs(mobilePortrait ? 12 : 11),
@@ -1451,6 +1486,8 @@ export class BasePanel extends SlidePanel {
     const unit = (value: number) => Math.round(value * layoutBoost);
     const companionName = this.getSafeCompanionName(companion);
     const profile = this.ensureRenderableProfile(companion);
+    const currentMilestone = getCurrentCompanionMilestone(companion.role, Math.max(1, companion.level || 1));
+    const nextMilestone = getNextCompanionMilestone(companion.role, Math.max(1, companion.level || 1));
     const safeRoster = roster.filter((item) => item && typeof item.id === 'string' && item.id.length > 0);
     let relationLines: string[] = [];
     try {
@@ -1538,8 +1575,32 @@ export class BasePanel extends SlidePanel {
         fontFamily: uiFont,
       }
     ));
+    card.add(this.scene.add.text(
+      infoX,
+      py + 84,
+      currentMilestone
+        ? `当前阶段 · Lv.${currentMilestone.level} ${currentMilestone.titleCN}`
+        : '当前阶段 · 基础训练',
+      {
+        fontSize: fs(11),
+        color: '#fef08a',
+        fontFamily: uiFont,
+      }
+    ));
+    if (nextMilestone) {
+      card.add(this.scene.add.text(
+        infoX,
+        py + 100,
+        `下阶段 · Lv.${nextMilestone.level} ${nextMilestone.titleCN}`,
+        {
+          fontSize: fs(11),
+          color: '#94a3b8',
+          fontFamily: uiFont,
+        }
+      ));
+    }
 
-    py += unit(92);
+    py += unit(118);
 
     // ── Divider ────────────────────────────────────────────
     const div1 = this.scene.add.rectangle(cardX, py, cardW - unit(28), 1, 0x1e3a5f, 0.6);

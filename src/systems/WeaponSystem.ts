@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { gameState } from '../state/GameState';
 import { getWeaponAtLevel } from '../data/weapons';
+import { getWeaponMilestoneBonuses, getWeaponMilestoneStage } from '../data/weaponMilestones';
 
 export type WeaponType = 'pistol' | 'shotgun' | 'rifle' | 'flamethrower' | 'laser' | 'rocket' | 'orbit' | 'holy_water' | 'lightning_ring' | 'boomerang';
 
@@ -190,6 +191,19 @@ export class WeaponSystem {
     private obstacleGroups: Phaser.GameObjects.Group[];
     private obstacleSprites: Phaser.Physics.Arcade.Sprite[];
 
+    private static readonly slotMap: Record<WeaponType, string> = {
+        pistol: 'ar_basic',
+        shotgun: 'scatter',
+        rifle: 'pulse',
+        flamethrower: 'flame',
+        laser: 'pierce',
+        rocket: 'cannon',
+        orbit: 'orbit',
+        holy_water: 'holy_water',
+        lightning_ring: 'lightning_ring',
+        boomerang: 'boomerang',
+    };
+
     constructor(
         scene: Phaser.Scene,
         bulletGroup: Phaser.Physics.Arcade.Group,
@@ -306,19 +320,22 @@ export class WeaponSystem {
         const speedMul = mod.speedMul || 1;
         const spreadMul = mod.spreadMul || 1;
         const tint = mod.tintColor;
-        const patternPower = Phaser.Math.Clamp(Math.floor(mod.patternPower || 0), 0, 10);
-        const signatureRateMul = Math.max(0.55, mod.signatureRateMul || 1);
+        const milestone = this.getMilestoneBonusesByWeaponType(weaponType);
+        const patternPower = Phaser.Math.Clamp(Math.floor(mod.patternPower || 0) + milestone.signaturePower, 0, 12);
+        const signatureRateMul = Math.max(0.55, (mod.signatureRateMul || 1) * milestone.signatureRateMul);
         const signatureDamageMul = Math.max(0.7, mod.signatureDamageMul || 1);
         const signatureSpeedMul = Math.max(0.7, mod.signatureSpeedMul || 1);
         const extraChainChance = Phaser.Math.Clamp(mod.extraChainChance || 0, 0, 0.55);
         const orbitAmpMul = Math.max(0.7, mod.orbitAmpMul || 1);
+        const milestoneStage = milestone.count;
         const patternIntensity = 1 + patternPower * 0.22 + Math.max(0, signatureRateMul - 1) * 0.52;
         const cadence = (base: number): number => Math.max(1, Math.round(base / (signatureRateMul * patternIntensity * 1.06)));
         const resolveSpecial = (base: WeaponConfig['special']): WeaponConfig['special'] => {
             if (extraChainChance > 0 && Math.random() < extraChainChance) return 'chain';
             return base;
         };
-        const emitArc = (
+        const emitArcAtAngle = (
+            aimAngle: number,
             count: number,
             spreadDeg: number,
             projectileSpeedMul: number,
@@ -334,7 +351,7 @@ export class WeaponSystem {
                 const spreadOffset = safeCount > 1
                     ? (-safeSpread / 2 + step * i)
                     : 0;
-                const finalAngle = baseAngle + Phaser.Math.DegToRad(spreadOffset + Phaser.Math.FloatBetween(-2.6, 2.6));
+                const finalAngle = aimAngle + Phaser.Math.DegToRad(spreadOffset + Phaser.Math.FloatBetween(-2.6, 2.6));
                 const shotSpeed = Math.max(120, scaled.speed * speedMul * projectileSpeedMul * signatureSpeedMul);
                 const shotDamage = Math.max(1, scaled.damage * damageMul * projectileDamageMul * signatureDamageMul);
                 const spawn = this.getSafeSpawnPoint(x, y, finalAngle);
@@ -359,6 +376,17 @@ export class WeaponSystem {
                     motionFactory ? motionFactory(i, safeCount) : undefined
                 );
             }
+        };
+        const emitArc = (
+            count: number,
+            spreadDeg: number,
+            projectileSpeedMul: number,
+            projectileDamageMul: number,
+            special: WeaponConfig['special'],
+            rangeMul: number = 1,
+            motionFactory?: (index: number, total: number) => SignatureMotionOptions
+        ): void => {
+            emitArcAtAngle(baseAngle, count, spreadDeg, projectileSpeedMul, projectileDamageMul, special, rangeMul, motionFactory);
         };
         const emitRadial = (
             count: number,
@@ -439,46 +467,77 @@ export class WeaponSystem {
             return;
         }
         if (weaponType === 'rifle' && shotIndex % cadence(5) === 0) {
+            const laneCount = 5 + Math.min(3, Math.floor(patternPower / 2)) + (milestoneStage >= 1 ? 1 : 0);
             emitArc(
-                5 + Math.min(3, Math.floor(patternPower / 2)),
+                laneCount,
                 18 + patternPower * 3,
                 1.6,
                 1.02,
                 'pierce',
                 1.25,
                 (index) => ({
-                    swayAmplitude: 16 * orbitAmpMul,
+                    swayAmplitude: (16 + milestoneStage * 4) * orbitAmpMul,
                     swayFrequency: 0.013 + patternPower * 0.0006,
                     swayPhase: index % 2 === 0 ? 0 : Math.PI,
                 })
             );
-            if (patternPower >= 3 && shotIndex % cadence(8) === 0) {
+            if (milestoneStage >= 1 && shotIndex % cadence(7) === 0) {
+                emitArcAtAngle(baseAngle + Phaser.Math.DegToRad(9), 4 + Math.min(3, patternPower), 12, 1.44, 0.82, 'pierce', 1.1);
+                emitArcAtAngle(baseAngle - Phaser.Math.DegToRad(9), 4 + Math.min(3, patternPower), 12, 1.44, 0.82, 'pierce', 1.1);
+            }
+            if (milestoneStage >= 2 && shotIndex % cadence(8) === 0) {
+                emitArcAtAngle(baseAngle + Math.PI / 2, 5 + patternPower, 36, 1.18, 0.66, 'pierce', 0.92);
+                emitArcAtAngle(baseAngle - Math.PI / 2, 5 + patternPower, 36, 1.18, 0.66, 'pierce', 0.92);
+            }
+            if (milestoneStage >= 3 && shotIndex % cadence(10) === 0) {
+                emitArcAtAngle(baseAngle + Phaser.Math.DegToRad(45), 5 + patternPower, 18, 1.52, 0.74, 'pierce', 1.18);
+                emitArcAtAngle(baseAngle - Phaser.Math.DegToRad(45), 5 + patternPower, 18, 1.52, 0.74, 'pierce', 1.18);
+            } else if (patternPower >= 3 && shotIndex % cadence(8) === 0) {
                 emitRadial(6 + patternPower, 1.18, 0.62, 'chain', 1.02, 5);
             }
             return;
         }
         if (weaponType === 'flamethrower' && shotIndex % cadence(8) === 0) {
             emitArc(
-                6 + Math.min(4, patternPower),
+                6 + Math.min(4, patternPower) + (milestoneStage >= 1 ? 1 : 0),
                 108 + patternPower * 8,
                 0.94,
                 0.74,
                 'burn',
                 0.9,
                 (_index, total) => ({
-                    swayAmplitude: (14 + patternPower * 3) * orbitAmpMul,
+                    swayAmplitude: (14 + patternPower * 3 + milestoneStage * 4) * orbitAmpMul,
                     swayFrequency: 0.021 + (total * 0.0002),
                 })
             );
-            if (patternPower >= 2 && shotIndex % cadence(7) === 0) {
+            if (milestoneStage >= 1 && shotIndex % cadence(7) === 0) {
+                emitArcAtAngle(baseAngle + Phaser.Math.DegToRad(24), 4 + patternPower, 28, 1.02, 0.68, 'burn', 0.82);
+                emitArcAtAngle(baseAngle - Phaser.Math.DegToRad(24), 4 + patternPower, 28, 1.02, 0.68, 'burn', 0.82);
+            }
+            if (milestoneStage >= 2 && shotIndex % cadence(7) === 0) {
                 emitRadial(7 + patternPower, 1.0, 0.62, 'burn', 0.94, 6);
+            }
+            if (milestoneStage >= 3 && shotIndex % cadence(10) === 0) {
+                emitRadial(10 + patternPower, 1.08, 0.58, 'burn', 1.02, 7);
+                emitArcAtAngle(baseAngle, 8 + patternPower, 138, 1.08, 0.72, 'burn', 1.04);
             }
             return;
         }
         if (weaponType === 'laser' && shotIndex % cadence(3) === 0) {
-            emitArc(5 + Math.min(3, patternPower), 24, 1.48, 1.14, 'pierce', 1.38);
-            if (patternPower >= 2 && shotIndex % cadence(5) === 0) {
+            emitArc(5 + Math.min(3, patternPower) + (milestoneStage >= 1 ? 1 : 0), 24, 1.48, 1.14, 'pierce', 1.38);
+            if (milestoneStage >= 1 && shotIndex % cadence(4) === 0) {
+                emitArcAtAngle(baseAngle + Phaser.Math.DegToRad(10), 3 + patternPower, 10, 1.64, 0.9, 'pierce', 1.28);
+                emitArcAtAngle(baseAngle - Phaser.Math.DegToRad(10), 3 + patternPower, 10, 1.64, 0.9, 'pierce', 1.28);
+            }
+            if (milestoneStage >= 2 && shotIndex % cadence(5) === 0) {
+                emitArcAtAngle(baseAngle + Math.PI / 2, 4 + Math.min(3, patternPower), 12, 1.42, 0.86, 'pierce', 1.08);
+                emitArcAtAngle(baseAngle - Math.PI / 2, 4 + Math.min(3, patternPower), 12, 1.42, 0.86, 'pierce', 1.08);
+            } else if (patternPower >= 2 && shotIndex % cadence(5) === 0) {
                 emitArc(4 + Math.min(3, patternPower), 20, 1.34, 0.82, 'pierce', 1.2);
+            }
+            if (milestoneStage >= 3 && shotIndex % cadence(8) === 0) {
+                emitArcAtAngle(baseAngle + Phaser.Math.DegToRad(45), 4 + patternPower, 10, 1.52, 0.72, 'pierce', 1.12);
+                emitArcAtAngle(baseAngle - Phaser.Math.DegToRad(45), 4 + patternPower, 10, 1.52, 0.72, 'pierce', 1.12);
             }
             return;
         }
@@ -530,14 +589,24 @@ export class WeaponSystem {
         }
         if (weaponType === 'lightning_ring' && shotIndex % cadence(2) === 0) {
             emitRadial(
-                8 + Math.min(6, patternPower),
+                8 + Math.min(6, patternPower) + milestoneStage,
                 1.2,
                 0.78,
                 'chain',
                 1.1,
                 5
             );
-            if (patternPower >= 1 && shotIndex % cadence(4) === 0) {
+            if (milestoneStage >= 1 && shotIndex % cadence(4) === 0) {
+                emitArcAtAngle(baseAngle, 5 + patternPower, 90, 1.08, 0.72, 'chain', 1.18);
+                emitArcAtAngle(baseAngle + Math.PI, 5 + patternPower, 90, 1.08, 0.72, 'chain', 1.18);
+            }
+            if (milestoneStage >= 2 && shotIndex % cadence(5) === 0) {
+                emitArcAtAngle(baseAngle + Math.PI / 2, 5 + patternPower, 90, 1.02, 0.68, 'chain', 1.12);
+                emitArcAtAngle(baseAngle - Math.PI / 2, 5 + patternPower, 90, 1.02, 0.68, 'chain', 1.12);
+            }
+            if (milestoneStage >= 3 && shotIndex % cadence(6) === 0) {
+                emitRadial(12 + patternPower * 2, 0.96, 0.58, 'chain', 1.34, 2);
+            } else if (patternPower >= 1 && shotIndex % cadence(4) === 0) {
                 emitRadial(12 + patternPower, 0.9, 0.6, 'chain', 1.3, 3);
             }
             return;
@@ -574,7 +643,7 @@ export class WeaponSystem {
         }
         if (weaponType === 'pistol' && this.currentWeapon === ('chain' as any) && shotIndex % cadence(3) === 0) {
             emitArc(
-                4 + Math.min(3, patternPower),
+                4 + Math.min(3, patternPower) + (milestoneStage >= 1 ? 1 : 0),
                 50 + patternPower * 6,
                 1.3,
                 0.85,
@@ -586,6 +655,13 @@ export class WeaponSystem {
                     swayPhase: index * Math.PI * 0.7,
                 })
             );
+            if (milestoneStage >= 2 && shotIndex % cadence(5) === 0) {
+                emitArcAtAngle(baseAngle + Math.PI / 2, 4 + patternPower, 26, 1.18, 0.7, 'chain', 1.02);
+                emitArcAtAngle(baseAngle - Math.PI / 2, 4 + patternPower, 26, 1.18, 0.7, 'chain', 1.02);
+            }
+            if (milestoneStage >= 3 && shotIndex % cadence(7) === 0) {
+                emitRadial(8 + patternPower, 1.0, 0.6, 'chain', 1.08, 4);
+            }
             return;
         }
         if (patternPower >= 2 && shotIndex % cadence(7) === 0) {
@@ -601,19 +677,7 @@ export class WeaponSystem {
     }
 
     private getScaledConfig(config: WeaponConfig, type: WeaponType): WeaponConfig {
-        const slotMap: Record<WeaponType, string> = {
-            pistol: 'ar_basic',
-            shotgun: 'scatter',
-            rifle: 'pulse',
-            flamethrower: 'flame',
-            laser: 'pierce',
-            rocket: 'cannon',
-            orbit: 'orbit',
-            holy_water: 'holy_water',
-            lightning_ring: 'lightning_ring',
-            boomerang: 'boomerang',
-        };
-        const slotId = slotMap[type];
+        const slotId = WeaponSystem.slotMap[type];
         const slot = gameState.data.weapons.find(w => w.id === slotId);
         const lv = Math.max(1, gameState.data.playerLevel || 1);
         const levelDamageMul = 1 + Math.min(2.55, (lv - 1) * 0.078);
@@ -622,6 +686,7 @@ export class WeaponSystem {
         const evolvedWeapons = gameState.data.weapons.filter(w => w.evolved).length;
         const arsenalDamageMul = 1 + Math.min(1.24, ownedWeapons * 0.06 + evolvedWeapons * 0.16);
         const arsenalFireRateMul = Math.max(0.32, 1 - ownedWeapons * 0.022 - evolvedWeapons * 0.04);
+        const milestone = getWeaponMilestoneBonuses(slotId, slot?.level || 0);
 
         if (!slot) {
             const adaptiveProjectileBonus =
@@ -634,9 +699,11 @@ export class WeaponSystem {
                 (type === 'laser' && lv >= 24 ? 1 : 0);
             const baseScaled: WeaponConfig = {
                 ...config,
-                damage: Math.max(1, Math.round(config.damage * levelDamageMul * arsenalDamageMul)),
-                fireRate: Math.max(30, Math.round(config.fireRate * levelFireRateMul * arsenalFireRateMul)),
-                projectileCount: Math.max(1, config.projectileCount + adaptiveProjectileBonus),
+                damage: Math.max(1, Math.round(config.damage * levelDamageMul * arsenalDamageMul * milestone.damageMul)),
+                fireRate: Math.max(30, Math.round(config.fireRate * levelFireRateMul * arsenalFireRateMul * milestone.fireRateMul)),
+                speed: Math.max(80, Math.round(config.speed * milestone.speedMul)),
+                range: Math.max(100, Math.round(config.range * milestone.rangeMul)),
+                projectileCount: Math.max(1, config.projectileCount + adaptiveProjectileBonus + milestone.projectileBonus),
             };
             return this.applyGearBonuses(baseScaled, type);
         }
@@ -659,13 +726,21 @@ export class WeaponSystem {
                     : (type === 'laser' && slot.level >= 10 ? 1 : 0)));
         const scaledConfig: WeaponConfig = {
             ...config,
-            damage: Math.max(1, Math.round(config.damage * damageMul * levelDamageMul * evolvedBonus * arsenalDamageMul)),
-            fireRate: Math.max(30, Math.round(config.fireRate * fireRateMul * levelFireRateMul * arsenalFireRateMul)),
-            range: Math.round(config.range * (1 + (slot.level - 1) * 0.11)),
-            speed: Math.round(config.speed * (1 + (slot.level - 1) * 0.08)),
-            projectileCount: Math.max(1, config.projectileCount + projectileBonus),
+            damage: Math.max(1, Math.round(config.damage * damageMul * levelDamageMul * evolvedBonus * arsenalDamageMul * milestone.damageMul)),
+            fireRate: Math.max(30, Math.round(config.fireRate * fireRateMul * levelFireRateMul * arsenalFireRateMul * milestone.fireRateMul)),
+            range: Math.round(config.range * (1 + (slot.level - 1) * 0.11) * milestone.rangeMul),
+            speed: Math.round(config.speed * (1 + (slot.level - 1) * 0.08) * milestone.speedMul),
+            projectileCount: Math.max(1, config.projectileCount + projectileBonus + milestone.projectileBonus),
         };
         return this.applyGearBonuses(scaledConfig, type);
+    }
+
+    private getMilestoneBonusesByWeaponType(type: WeaponType) {
+        return getWeaponMilestoneBonuses(WeaponSystem.slotMap[type], gameState.data.weapons.find(w => w.id === WeaponSystem.slotMap[type])?.level || 0);
+    }
+
+    private getMilestoneStageByWeaponType(type: WeaponType): number {
+        return getWeaponMilestoneStage(WeaponSystem.slotMap[type], gameState.data.weapons.find(w => w.id === WeaponSystem.slotMap[type])?.level || 0);
     }
 
     private applyGearBonuses(config: WeaponConfig, type: WeaponType): WeaponConfig {
@@ -709,6 +784,8 @@ export class WeaponSystem {
 
         bullet.enableBody(true, x, y, true, true);
         const bulletTexture = this.getBulletTextureByWeapon(weaponType, specialValue);
+        const milestoneStage = weaponType ? this.getMilestoneStageByWeaponType(weaponType) : 0;
+        const vfxIntensity = 1 + milestoneStage * 0.34 + (motion ? 0.08 : 0);
         bullet.setTexture(bulletTexture);
         bullet.setBlendMode(Phaser.BlendModes.ADD);
         bullet.setActive(true);
@@ -728,9 +805,12 @@ export class WeaponSystem {
         } else if (brandTint != null) {
             tint = brandTint;
         }
+        bulletScale *= bulletTexture === 'bullet_cannon'
+            ? (1 + milestoneStage * 0.08)
+            : (1 + milestoneStage * 0.14);
         bullet.setTint(tint);
         bullet.setScale(bulletScale);
-        bullet.setAlpha(0.96);
+        bullet.setAlpha(Math.min(1, 0.94 + milestoneStage * 0.015));
         bullet.setRotation(Math.atan2(vy, vx) + Math.PI / 2);
 
         const body = bullet.body as Phaser.Physics.Arcade.Body;
@@ -758,6 +838,9 @@ export class WeaponSystem {
         anyBullet.isHoming = !!homingEnabled;
         anyBullet.homingTarget = null;
         anyBullet.homingStrength = homingEnabled ? 0.16 : null;
+        anyBullet.milestoneStage = milestoneStage;
+        anyBullet.vfxIntensity = vfxIntensity;
+        anyBullet.visualTrailBias = 1 + milestoneStage * 0.2;
         anyBullet.bulletTextureKey = bulletTexture;
         anyBullet.baseVelocityX = vx;
         anyBullet.baseVelocityY = vy;
@@ -768,9 +851,9 @@ export class WeaponSystem {
                 : bulletTexture === 'bullet_flame'
                     ? 10
                     : 0;
-        anyBullet.swayAmplitude = motion?.swayAmplitude ?? swayAmp;
+        anyBullet.swayAmplitude = motion?.swayAmplitude ?? (swayAmp > 0 ? swayAmp + milestoneStage * 4 : 0);
         const fallbackFrequency = swayAmp > 0 ? (bulletTexture === 'bullet_flame' ? 0.02 : 0.013) : 0;
-        anyBullet.swayFrequency = motion?.swayFrequency ?? fallbackFrequency;
+        anyBullet.swayFrequency = motion?.swayFrequency ?? (fallbackFrequency > 0 ? fallbackFrequency + milestoneStage * 0.0012 : 0);
         anyBullet.swayPhase = motion?.swayPhase ?? (Math.random() * Math.PI * 2);
 
         // Cleanup: disable for pooling
@@ -795,6 +878,9 @@ export class WeaponSystem {
                 anyBullet.isHoming = false;
                 anyBullet.homingTarget = null;
                 anyBullet.homingStrength = null;
+                anyBullet.milestoneStage = null;
+                anyBullet.vfxIntensity = null;
+                anyBullet.visualTrailBias = null;
                 anyBullet.bulletTextureKey = null;
                 anyBullet.baseVelocityX = null;
                 anyBullet.baseVelocityY = null;
@@ -878,6 +964,9 @@ export class WeaponSystem {
         anyBullet.isHoming = false;
         anyBullet.homingTarget = null;
         anyBullet.homingStrength = null;
+        anyBullet.milestoneStage = null;
+        anyBullet.vfxIntensity = null;
+        anyBullet.visualTrailBias = null;
         anyBullet.bulletTextureKey = null;
         anyBullet.baseVelocityX = null;
         anyBullet.baseVelocityY = null;

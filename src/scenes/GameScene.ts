@@ -75,6 +75,8 @@ import {
   customHeroTextureKey,
   hasCustomHeroDirectionalTextures,
 } from '../data/customHero';
+import { getCompanionMilestoneBonuses } from '../data/companionMilestones';
+import { getWeaponMilestoneBonuses } from '../data/weaponMilestones';
 
 interface CampInteractable {
   sprite: Phaser.GameObjects.Sprite;
@@ -9331,7 +9333,8 @@ export default class GameScene extends Phaser.Scene {
       }
       if (now - lastFire < adjustedFireRate) continue;
 
-      const firedCount = this.fireVSWeapon(weapon.def, nearest, brandMods);
+      const baseWeaponId = String(weapon.slotKey || weapon.id).split('#')[0] || weapon.id;
+      const firedCount = this.fireVSWeapon(weapon.def, nearest, brandMods, baseWeaponId, weapon.level);
       if (firedCount > 0) {
         didAnyShot = true;
         this.weaponTimers.set(timerKey, now);
@@ -9524,7 +9527,9 @@ export default class GameScene extends Phaser.Scene {
       signatureDamageMul?: number;
       signatureSpeedMul?: number;
       orbitAmpMul?: number;
-    }
+    },
+    weaponId?: string,
+    weaponLevel?: number
   ): number {
     if (!weaponDef) return 0;
     const mods: ReturnType<typeof EvolutionSystem.getEquippedBrandCombatModifiers> & {
@@ -9540,6 +9545,8 @@ export default class GameScene extends Phaser.Scene {
     };
     const glassesSpecials = EvolutionSystem.getGlassesSpecials();
     const enableGlobalHoming = glassesSpecials.has('emergence_resonance') || glassesSpecials.has('gemini_assist');
+    const milestoneStage = getWeaponMilestoneBonuses(weaponId || String(weaponDef.id || ''), Math.max(1, weaponLevel || 1)).count;
+    const milestoneIntensity = 1 + milestoneStage * 0.34;
     const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y);
     const projectileCount = Math.max(1, (weaponDef.projectileCount || 1) + (mods.projectileBonus || 0));
     const spreadDeg = (weaponDef.spread || 0) * (mods.spreadMul || 1);
@@ -9556,7 +9563,7 @@ export default class GameScene extends Phaser.Scene {
     const patternKey = String(weaponDef.id || weaponDef.nameCN || weaponDef.name || 'vs');
     const shotIndex = (this.vsWeaponPatternCounter.get(patternKey) || 0) + 1;
     this.vsWeaponPatternCounter.set(patternKey, shotIndex);
-    const patternIntensity = 1 + patternPower * 0.22 + Math.max(0, signatureRateMul - 1) * 0.35;
+    const patternIntensity = 1 + patternPower * 0.22 + Math.max(0, signatureRateMul - 1) * 0.35 + milestoneStage * 0.16;
 
     for (let i = 0; i < projectileCount; i++) {
       const spread = spreadDeg * (Math.PI / 180);
@@ -9570,7 +9577,7 @@ export default class GameScene extends Phaser.Scene {
       const bulletTexture = this.getVSBulletTexture(weaponDef, finalSpecial);
       bullet.setTexture(bulletTexture);
       bullet.setAlpha(1);
-      const bulletScale = this.getVSBulletScale(bulletTexture);
+      const bulletScale = this.getVSBulletScale(bulletTexture) * (bulletTexture === 'bullet_cannon' ? (1 + milestoneStage * 0.08) : (1 + milestoneStage * 0.14));
       bullet.setScale(bulletScale);
       const baseTint = weaponDef.color || 0x0ea5e9;
       const visualTint = finalSpecial ? baseTint : (mods.tintColor || baseTint);
@@ -9590,7 +9597,7 @@ export default class GameScene extends Phaser.Scene {
       const baseVelocityY = Math.sin(bulletAngle) * speed;
       body.setVelocity(baseVelocityX, baseVelocityY);
       bullet.setRotation(bulletAngle + Math.PI / 2);
-      this.createBulletMuzzleVfx(this.player.x, this.player.y, bulletAngle, visualTint, bulletTexture);
+      this.createBulletMuzzleVfx(this.player.x, this.player.y, bulletAngle, visualTint, bulletTexture, milestoneIntensity);
 
       // Store weapon data on bullet
       const anyBullet = bullet as any;
@@ -9602,6 +9609,9 @@ export default class GameScene extends Phaser.Scene {
       anyBullet.isHoming = !!(enableGlobalHoming || mods.homing);
       anyBullet.homingTarget = (enableGlobalHoming || mods.homing) ? target : null;
       anyBullet.brandDamageApplied = true;
+      anyBullet.milestoneStage = milestoneStage;
+      anyBullet.vfxIntensity = milestoneIntensity;
+      anyBullet.visualTrailBias = 1 + milestoneStage * 0.24;
       anyBullet.bulletTextureKey = bulletTexture;
       anyBullet.baseVelocityX = baseVelocityX;
       anyBullet.baseVelocityY = baseVelocityY;
@@ -9611,8 +9621,8 @@ export default class GameScene extends Phaser.Scene {
           : swayArchetype === 'chain' ? 18
             : swayArchetype === 'flame' ? 14
               : 0;
-      anyBullet.swayAmplitude = swayAmp;
-      anyBullet.swayFrequency = swayAmp > 0 ? (swayArchetype === 'flame' ? 0.02 : 0.014) : 0;
+      anyBullet.swayAmplitude = swayAmp > 0 ? swayAmp + milestoneStage * 4 : 0;
+      anyBullet.swayFrequency = swayAmp > 0 ? (swayArchetype === 'flame' ? 0.02 : 0.014) + milestoneStage * 0.001 : 0;
       anyBullet.swayPhase = Math.random() * Math.PI * 2;
       if (finalSpecial === 'pierce') {
         anyBullet.pierceLeft = 1 + (mods.pierceBonus || 0);
@@ -9660,7 +9670,7 @@ export default class GameScene extends Phaser.Scene {
         extra.setActive(true).setVisible(true);
         const burstTexture = this.getVSBulletTexture(weaponDef, finalSpecial === 'burn' ? 'burn' : finalSpecial || 'chain');
         extra.setTexture(burstTexture);
-        extra.setScale(this.getVSBulletScale(burstTexture));
+        extra.setScale(this.getVSBulletScale(burstTexture) * (1 + milestoneStage * 0.16));
         extra.setTint(weaponDef.color || 0x0ea5e9);
         extra.setBlendMode(Phaser.BlendModes.ADD);
         const body = extra.body as Phaser.Physics.Arcade.Body;
@@ -9683,11 +9693,14 @@ export default class GameScene extends Phaser.Scene {
         anyExtra.isHoming = false;
         anyExtra.homingTarget = null;
         anyExtra.brandDamageApplied = true;
+        anyExtra.milestoneStage = milestoneStage;
+        anyExtra.vfxIntensity = milestoneIntensity + 0.18;
+        anyExtra.visualTrailBias = 1.08 + milestoneStage * 0.28;
         anyExtra.bulletTextureKey = burstTexture;
         anyExtra.baseVelocityX = Math.cos(burstAngle) * burstSpeed;
         anyExtra.baseVelocityY = Math.sin(burstAngle) * burstSpeed;
-        anyExtra.swayAmplitude = (10 + patternPower * 2) * orbitAmpMul;
-        anyExtra.swayFrequency = 0.012 + patternPower * 0.0008;
+        anyExtra.swayAmplitude = (10 + patternPower * 2 + milestoneStage * 3) * orbitAmpMul;
+        anyExtra.swayFrequency = 0.012 + patternPower * 0.0008 + milestoneStage * 0.0009;
         anyExtra.swayPhase = (Math.PI * 2 * i) / Math.max(1, burstCount);
         anyExtra.pierceLeft = anyExtra.weaponSpecial === 'pierce' ? (2 + (mods.pierceBonus || 0)) : null;
         const burstLife = anyExtra.weaponRange / Math.max(120, burstSpeed) * 1000;
@@ -9713,7 +9726,7 @@ export default class GameScene extends Phaser.Scene {
             ? 'pierce'
             : 'chain';
         const novaTexture = this.getVSBulletTexture(weaponDef, novaSpecial);
-        const novaScale = this.getVSBulletScale(novaTexture) * (novaTexture === 'bullet_cannon' ? 1 : 1.08);
+        const novaScale = this.getVSBulletScale(novaTexture) * (novaTexture === 'bullet_cannon' ? (1.04 + milestoneStage * 0.08) : (1.08 + milestoneStage * 0.18));
         const novaSpeed = speed * (0.92 + patternPower * 0.045) * signatureSpeedMul;
         const novaDamage = damage * (0.38 + patternPower * 0.07) * signatureDamageMul;
         nova.enableBody(true, this.player.x, this.player.y, true, true);
@@ -9741,11 +9754,14 @@ export default class GameScene extends Phaser.Scene {
         anyNova.isHoming = false;
         anyNova.homingTarget = null;
         anyNova.brandDamageApplied = true;
+        anyNova.milestoneStage = milestoneStage;
+        anyNova.vfxIntensity = milestoneIntensity + 0.34;
+        anyNova.visualTrailBias = 1.14 + milestoneStage * 0.32;
         anyNova.bulletTextureKey = novaTexture;
         anyNova.baseVelocityX = Math.cos(novaAngle) * novaSpeed;
         anyNova.baseVelocityY = Math.sin(novaAngle) * novaSpeed;
-        anyNova.swayAmplitude = (14 + patternPower * 2.4) * orbitAmpMul;
-        anyNova.swayFrequency = 0.014 + patternPower * 0.0009;
+        anyNova.swayAmplitude = (14 + patternPower * 2.4 + milestoneStage * 3.5) * orbitAmpMul;
+        anyNova.swayFrequency = 0.014 + patternPower * 0.0009 + milestoneStage * 0.0011;
         anyNova.swayPhase = (Math.PI * 2 * i) / Math.max(1, novaCount);
         anyNova.pierceLeft = anyNova.weaponSpecial === 'pierce' ? (2 + (mods.pierceBonus || 0)) : null;
         const novaLife = anyNova.weaponRange / Math.max(120, novaSpeed) * 1000;
@@ -9867,7 +9883,8 @@ export default class GameScene extends Phaser.Scene {
       enemy.y,
       special,
       bullet.tintTopLeft || 0x7dd3fc,
-      (bullet as any).bulletTextureKey || bullet.texture?.key
+      (bullet as any).bulletTextureKey || bullet.texture?.key,
+      bulletData.vfxIntensity || 1
     );
 
     const source: DamageSource = bulletData.ownerType === 'companion'
@@ -9902,6 +9919,9 @@ export default class GameScene extends Phaser.Scene {
         const textureKey = b.bulletTextureKey || bullet.texture?.key;
         const special = b.weaponSpecial ?? b.special ?? b.bulletEffect?.type;
         const archetype = this.resolveBulletVfxArchetype(textureKey, special);
+        const milestoneStage = Math.max(0, Math.floor(b.milestoneStage || 0));
+        const vfxIntensity = Math.max(1, b.vfxIntensity || 1);
+        const trailBias = Math.max(1, b.visualTrailBias || 1);
         const trailChance = archetype === 'scatter' ? 0.34
           : archetype === 'pulse' ? 0.44
             : archetype === 'flame' ? 0.48
@@ -9911,20 +9931,20 @@ export default class GameScene extends Phaser.Scene {
                     : archetype === 'chain' ? 0.42
                       : 0.32;
         const perfRate = this.ultraLowPerfMode ? 0.62 : this.lowPerfMode ? 0.82 : 1;
-        if (Math.random() > baseRate * trailChance * perfRate) return;
+        if (Math.random() > baseRate * trailChance * perfRate * Math.min(1.8, trailBias * (0.92 + (vfxIntensity - 1) * 0.6))) return;
         const body = bullet.body as Phaser.Physics.Arcade.Body | null;
         const vx = body?.velocity.x ?? 0;
         const vy = body?.velocity.y ?? 0;
         const speed = Math.max(1, Math.hypot(vx, vy));
         const dir = Math.atan2(vy, vx);
         const tint = (bullet.tintTopLeft && bullet.tintTopLeft !== 0xffffff) ? bullet.tintTopLeft : 0x7dd3fc;
-        const length = archetype === 'pierce' ? 11
+        const length = (archetype === 'pierce' ? 11
           : archetype === 'pulse' ? 9
             : archetype === 'cannon' ? 8
-              : 6;
-        const width = archetype === 'cannon' ? 4 : archetype === 'scatter' ? 2 : 3;
-        const alpha = archetype === 'flame' ? 0.46 : archetype === 'chain' ? 0.42 : 0.38;
-        const life = archetype === 'cannon' ? 170 : archetype === 'frost' ? 150 : 130;
+              : 6) + milestoneStage * 1.8;
+        const width = (archetype === 'cannon' ? 4 : archetype === 'scatter' ? 2 : 3) + Math.min(1.4, milestoneStage * 0.35);
+        const alpha = Math.min(0.72, (archetype === 'flame' ? 0.46 : archetype === 'chain' ? 0.42 : 0.38) + milestoneStage * 0.05);
+        const life = (archetype === 'cannon' ? 170 : archetype === 'frost' ? 150 : 130) + milestoneStage * 18;
         const backOffset = Phaser.Math.Clamp(speed * 0.008, 4, 10);
         const tx = bullet.x - Math.cos(dir) * backOffset + Phaser.Math.FloatBetween(-1, 1);
         const ty = bullet.y - Math.sin(dir) * backOffset + Phaser.Math.FloatBetween(-1, 1);
@@ -9965,6 +9985,37 @@ export default class GameScene extends Phaser.Scene {
             scaleY: 0.2,
             duration: 150,
             onComplete: () => shard.destroy(),
+          });
+        }
+        if (!this.lowPerfMode && milestoneStage >= 2 && Math.random() < 0.45) {
+          const offset = Phaser.Math.FloatBetween(5, 11 + milestoneStage * 2);
+          const rune = this.add.circle(
+            tx + Math.cos(dir + Math.PI / 2) * offset,
+            ty + Math.sin(dir + Math.PI / 2) * offset,
+            2 + milestoneStage,
+            tint,
+            0.18 + milestoneStage * 0.04
+          ).setDepth(9);
+          rune.setBlendMode(Phaser.BlendModes.ADD);
+          this.tweens.add({
+            targets: rune,
+            alpha: 0,
+            scale: 1.6 + milestoneStage * 0.18,
+            duration: life + 40,
+            onComplete: () => rune.destroy(),
+          });
+        }
+        if (!this.lowPerfMode && milestoneStage >= 3 && Math.random() < 0.28) {
+          const cross = this.add.rectangle(tx, ty, length * 0.8, 2, tint, 0.34).setDepth(10);
+          cross.setBlendMode(Phaser.BlendModes.ADD);
+          cross.setRotation(dir);
+          this.tweens.add({
+            targets: cross,
+            alpha: 0,
+            scaleX: 1.8,
+            scaleY: 0.4,
+            duration: life + 30,
+            onComplete: () => cross.destroy(),
           });
         }
       });
@@ -10063,6 +10114,9 @@ export default class GameScene extends Phaser.Scene {
     anyBullet.homingStrength = null;
     anyBullet.ownerType = null;
     anyBullet.ownerId = null;
+    anyBullet.milestoneStage = null;
+    anyBullet.vfxIntensity = null;
+    anyBullet.visualTrailBias = null;
     anyBullet.bulletTextureKey = null;
     anyBullet.baseVelocityX = null;
     anyBullet.baseVelocityY = null;
@@ -10080,22 +10134,25 @@ export default class GameScene extends Phaser.Scene {
     y: number,
     special: string | undefined,
     _color: number,
-    textureKey?: string
+    textureKey?: string,
+    intensity: number = 1
   ): void {
     const archetype = this.resolveBulletVfxArchetype(textureKey, special);
+    const intensityMul = Phaser.Math.Clamp(intensity, 1, 2.5);
     const ringColor = archetype === 'cannon' ? 0xfb923c
       : archetype === 'chain' ? 0xd8b4fe
         : archetype === 'frost' ? 0x93c5fd
           : archetype === 'flame' ? 0xf97316
             : archetype === 'pierce' ? 0x7dd3fc
               : 0x67e8f9;
-    const coreSize = archetype === 'cannon' ? 8 : archetype === 'pierce' ? 6 : 5;
+    const coreSize = (archetype === 'cannon' ? 8 : archetype === 'pierce' ? 6 : 5) * (1 + (intensityMul - 1) * 0.34);
     const baseSparkCount = archetype === 'cannon' ? 8 : archetype === 'scatter' ? 5 : 6;
-    const sparkCount = this.ultraLowPerfMode ? Math.max(1, Math.floor(baseSparkCount * 0.35))
-      : this.lowPerfMode ? Math.max(2, Math.floor(baseSparkCount * 0.55))
-        : baseSparkCount;
-    const travel = archetype === 'cannon' ? 28 : archetype === 'pierce' ? 22 : 18;
-    const duration = archetype === 'cannon' ? 220 : archetype === 'chain' ? 180 : 150;
+    const amplifiedSparkCount = Math.round(baseSparkCount * (1 + (intensityMul - 1) * 0.6));
+    const sparkCount = this.ultraLowPerfMode ? Math.max(1, Math.floor(amplifiedSparkCount * 0.35))
+      : this.lowPerfMode ? Math.max(2, Math.floor(amplifiedSparkCount * 0.55))
+        : amplifiedSparkCount;
+    const travel = (archetype === 'cannon' ? 28 : archetype === 'pierce' ? 22 : 18) * (1 + (intensityMul - 1) * 0.28);
+    const duration = (archetype === 'cannon' ? 220 : archetype === 'chain' ? 180 : 150) * (1 + (intensityMul - 1) * 0.18);
 
     const core = this.add.rectangle(x, y, coreSize, coreSize, ringColor, 0.86).setDepth(110);
     core.setBlendMode(Phaser.BlendModes.ADD);
@@ -10116,6 +10173,17 @@ export default class GameScene extends Phaser.Scene {
       duration: duration + 40,
       onComplete: () => halo.destroy(),
     });
+    if (!this.lowPerfMode && intensityMul >= 1.45) {
+      const shock = this.add.circle(x, y, coreSize + 5, ringColor, 0.14).setDepth(108);
+      shock.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: shock,
+        alpha: 0,
+        scale: 2.6 + (intensityMul - 1) * 0.6,
+        duration: duration + 70,
+        onComplete: () => shock.destroy(),
+      });
+    }
 
     for (let i = 0; i < sparkCount; i++) {
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
@@ -10159,6 +10227,23 @@ export default class GameScene extends Phaser.Scene {
         onComplete: () => shard.destroy(),
       });
     }
+    if (!this.lowPerfMode && intensityMul >= 1.85) {
+      const slashA = this.add.rectangle(x, y, coreSize * 3.2, 2, 0xf8fafc, 0.42).setDepth(113);
+      const slashB = this.add.rectangle(x, y, coreSize * 3.2, 2, ringColor, 0.34).setDepth(113);
+      slashA.setBlendMode(Phaser.BlendModes.ADD);
+      slashB.setBlendMode(Phaser.BlendModes.ADD);
+      slashA.setRotation(Phaser.Math.FloatBetween(-0.9, 0.9));
+      slashB.setRotation(slashA.rotation + Math.PI / 2);
+      [slashA, slashB].forEach((slash) => {
+        this.tweens.add({
+          targets: slash,
+          alpha: 0,
+          scaleX: 1.7,
+          duration: duration + 30,
+          onComplete: () => slash.destroy(),
+        });
+      });
+    }
   }
 
   private createBulletMuzzleVfx(
@@ -10166,14 +10251,16 @@ export default class GameScene extends Phaser.Scene {
     y: number,
     angle: number,
     tint: number,
-    textureKey?: string
+    textureKey?: string,
+    intensity: number = 1
   ): void {
     const archetype = this.resolveBulletVfxArchetype(textureKey, undefined);
-    const dist = archetype === 'cannon' ? 14 : 10;
+    const intensityMul = Phaser.Math.Clamp(intensity, 1, 2.5);
+    const dist = (archetype === 'cannon' ? 14 : 10) + (intensityMul - 1) * 4;
     const fxX = x + Math.cos(angle) * dist;
     const fxY = y + Math.sin(angle) * dist;
-    const coreW = archetype === 'pierce' ? 10 : archetype === 'cannon' ? 9 : 7;
-    const coreH = archetype === 'pierce' ? 4 : 6;
+    const coreW = (archetype === 'pierce' ? 10 : archetype === 'cannon' ? 9 : 7) * (1 + (intensityMul - 1) * 0.25);
+    const coreH = (archetype === 'pierce' ? 4 : 6) * (1 + (intensityMul - 1) * 0.16);
     const core = this.add.rectangle(fxX, fxY, coreW, coreH, tint, 0.78).setDepth(109);
     core.setBlendMode(Phaser.BlendModes.ADD);
     core.setRotation(angle + Math.PI / 2);
@@ -10182,7 +10269,7 @@ export default class GameScene extends Phaser.Scene {
       alpha: 0,
       scaleX: 0.3,
       scaleY: 1.35,
-      duration: archetype === 'cannon' ? 110 : 80,
+      duration: (archetype === 'cannon' ? 110 : 80) * (1 + (intensityMul - 1) * 0.12),
       onComplete: () => core.destroy(),
     });
     const rune = this.add.circle(fxX, fxY, archetype === 'cannon' ? 7 : 5, tint, 0.26).setDepth(108);
@@ -10191,12 +10278,23 @@ export default class GameScene extends Phaser.Scene {
       targets: rune,
       alpha: 0,
       scale: archetype === 'cannon' ? 2.2 : 1.8,
-      duration: archetype === 'cannon' ? 130 : 95,
+      duration: (archetype === 'cannon' ? 130 : 95) * (1 + (intensityMul - 1) * 0.14),
       onComplete: () => rune.destroy(),
     });
+    if (!this.lowPerfMode && intensityMul >= 1.4) {
+      const echo = this.add.circle(fxX, fxY, (archetype === 'cannon' ? 9 : 6) * intensityMul, tint, 0.14).setDepth(107);
+      echo.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: echo,
+        alpha: 0,
+        scale: 1.8,
+        duration: 120,
+        onComplete: () => echo.destroy(),
+      });
+    }
 
     if (this.ultraLowPerfMode) return;
-    const sparkCount = this.lowPerfMode ? 1 : (archetype === 'cannon' ? 4 : 2);
+    const sparkCount = this.lowPerfMode ? 1 : Math.max(2, Math.round((archetype === 'cannon' ? 4 : 2) * (1 + (intensityMul - 1) * 0.55)));
     for (let i = 0; i < sparkCount; i++) {
       const spread = Phaser.Math.FloatBetween(-0.35, 0.35);
       const dir = angle + Math.PI + spread;
@@ -11068,6 +11166,25 @@ export default class GameScene extends Phaser.Scene {
       Phaser.Display.Color.IntegerToColor(info.tint).rgba,
       false
     );
+    if (info.milestoneLevel && info.milestoneTitleCN) {
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 74,
+        `${companionName} 里程碑 · Lv.${info.milestoneLevel} ${info.milestoneTitleCN}`,
+        '#67e8f9',
+        false
+      );
+      if (info.milestoneDetailCN) {
+        this.showFloatingText(
+          this.player.x,
+          this.player.y - 94,
+          info.milestoneDetailCN,
+          '#bae6fd',
+          false
+        );
+      }
+      this.cameras.main.flash(120, 80, 180, 255, false);
+    }
     if (info.reachedMax) {
       this.showFloatingText(
         this.player.x,
@@ -12135,8 +12252,10 @@ export default class GameScene extends Phaser.Scene {
       const companion = companionId ? gameState.data.companions.find((item) => item.id === companionId) : null;
       if (companion) {
         const duty = this.getCompanionAutoDuty(companion);
+        const milestone = getCompanionMilestoneBonuses(companion.role || 'tank', Math.max(1, companion.level || 1));
         if (duty === 'builder') mul *= 1.26;
         else if (duty === 'defender') mul *= 1.12;
+        mul *= milestone.constructionSpeedMul;
       }
     }
     return Phaser.Math.Clamp(mul, 0.62, 3.2);
@@ -12443,7 +12562,12 @@ export default class GameScene extends Phaser.Scene {
       if (this.getCompanionAutoDuty(companion) !== 'scavenger') continue;
       scavengerCount += 1;
       scavengerLevelSum += Math.max(1, companion.level || 1);
-      const radius = Phaser.Math.Clamp(132 + (companion.level || 1) * 6, 132, 320);
+      const milestone = getCompanionMilestoneBonuses(companion.role || 'tank', Math.max(1, companion.level || 1));
+      const radius = Phaser.Math.Clamp(
+        132 + (companion.level || 1) * 6 + milestone.scavengerRadiusBonus,
+        132,
+        360
+      );
       collectors.push({ x: container.x, y: container.y, radius });
     }
     if (scavengerCount > 0) {
@@ -13887,7 +14011,16 @@ export default class GameScene extends Phaser.Scene {
       : 1;
     const moraleMul = this.hasDayBuff('morale') ? 1.22 : 1;
     const runMul = this.getRunDayActivityGainMultiplier();
-    const gainMul = Phaser.Math.Clamp(profileMul * moraleMul * runMul, 0.62, 2.2);
+    const duty = companion ? this.getCompanionAutoDuty(companion) : 'support';
+    const milestone = companion
+      ? getCompanionMilestoneBonuses(companion.role || 'tank', Math.max(1, companion.level || 1))
+      : getCompanionMilestoneBonuses('tank', 1);
+    let gainMul = profileMul * moraleMul * runMul * milestone.dayYieldMul;
+    if (duty === 'builder') gainMul *= milestone.constructionSpeedMul;
+    else if (duty === 'scavenger') gainMul *= milestone.scavengerYieldMul;
+    else if (duty === 'defender') gainMul *= milestone.defenseDamageMul;
+    else gainMul *= milestone.supportYieldMul;
+    gainMul = Phaser.Math.Clamp(gainMul, 0.62, 2.8);
     const addGain = (base: number): number => Math.max(1, Math.round(base * gainMul));
     const addResource = (key: keyof Resources, base: number): number => {
       const amount = addGain(base);
@@ -14291,6 +14424,9 @@ export default class GameScene extends Phaser.Scene {
     const combatDamageMul = companionData
       ? CompanionPersonalitySystem.getCombatDamageMultiplier(companionData, roster)
       : 1;
+    const milestone = companionData
+      ? getCompanionMilestoneBonuses(companionData.role || 'tank', Math.max(1, companionData.level || 1))
+      : getCompanionMilestoneBonuses((companion.role as any) || 'tank', level);
     const guardPost = this.facilityInteractables.find(f => f.id === 'guard_post');
     const nearGuardPost = !!guardPost
       && Phaser.Math.Distance.Between(container.x, container.y, guardPost.enterX, guardPost.enterY) < 96;
@@ -14305,6 +14441,7 @@ export default class GameScene extends Phaser.Scene {
         * jobBonus
         * guardPostDamageBonus
         * combatDamageMul
+        * milestone.defenseDamageMul
         * this.nightDirectiveEffects.residentDamageMul
         * this.runMutatorEffects.nightResidentDamageMul
       )
@@ -14983,9 +15120,19 @@ export default class GameScene extends Phaser.Scene {
     const container = this.baseResidents.get(task.companionId);
     const name = (container?.getData('residentName') || '伙伴') as string;
     const bonusMult = Math.max(1, 1 + Math.floor((gameState.data.playerLevel || 1) / 12));
+    const companion = gameState.data.companions.find((item) => item.id === task.companionId);
+    const duty = companion ? this.getCompanionAutoDuty(companion) : 'support';
+    const milestone = companion
+      ? getCompanionMilestoneBonuses(companion.role || 'tank', Math.max(1, companion.level || 1))
+      : getCompanionMilestoneBonuses('tank', 1);
+    let supportMul = milestone.dayYieldMul;
+    if (duty === 'builder') supportMul *= milestone.constructionSpeedMul;
+    else if (duty === 'scavenger') supportMul *= milestone.scavengerYieldMul;
+    else if (duty === 'defender') supportMul *= milestone.defenseDamageMul;
+    else supportMul *= milestone.supportYieldMul;
     const amount = Math.max(
       1,
-      Math.round(task.rewardAmount * bonusMult * this.getRunDayActivityGainMultiplier())
+      Math.round(task.rewardAmount * bonusMult * this.getRunDayActivityGainMultiplier() * supportMul)
     );
     gameState.addResource(task.rewardResource, amount);
     this.grantExperience(task.rewardExp + Math.floor((gameState.data.currentDay || 1) / 2));
@@ -15035,6 +15182,10 @@ export default class GameScene extends Phaser.Scene {
       const profileMul = companion
         ? CompanionPersonalitySystem.getDayEfficiencyMultiplier(companion, roster)
         : 1;
+      const duty = companion ? this.getCompanionAutoDuty(companion) : 'support';
+      const milestone = companion
+        ? getCompanionMilestoneBonuses(companion.role || 'tank', Math.max(1, companion.level || 1))
+        : getCompanionMilestoneBonuses('tank', 1);
       const nextAt = this.residentDayYieldNextAt.get(companionId) || 0;
       if (now < nextAt) continue;
       this.residentDayYieldNextAt.set(companionId, now + Phaser.Math.Between(6800, 10600));
@@ -15095,7 +15246,12 @@ export default class GameScene extends Phaser.Scene {
       }
 
       if (amount > 0) {
-        amount = Math.max(1, Math.round(amount * runMul));
+        let dutyMul = milestone.dayYieldMul;
+        if (duty === 'builder') dutyMul *= milestone.constructionSpeedMul;
+        else if (duty === 'scavenger') dutyMul *= milestone.scavengerYieldMul;
+        else if (duty === 'defender') dutyMul *= milestone.defenseDamageMul;
+        else dutyMul *= milestone.supportYieldMul;
+        amount = Math.max(1, Math.round(amount * runMul * dutyMul));
       }
 
       if (!resource || amount <= 0) continue;
@@ -15762,6 +15918,25 @@ export default class GameScene extends Phaser.Scene {
     this.levelUpPanelOpen = false;
     const w = this.cameras.main.width;
     this.showFloatingText(w / 2, 120, `获得: ${choice.nameCN}`, '#fbbf24', true);
+    if (choice?.milestoneTitleCN && choice?.milestoneLevel) {
+      this.showFloatingText(
+        w / 2,
+        146,
+        `武器跃迁 · Lv.${choice.milestoneLevel} ${choice.milestoneTitleCN}`,
+        '#22c55e',
+        true
+      );
+      if (choice?.milestoneDetailCN) {
+        this.showFloatingText(
+          w / 2,
+          172,
+          choice.milestoneDetailCN,
+          '#86efac',
+          true
+        );
+      }
+      this.cameras.main.flash(220, 120, 255, 180);
+    }
     if (choice?.type === 'upgrade_protocol') {
       const protocolId = (choice.protocolId || choice.id) as LevelUpProtocolId;
       const level = EvolutionSystem.getProtocolLevel(protocolId);

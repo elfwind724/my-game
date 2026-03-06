@@ -41,6 +41,15 @@ export class LevelUpPanel {
     return `protocol_icon_${protocolId}`;
   }
 
+  private clampTextToLines(textObject: Phaser.GameObjects.Text, maxLines: number): void {
+    const wrapped = textObject.getWrappedText(textObject.text);
+    if (wrapped.length <= maxLines) return;
+    const clipped = wrapped.slice(0, maxLines);
+    const last = clipped.length - 1;
+    clipped[last] = `${clipped[last].replace(/[。；，、：\s]+$/u, '')}…`;
+    textObject.setText(clipped.join('\n'));
+  }
+
   show(onChoice: (choice: LevelUpChoice) => void): void {
     if (this.isOpen) return;
     this.isOpen = true;
@@ -94,6 +103,12 @@ export class LevelUpPanel {
     if (!this.container) return;
 
     const rarityColor = RARITY_COLORS[choice.rarity] || 0x9ca3af;
+
+    const previewAreaHeight = choice.previewTextCN ? 52 : 0;
+    const previewAreaY = y + h / 2 - 40;
+    const descTopY = y + 72;
+    const descBottomY = y + h / 2 - 58 - previewAreaHeight;
+    const descWrapWidth = w - 28;
 
     // Card background
     const bg = this.scene.add.rectangle(x, y, w, h, 0x1e293b, 0.95);
@@ -160,22 +175,35 @@ export class LevelUpPanel {
     }
 
     // Description
-    const desc = this.scene.add.text(x, y + 75, choice.descriptionCN, {
+    const desc = this.scene.add.text(x, descTopY, choice.descriptionCN, {
       fontSize: this.fs(13, 11), color: '#94a3b8', fontFamily: this.getUIFontFamily(),
-      wordWrap: { width: w - 24 }, align: 'center',
-    }).setOrigin(0.5);
+      wordWrap: { width: descWrapWidth }, align: 'center',
+      lineSpacing: 2,
+    }).setOrigin(0.5, 0);
     this.container.add(desc);
+    const maxDescHeight = Math.max(38, descBottomY - descTopY);
+    if (desc.height > maxDescHeight) {
+      const estimatedLineHeight = this.isMobileViewport() ? 18 : 16;
+      const maxLines = Math.max(2, Math.floor(maxDescHeight / estimatedLineHeight));
+      this.clampTextToLines(desc, maxLines);
+    }
 
     let preview: Phaser.GameObjects.Text | null = null;
+    let previewFrame: Phaser.GameObjects.Rectangle | null = null;
     if (choice.previewTextCN) {
-      preview = this.scene.add.text(x, y + h / 2 - 34, choice.previewTextCN, {
-        fontSize: this.fs(11, 10),
+      previewFrame = this.scene.add.rectangle(x, previewAreaY, w - 26, previewAreaHeight, 0x0f172a, 0.48)
+        .setStrokeStyle(1, rarityColor, 0.4);
+      this.container.add(previewFrame);
+      preview = this.scene.add.text(x, previewAreaY - previewAreaHeight / 2 + 6, choice.previewTextCN, {
+        fontSize: this.fs(10, 10),
         color: choice.previewDpsDelta && choice.previewDpsDelta >= 0 ? '#22c55e' : '#f87171',
         fontFamily: this.getUIFontFamily(),
         fontStyle: 'bold',
         align: 'center',
-        wordWrap: { width: w - 16 },
-      }).setOrigin(0.5);
+        wordWrap: { width: w - 24 },
+        lineSpacing: 2,
+      }).setOrigin(0.5, 0);
+      this.clampTextToLines(preview, 2);
       this.container.add(preview);
     }
 
@@ -211,6 +239,7 @@ export class LevelUpPanel {
     if (protocolFrame) allElements.push(protocolFrame as Phaser.GameObjects.GameObject & { y: number; setAlpha: (value: number) => any });
     if (protocolHalo) allElements.push(protocolHalo as Phaser.GameObjects.GameObject & { y: number; setAlpha: (value: number) => any });
     if (levelText) allElements.push(levelText);
+    if (previewFrame) allElements.push(previewFrame as Phaser.GameObjects.GameObject & { y: number; setAlpha: (value: number) => any });
     if (preview) allElements.push(preview);
     allElements.forEach(el => {
       el.setAlpha(0);

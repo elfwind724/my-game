@@ -55,6 +55,12 @@ export class BuildPanel {
     return Math.round(value * this.layoutBoost);
   }
 
+  private clampText(text: string, maxChars: number): string {
+    const safe = typeof text === 'string' ? text.trim() : '';
+    if (safe.length <= maxChars) return safe;
+    return `${safe.slice(0, Math.max(0, maxChars - 1))}…`;
+  }
+
   private getCategoryColor(category: BuildingCategory): number {
     if (category === 'defense') return 0x38bdf8;
     if (category === 'turret') return 0xa78bfa;
@@ -247,7 +253,7 @@ export class BuildPanel {
     let columns = Math.floor((availableW + gapX) / Math.max(1, preferredW + gapX));
     columns = Phaser.Math.Clamp(columns, 2, 4);
     const cardW = Math.floor((availableW - gapX * (columns - 1)) / columns);
-    const cardH = this.unit(this.isMobileViewport() ? 146 : 138);
+    const cardH = this.unit(this.isMobileViewport() ? 164 : 154);
     const availableH = Math.max(1, Math.abs(cardBottom - cardTop));
     const maxRows = Math.max(1, Math.floor((availableH + gapY) / (cardH + gapY)));
     const maxCards = Math.max(columns, columns * maxRows);
@@ -290,12 +296,13 @@ export class BuildPanel {
         card.add(icon);
       }
 
-      const descText = bDef.descriptionCN.length > 20 ? `${bDef.descriptionCN.slice(0, 20)}…` : bDef.descriptionCN;
-      card.add(this.scene.add.text(this.unit(50), this.unit(14), bDef.nameCN, {
-        fontSize: this.fs(13, 11), color: '#f8fafc', fontFamily: this.uiFont, fontStyle: 'bold',
+      const descMaxChars = Math.max(18, Math.floor((cardW - this.unit(24)) / this.unit(7)) * 2);
+      const descText = this.clampText(bDef.descriptionCN, descMaxChars);
+      card.add(this.scene.add.text(this.unit(50), this.unit(12), this.clampText(bDef.nameCN, 12), {
+        fontSize: this.fs(14, 12), color: '#f8fafc', fontFamily: this.uiFont, fontStyle: 'bold',
       }));
       card.add(this.scene.add.text(this.unit(50), this.unit(30), `T${bDef.tier} · HP${bDef.health}`, {
-        fontSize: this.fs(10, 10), color: '#94a3b8', fontFamily: this.uiFont,
+        fontSize: this.fs(11, 11), color: '#94a3b8', fontFamily: this.uiFont,
       }));
 
       const costParts: string[] = [];
@@ -307,15 +314,19 @@ export class BuildPanel {
         costParts.push(`${names[res] || res}${amt}`);
       }
       card.add(this.scene.add.text(this.unit(10), this.unit(58), `耗材: ${costParts.join(' ')}`, {
-        fontSize: this.fs(10, 10), color: canAfford ? '#4ade80' : '#ef4444', fontFamily: this.uiFont,
+        fontSize: this.fs(11, 11), color: canAfford ? '#4ade80' : '#ef4444', fontFamily: this.uiFont,
       }));
-      card.add(this.scene.add.text(this.unit(10), this.unit(76), descText, {
-        fontSize: this.fs(10, 10), color: '#cbd5e1', fontFamily: this.uiFont,
+      card.add(this.scene.add.text(this.unit(10), this.unit(78), descText, {
+        fontSize: this.fs(11, 11), color: '#cbd5e1', fontFamily: this.uiFont,
         wordWrap: { width: cardW - this.unit(20) },
+        lineSpacing: this.unit(1),
       }));
 
+      card.add(this.scene.add.rectangle(cardW / 2, cardH - this.unit(17), cardW - this.unit(12), this.unit(26), 0x0b1220, 0.92)
+        .setStrokeStyle(1, 0x1f2937, 0.96));
+
       const categoryTag = this.scene.add.text(this.unit(10), cardH - this.unit(26), `${bDef.category.toUpperCase()}`, {
-        fontSize: this.fs(9, 9),
+        fontSize: this.fs(10, 10),
         color: '#7dd3fc',
         fontFamily: this.uiFont,
         backgroundColor: '#0b1220',
@@ -324,7 +335,7 @@ export class BuildPanel {
       card.add(categoryTag);
       const actionLabel = isSelected ? '已选中' : (canAfford ? '点击建造' : '资源不足');
       card.add(this.scene.add.text(cardW - this.unit(10), cardH - this.unit(26), actionLabel, {
-        fontSize: this.fs(10, 10),
+        fontSize: this.fs(11, 11),
         color: isSelected ? '#22d3ee' : (canAfford ? '#38bdf8' : '#64748b'),
         fontFamily: this.uiFont,
         fontStyle: 'bold',

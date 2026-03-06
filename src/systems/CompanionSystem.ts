@@ -8,6 +8,10 @@ import {
 } from '../types/SkillTypes';
 import { gameState, type CompanionData } from '../state/GameState';
 import { events, GameEvents } from '../utils/EventBus';
+import {
+    getCompanionMilestoneBonuses,
+    getReachedCompanionMilestone,
+} from '../data/companionMilestones';
 
 interface CompanionInstance {
     id: string;
@@ -33,6 +37,9 @@ type CompanionProgressResult = {
     level: number;
     name: string;
     tint: number;
+    milestoneLevel?: number;
+    milestoneTitleCN?: string;
+    milestoneDetailCN?: string;
     promoted?: boolean;
     advancedClass?: string;
     reachedMax?: boolean;
@@ -868,7 +875,7 @@ export class CompanionSystem {
     private applyLevelScaling(comp: CompanionInstance): void {
         const level = Phaser.Math.Clamp(Math.max(1, comp.config.level), 1, COMPANION_MAX_LEVEL);
         comp.config.level = level;
-        const role = comp.config.role;
+        const role = comp.config.role || 'tank';
         const roleDamageMul = role === 'tank' ? 1.16 : role === 'sniper' ? 1.22 : 1.14;
         const roleFireRateMul = role === 'tank' ? 0.982 : role === 'sniper' ? 0.988 : 0.978;
         const roleRangeMul = role === 'tank' ? 1.012 : role === 'sniper' ? 1.038 : 1.024;
@@ -882,6 +889,7 @@ export class CompanionSystem {
         let bonusPierce = 0;
         let bonusExplosionRadius = 0;
         let bonusHoming = 0;
+        const milestone = getCompanionMilestoneBonuses(role, level);
 
         const advanced = this.getAdvancedClassDef(comp.config);
         if (advanced) {
@@ -895,12 +903,20 @@ export class CompanionSystem {
             bonusHoming += advanced.bonusHoming || 0;
         }
 
+        damageMul *= milestone.damageMul;
+        fireRateMul *= milestone.fireRateMul;
+        rangeMul *= milestone.rangeMul;
+        hpMul *= milestone.healthMul;
+        bonusPierce += milestone.bonusPierce;
+        bonusExplosionRadius += milestone.bonusExplosionRadius;
+        bonusHoming += milestone.bonusHoming;
+
         const speedBonus = role === 'sniper' ? 1.0 : role === 'medic' ? 0.85 : 0.55;
         comp.config.stats.damage = Math.max(1, Math.round(comp.baseDamage * damageMul));
         comp.config.stats.fireRate = Math.max(95, Math.round(comp.baseFireRate * fireRateMul));
         comp.config.stats.range = Math.min(1700, Math.round(comp.baseRange * rangeMul));
         comp.config.stats.health = Math.max(120, Math.round(comp.baseHealth * hpMul));
-        comp.config.stats.speed = Math.min(330, Math.round((comp.config.stats.speed || 140) + speedBonus * level * speedMul));
+        comp.config.stats.speed = Math.min(330, Math.round((comp.config.stats.speed || 140) + speedBonus * level * speedMul + milestone.speedFlat));
         comp.config.bulletEffect.damage = Math.max(1, Math.round(comp.baseBulletDamage * damageMul * 1.34));
         if (role === 'tank') {
             comp.config.bulletEffect.explosionRadius = 56 + Math.min(130, level * 3 + bonusExplosionRadius);
@@ -935,9 +951,19 @@ export class CompanionSystem {
         }
         let leveledUp = false;
         let promoted = false;
+        let milestoneLevel: number | undefined;
+        let milestoneTitleCN: string | undefined;
+        let milestoneDetailCN: string | undefined;
         while (comp.config.level < COMPANION_MAX_LEVEL && comp.killCount >= comp.nextLevelKills) {
+            const previousLevel = comp.config.level;
             comp.config.level += 1;
             leveledUp = true;
+            const reachedMilestone = getReachedCompanionMilestone(comp.config.role || 'tank', previousLevel, comp.config.level);
+            if (reachedMilestone) {
+                milestoneLevel = reachedMilestone.level;
+                milestoneTitleCN = reachedMilestone.titleCN;
+                milestoneDetailCN = reachedMilestone.detailCN;
+            }
             if (comp.config.level >= COMPANION_PROMOTION_LEVEL && comp.config.promotionTier !== 1) {
                 this.promoteCompanion(comp);
                 promoted = true;
@@ -956,6 +982,9 @@ export class CompanionSystem {
             level: comp.config.level,
             name: comp.config.name,
             tint: comp.config.bulletEffect.color ?? 0xffffff,
+            milestoneLevel,
+            milestoneTitleCN,
+            milestoneDetailCN,
             promoted,
             advancedClass: comp.config.advancedClass,
             reachedMax,

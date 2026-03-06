@@ -8,6 +8,7 @@ import { gameState, PlayerStats, type PassiveSlot, type WeaponSlot } from '../st
 import { WEAPON_DEFS, getWeaponAtLevel } from '../data/weapons';
 import { PASSIVE_DEFS } from '../data/passives';
 import { AR_GLASSES, type ARGlassesDef } from '../data/arGlasses';
+import { getReachedWeaponMilestone, getWeaponMilestoneBonuses } from '../data/weaponMilestones';
 
 export interface BrandCombatModifiers {
   fireRateMul: number;      // >1 means faster
@@ -170,6 +171,9 @@ export interface LevelUpChoice {
   previewDpsAfter?: number;
   previewDpsDelta?: number;
   previewTextCN?: string;
+  milestoneLevel?: number;
+  milestoneTitleCN?: string;
+  milestoneDetailCN?: string;
 }
 
 export type LevelUpProtocolId =
@@ -585,14 +589,33 @@ export class EvolutionSystem {
       const roundedAfter = Number(after.toFixed(1));
       const roundedDelta = Number(delta.toFixed(1));
       const sign = roundedDelta >= 0 ? '+' : '';
+      const milestone = this.getChoiceMilestone(choice);
+      const previewTextCN = milestone
+        ? `强度预览  DPS ${roundedBefore} → ${roundedAfter} (${sign}${roundedDelta})\nLv.${milestone.level}跃迁：${milestone.titleCN}`
+        : `强度预览  DPS ${roundedBefore} → ${roundedAfter} (${sign}${roundedDelta})`;
       return {
         ...choice,
         previewDpsBefore: roundedBefore,
         previewDpsAfter: roundedAfter,
         previewDpsDelta: roundedDelta,
-        previewTextCN: `强度预览  DPS ${roundedBefore} → ${roundedAfter} (${sign}${roundedDelta})`,
+        previewTextCN,
+        milestoneLevel: milestone?.level,
+        milestoneTitleCN: milestone?.titleCN,
+        milestoneDetailCN: milestone?.detailCN,
       };
     });
+  }
+
+  private static getChoiceMilestone(choice: LevelUpChoice): { level: number; titleCN: string; detailCN: string } | null {
+    if (choice.type !== 'upgrade_weapon' || choice.currentLevel == null) return null;
+    const nextLevel = Math.min(8, choice.currentLevel + 1);
+    const milestone = getReachedWeaponMilestone(choice.id, choice.currentLevel, nextLevel);
+    if (!milestone) return null;
+    return {
+      level: milestone.level,
+      titleCN: milestone.titleCN,
+      detailCN: milestone.detailCN,
+    };
   }
 
   private static simulateChoiceResult(
@@ -683,8 +706,12 @@ export class EvolutionSystem {
       const effectiveId = weapon.evolved && weapon.evolvedId ? weapon.evolvedId : weapon.id;
       const def = getWeaponAtLevel(effectiveId, weapon.evolved ? 1 : weapon.level);
       if (!def) continue;
-      const shotsPerSec = 1000 / Math.max(30, def.fireRate / fireRateMul);
-      let dps = def.damage * def.projectileCount * shotsPerSec * damageMul * critMul;
+      const milestone = getWeaponMilestoneBonuses(weapon.id, weapon.level);
+      const effectiveFireRate = Math.max(30, def.fireRate * milestone.fireRateMul);
+      const effectiveDamage = def.damage * milestone.damageMul;
+      const effectiveProjectiles = Math.max(1, def.projectileCount + milestone.projectileBonus);
+      const shotsPerSec = 1000 / Math.max(30, effectiveFireRate / fireRateMul);
+      let dps = effectiveDamage * effectiveProjectiles * shotsPerSec * damageMul * critMul * milestone.dpsWeight;
       if (def.special === 'burn') dps *= 1.12;
       if (def.special === 'chain') dps *= 1.1;
       if (def.special === 'explode') dps *= 1.18;

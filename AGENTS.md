@@ -2,6 +2,11 @@
 
 ## Cursor Cloud specific instructions
 
+## Persistent design prompt
+
+- For game design, progression, combat, survival, roguelike, base-building, and content-roadmap tasks in this repository, consult `/Users/fengnian/my-game/docs/game-master-prompt.xml` first and treat it as the standing production/design spec.
+- When a request is implementation-oriented, use that prompt as a prioritization and validation framework, then proceed to code changes and verification.
+
 This is a **Phaser 3 browser game** (Zombie Survival Roguelike) — a purely client-side application with no backend.
 
 ### Services
