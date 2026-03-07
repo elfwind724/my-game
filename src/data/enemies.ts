@@ -69,6 +69,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
     healthPerWeek: 8,
     damagePerWeek: 2,
     xpValue: 4,
+    special: 'dash_weave',
     unlockWeek: 1,
     spawnWeight: 25,
     lootTable: [
@@ -89,6 +90,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
     healthPerWeek: 40,
     damagePerWeek: 5,
     xpValue: 12,
+    special: 'brace_surge',
     unlockWeek: 2,
     spawnWeight: 10,
     lootTable: [
@@ -110,6 +112,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
     healthPerWeek: 12,
     damagePerWeek: 4,
     xpValue: 8,
+    special: 'strafe_shot',
     unlockWeek: 2,
     spawnWeight: 12,
     lootTable: [
@@ -214,6 +217,7 @@ export const ENEMY_DEFS: Record<string, EnemyDef> = {
     healthPerWeek: 4,
     damagePerWeek: 1,
     xpValue: 2,
+    special: 'pack_rush',
     unlockWeek: 1,
     spawnWeight: 30,
     lootTable: [

@@ -204,6 +204,20 @@ export interface GearStatBonuses {
   fireRateMul: number;
   speedMul: number;
   projectileBonus: number;
+  rangeMul?: number;
+  pierceBonus?: number;
+  chainBonus?: number;
+  explosionRadiusMul?: number;
+}
+
+export interface GearAffix {
+  id: string;
+  kind: 'prefix' | 'suffix' | 'legendary';
+  nameCN: string;
+  descCN: string;
+  tier: number;
+  statKey: keyof GearStatBonuses;
+  value: number;
 }
 
 export interface GearItem {
@@ -215,8 +229,11 @@ export interface GearItem {
   droppedDay: number;
   droppedWeek: number;
   sourceTag?: string;
+  sourceTheme?: string;
   sellValue: number;
   bonuses: GearStatBonuses;
+  affixes?: GearAffix[];
+  legendaryPowerCN?: string;
 }
 
 export interface BitcoinPerkDef {
@@ -812,6 +829,10 @@ class GameStateManager {
       fireRateMul: 1,
       speedMul: 1,
       projectileBonus: 0,
+      rangeMul: 1,
+      pierceBonus: 0,
+      chainBonus: 0,
+      explosionRadiusMul: 1,
     };
     const equipped = this.getEquippedGearForWeapon(weaponType);
     const perk = this.getBitcoinPerkBonuses();
@@ -821,6 +842,10 @@ class GameStateManager {
         fireRateMul: defaults.fireRateMul,
         speedMul: defaults.speedMul,
         projectileBonus: defaults.projectileBonus + perk.projectileBonus,
+        rangeMul: defaults.rangeMul,
+        pierceBonus: defaults.pierceBonus,
+        chainBonus: defaults.chainBonus,
+        explosionRadiusMul: defaults.explosionRadiusMul,
       };
     }
     return {
@@ -828,6 +853,10 @@ class GameStateManager {
       fireRateMul: Number((equipped.bonuses.fireRateMul || 1).toFixed(3)),
       speedMul: Number((equipped.bonuses.speedMul || 1).toFixed(3)),
       projectileBonus: Math.max(0, Math.floor((equipped.bonuses.projectileBonus || 0) + perk.projectileBonus)),
+      rangeMul: Number((equipped.bonuses.rangeMul || 1).toFixed(3)),
+      pierceBonus: Math.max(0, Math.floor(equipped.bonuses.pierceBonus || 0)),
+      chainBonus: Math.max(0, Math.floor(equipped.bonuses.chainBonus || 0)),
+      explosionRadiusMul: Number((equipped.bonuses.explosionRadiusMul || 1).toFixed(3)),
     };
   }
 

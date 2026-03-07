@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { BITCOIN_PERK_DEFS, gameState, type GearItem, type GearRarity, type GearWeaponType } from '../state/GameState';
+import { GearLootSystem } from '../systems/GearLootSystem';
 import { events } from '../utils/EventBus';
 import { resolvePreferredHeroPortraitTexture } from '../data/customHero';
 
@@ -204,8 +205,8 @@ export class GearVaultPanel {
     const leftBoxX = panelX + this.unit(16);
     const rightBoxX = panelX + panelW - slotBoxW - this.unit(16);
     const slotBaseY = showcaseTop + this.unit(34);
-    const slotStepY = this.unit(44);
-    const slotBoxH = this.unit(34);
+    const slotStepY = this.unit(48);
+    const slotBoxH = this.unit(42);
 
     const slotDefs: Array<{
       weaponType: GearWeaponType;
@@ -251,7 +252,10 @@ export class GearVaultPanel {
       const title = `${part} · ${WEAPON_LABELS[slot.weaponType]} ${rarityTag}`;
       const name = equipped ? equipped.nameCN : '空位';
       const detail = equipped
-        ? `伤x${equipped.bonuses.damageMul.toFixed(2)} 速x${equipped.bonuses.fireRateMul.toFixed(2)} 弹+${equipped.bonuses.projectileBonus}`
+        ? GearLootSystem.formatBonusSummary(equipped)
+        : '待装备';
+      const affixLine = equipped
+        ? `${GearLootSystem.getThemeLabel(equipped.sourceTheme)} · ${GearLootSystem.formatAffixSummary(equipped, 2) || '基础词条'}`
         : '待装备';
       this.container?.add(this.scene.add.text(slot.boxX + this.unit(8), slot.boxY + this.unit(4), `${title}  ${name}`, {
         fontSize: this.fs(11, 12),
@@ -262,6 +266,11 @@ export class GearVaultPanel {
       this.container?.add(this.scene.add.text(slot.boxX + this.unit(8), slot.boxY + this.unit(18), detail, {
         fontSize: this.fs(10, 12),
         color: equipped ? '#cbd5e1' : '#64748b',
+        fontFamily: uiFont,
+      }));
+      this.container?.add(this.scene.add.text(slot.boxX + this.unit(8), slot.boxY + this.unit(29), affixLine, {
+        fontSize: this.fs(9, 11),
+        color: equipped ? '#94a3b8' : '#475569',
         fontFamily: uiFont,
       }));
 
@@ -282,7 +291,7 @@ export class GearVaultPanel {
     const uiFont = this.getUIFontFamily();
     const listH = this.unit(264);
     const listW = panelW - this.unit(24);
-    const rowH = this.unit(44);
+    const rowH = this.unit(56);
     const start = this.page * this.pageSize;
     const pageItems = stash.slice(start, start + this.pageSize);
     const leftTextX = panelX + this.unit(30);
@@ -323,8 +332,8 @@ export class GearVaultPanel {
       ));
       this.container?.add(this.scene.add.text(
         detailTextX,
-        y + this.unit(22),
-        `${WEAPON_LABELS[item.weaponType]} · 伤x${item.bonuses.damageMul.toFixed(2)} 速x${item.bonuses.fireRateMul.toFixed(2)} 弹+${item.bonuses.projectileBonus} 售₿${item.sellValue.toFixed(2)}`,
+        y + this.unit(8),
+        `${WEAPON_LABELS[item.weaponType]} · ${GearLootSystem.formatBonusSummary(item)}`,
         {
           fontSize: this.fs(10, 12),
           color: '#cbd5e1',
@@ -332,8 +341,19 @@ export class GearVaultPanel {
           wordWrap: { width: Math.max(180, sellBtnX - detailTextX - this.unit(10)) },
         }
       ));
+      this.container?.add(this.scene.add.text(
+        detailTextX,
+        y + this.unit(25),
+        `${GearLootSystem.getThemeLabel(item.sourceTheme)} · ${GearLootSystem.formatAffixSummary(item, 2) || '基础词条'} · 售₿${item.sellValue.toFixed(2)}`,
+        {
+          fontSize: this.fs(9, 11),
+          color: '#94a3b8',
+          fontFamily: uiFont,
+          wordWrap: { width: Math.max(180, sellBtnX - detailTextX - this.unit(10)) },
+        }
+      ));
 
-      const equipBtn = this.scene.add.text(equipBtnX, y + this.unit(7), isEquipped ? '卸下' : '装备', {
+      const equipBtn = this.scene.add.text(equipBtnX, y + this.unit(14), isEquipped ? '卸下' : '装备', {
         fontSize: this.fs(11, 12),
         color: '#22c55e',
         fontFamily: uiFont,
@@ -356,7 +376,7 @@ export class GearVaultPanel {
       });
       this.container?.add(equipBtn);
 
-      const sellBtn = this.scene.add.text(sellBtnX, y + this.unit(7), '出售', {
+      const sellBtn = this.scene.add.text(sellBtnX, y + this.unit(14), '出售', {
         fontSize: this.fs(11, 12),
         color: '#fbbf24',
         fontFamily: uiFont,

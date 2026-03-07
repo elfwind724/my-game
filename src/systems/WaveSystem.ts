@@ -11,6 +11,7 @@ import type { EnemyDef } from '../data/enemies';
 export class WaveSystem {
   private scene: Phaser.Scene;
   private enemies: Phaser.Physics.Arcade.Group;
+  private player: Phaser.Physics.Arcade.Sprite;
 
   private currentWave: number = 0;
   private enemiesInWave: number = 0;
@@ -23,9 +24,10 @@ export class WaveSystem {
   private spawnedInWave: number = 0;
   private bossSpawnCount: number = 0;
 
-  constructor(scene: Phaser.Scene, enemies: Phaser.Physics.Arcade.Group, _player: Phaser.Physics.Arcade.Sprite) {
+  constructor(scene: Phaser.Scene, enemies: Phaser.Physics.Arcade.Group, player: Phaser.Physics.Arcade.Sprite) {
     this.scene = scene;
     this.enemies = enemies;
+    this.player = player;
   }
 
   private getDayBalanceProfile(dayOverride?: number): {
@@ -154,6 +156,9 @@ export class WaveSystem {
     // Spawn boss on Blood Moon after wave 5
     if (isBloodMoon && this.currentWave >= 2 && this.bossSpawnCount < 1) {
       this.scene.time.delayedCall(2500, () => this.spawnBoss());
+    } else if (!isBloodMoon && gameState.data.currentDay >= 3 && this.currentWave >= 4 && this.bossSpawnCount < 1) {
+      // Regular nights also need a visible pressure spike, but lighter than blood moon.
+      this.scene.time.delayedCall(3200, () => this.spawnBoss());
     }
   }
 
@@ -180,11 +185,13 @@ export class WaveSystem {
     const factionWeights = gameState.data.isNight
       ? (((this.scene as any).getNightEnemyFactionWeights?.() || {}) as Record<string, number>)
       : {};
+    const scriptedThreat = this.pickScriptedThreat(availableTypes);
     const weightedEntries = availableTypes.map((type) => {
       const mul = Phaser.Math.Clamp(Number(factionWeights[type.id] || 1), 0.18, 2.3);
+      const scriptedMul = scriptedThreat?.id === type.id ? 2.85 : 1;
       return {
         type,
-        weight: Math.max(0.01, type.spawnWeight * mul),
+        weight: Math.max(0.01, type.spawnWeight * mul * scriptedMul),
       };
     });
     const totalWeight = weightedEntries.reduce((sum, entry) => sum + entry.weight, 0);
@@ -206,16 +213,77 @@ export class WaveSystem {
     this.spawnedInWave++;
   }
 
-  spawnEnemyOfType(def: EnemyDef): Phaser.Physics.Arcade.Sprite {
-    // Spawn from world edges
-    const side = Phaser.Math.Between(0, 3);
-    let x: number, y: number;
-    switch (side) {
-      case 0: x = Phaser.Math.Between(50, 1950); y = Phaser.Math.Between(20, 60); break;
-      case 1: x = Phaser.Math.Between(1900, 1960); y = Phaser.Math.Between(50, 1450); break;
-      case 2: x = Phaser.Math.Between(50, 1950); y = Phaser.Math.Between(1420, 1470); break;
-      default: x = Phaser.Math.Between(20, 60); y = Phaser.Math.Between(50, 1450); break;
+  private pickScriptedThreat(availableTypes: EnemyDef[]): EnemyDef | null {
+    const cadence = gameState.data.isBloodMoon ? 5 : 7;
+    if (this.spawnedInWave === 0 || this.spawnedInWave % cadence !== cadence - 1) return null;
+    const week = Math.max(1, gameState.data.currentWeek || 1);
+    const pressure = Math.max(0, this.currentWave - 1);
+    const specialistEntries = availableTypes
+      .filter((type) => {
+        if (type.isBoss) return false;
+        return type.behavior === 'ranged'
+          || type.behavior === 'heavy'
+          || type.behavior === 'explode'
+          || type.behavior === 'heal'
+          || type.behavior === 'stealth'
+          || type.behavior === 'elite'
+          || type.id === 'spitter'
+          || type.id === 'necromancer'
+          || type.id === 'bomber'
+          || type.id === 'parasite'
+          || type.id === 'shield_bearer'
+          || type.id === 'berserker';
+      })
+      .map((type) => {
+        let weight = type.spawnWeight;
+        if (type.behavior === 'ranged' || type.id === 'spitter') weight *= 1.2 + pressure * 0.06;
+        if (type.behavior === 'heavy' || type.id === 'shield_bearer') weight *= 1.15 + week * 0.08;
+        if (type.behavior === 'heal' || type.id === 'necromancer') weight *= 1 + Math.max(0, pressure - 1) * 0.05;
+        if (type.behavior === 'elite') weight *= 0.7 + pressure * 0.12;
+        if (type.id === 'bomber' || type.behavior === 'explode') weight *= 0.95 + pressure * 0.08;
+        return { type, weight: Math.max(0.1, weight) };
+      });
+    if (specialistEntries.length === 0) return null;
+    const total = specialistEntries.reduce((sum, entry) => sum + entry.weight, 0);
+    let roll = Math.random() * total;
+    for (const entry of specialistEntries) {
+      roll -= entry.weight;
+      if (roll <= 0) return entry.type;
     }
+    return specialistEntries[0].type;
+  }
+
+  private getEdgeSpawnPoint(): { x: number; y: number } {
+    const side = Phaser.Math.Between(0, 3);
+    switch (side) {
+      case 0: return { x: Phaser.Math.Between(50, 1950), y: Phaser.Math.Between(20, 60) };
+      case 1: return { x: Phaser.Math.Between(1900, 1960), y: Phaser.Math.Between(50, 1450) };
+      case 2: return { x: Phaser.Math.Between(50, 1950), y: Phaser.Math.Between(1420, 1470) };
+      default: return { x: Phaser.Math.Between(20, 60), y: Phaser.Math.Between(50, 1450) };
+    }
+  }
+
+  private getBossSpawnPoint(): { x: number; y: number } {
+    const bounds = new Phaser.Geom.Rectangle(60, 60, 1880, 1380);
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      const radius = Phaser.Math.Between(420, 560);
+      const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * radius, bounds.left, bounds.right);
+      const y = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * radius, bounds.top, bounds.bottom);
+      const dist = Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y);
+      if (dist >= 360 && dist <= 620) return { x, y };
+    }
+    return this.getEdgeSpawnPoint();
+  }
+
+  spawnEnemyOfType(def: EnemyDef, options?: { x?: number; y?: number; entranceFx?: boolean }): Phaser.Physics.Arcade.Sprite {
+    const edgeSpawn = this.getEdgeSpawnPoint();
+    const spawnPoint = {
+      x: options?.x ?? edgeSpawn.x,
+      y: options?.y ?? edgeSpawn.y,
+    };
+    const x = spawnPoint.x;
+    const y = spawnPoint.y;
 
     // Choose texture based on size
     let texture = 'zombie';
@@ -227,7 +295,7 @@ export class WaveSystem {
 
     enemy.setActive(true).setVisible(true);
     enemy.setTint(def.color);
-    enemy.setDepth(5);
+    enemy.setDepth(def.isBoss ? 12 : 5);
 
     // Scale sprite based on def size
     const scale = def.size / 12;
@@ -255,6 +323,7 @@ export class WaveSystem {
     ed.xpValue = def.xpValue;
     ed.lootTable = def.lootTable;
     ed.special = def.special;
+    ed.spawnWave = this.currentWave;
 
     // Behavior-specific setup
     if (def.behavior === 'stealth') {
@@ -291,6 +360,19 @@ export class WaveSystem {
     ed.damage = Math.max(1, Math.floor(ed.damage * offenseMul * pace.enemyOffenseMul));
     ed.speed = Math.max(20, Math.floor(ed.speed * speedMul * pace.enemySpeedMul));
 
+    if (options?.entranceFx || def.isBoss) {
+      const entryColor = def.isBoss ? 0xfb7185 : def.color;
+      const entryFx = this.scene.add.circle(x, y, def.isBoss ? 34 : 20, entryColor, def.isBoss ? 0.26 : 0.18)
+        .setDepth(def.isBoss ? 14 : 8);
+      this.scene.tweens.add({
+        targets: entryFx,
+        alpha: 0,
+        scale: def.isBoss ? 2.8 : 2.1,
+        duration: def.isBoss ? 700 : 320,
+        onComplete: () => entryFx.destroy(),
+      });
+    }
+
     return enemy;
   }
 
@@ -305,29 +387,32 @@ export class WaveSystem {
     if (!scaled) return;
 
     this.bossSpawnCount += 1;
-    const boss = this.spawnEnemyOfType(scaled);
+    const bossPoint = this.getBossSpawnPoint();
+    const boss = this.spawnEnemyOfType(scaled, { x: bossPoint.x, y: bossPoint.y, entranceFx: true });
     if (!boss) return;
 
     const bd = boss as any;
-    const bloodMoonMul = gameState.data.isBloodMoon ? 1.8 : 1.35;
+    const isBloodMoon = !!gameState.data.isBloodMoon;
+    const bloodMoonMul = isBloodMoon ? 1.8 : 1.18;
     const weekMul = 1 + Math.max(0, gameState.data.currentWeek - 1) * 0.42;
-    const pressureMul = forceSecond ? 2.35 : 1.95;
+    const pressureMul = forceSecond ? 2.35 : (isBloodMoon ? 1.95 : 1.32);
     bd.health = Math.floor((bd.health || scaled.baseHealth) * bloodMoonMul * weekMul * pressureMul);
     bd.maxHealth = bd.health;
-    bd.damage = Math.floor((bd.damage || scaled.baseDamage) * (1.35 + (gameState.data.currentWeek - 1) * 0.18) * (forceSecond ? 1.28 : 1.12));
-    bd.speed = Math.floor((bd.speed || scaled.speed) * (forceSecond ? 1.18 : 1.1));
+    bd.damage = Math.floor((bd.damage || scaled.baseDamage) * ((isBloodMoon ? 1.35 : 1.14) + (gameState.data.currentWeek - 1) * 0.18) * (forceSecond ? 1.28 : 1.08));
+    bd.speed = Math.floor((bd.speed || scaled.speed) * (forceSecond ? 1.18 : (isBloodMoon ? 1.1 : 1.04)));
     bd.bossArmorMul = Phaser.Math.Clamp(
-      0.36 + gameState.data.currentWeek * 0.035 + this.currentWave * 0.012 + (forceSecond ? 0.08 : 0),
-      0.38,
+      (isBloodMoon ? 0.36 : 0.28) + gameState.data.currentWeek * 0.035 + this.currentWave * 0.012 + (forceSecond ? 0.08 : 0),
+      isBloodMoon ? 0.38 : 0.26,
       0.78
     );
-    bd.bossHitCapRatio = forceSecond ? 0.022 : 0.028;
-    bd.enrageThreshold = forceSecond ? 0.62 : 0.48;
+    bd.bossHitCapRatio = forceSecond ? 0.022 : (isBloodMoon ? 0.028 : 0.034);
+    bd.enrageThreshold = forceSecond ? 0.62 : (isBloodMoon ? 0.48 : 0.42);
 
     if (forceSecond) {
       boss.setTint(0xff225f);
       boss.setScale((boss.scale || 1) * 1.08);
     }
+    const alertText = isBloodMoon ? '⚠ 强敌出现 ⚠' : '⚠ 变异首领逼近 ⚠';
 
     // Boss announcement - dramatic entrance
     const w = this.scene.cameras.main.width;
@@ -345,7 +430,7 @@ export class WaveSystem {
     });
 
     // Warning text with scale-in animation
-    const warnTitle = forceSecond ? '⚠ 二次首领突入 ⚠' : '⚠ 强敌出现 ⚠';
+    const warnTitle = forceSecond ? '⚠ 二次首领突入 ⚠' : alertText;
     const warn = this.scene.add.text(w / 2, 60, warnTitle, {
       fontSize: '24px', color: '#fbbf24', fontFamily: 'Courier New', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 3,
@@ -355,6 +440,25 @@ export class WaveSystem {
       fontSize: '36px', color: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold',
       stroke: '#000000', strokeThickness: 5,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(2000).setScale(0);
+
+    const marker = this.scene.add.text(boss.x, boss.y - Math.max(58, boss.displayHeight * 0.7), scaled.nameCN, {
+      fontSize: '16px',
+      color: '#ffd166',
+      fontFamily: 'Courier New',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 3,
+      backgroundColor: '#3b0d17',
+      padding: { left: 6, right: 6, top: 3, bottom: 3 },
+    }).setOrigin(0.5).setDepth(1500);
+    (boss as any).bossMarker = marker;
+    this.scene.tweens.add({
+      targets: marker,
+      alpha: { from: 0.2, to: 0.92 },
+      duration: 460,
+      yoyo: true,
+      repeat: 2,
+    });
 
     this.scene.tweens.add({
       targets: bossName, scale: { from: 0, to: 1 }, duration: 500,

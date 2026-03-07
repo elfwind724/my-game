@@ -432,6 +432,9 @@ export class CraftingPanel extends SlidePanel {
       laser_fire: '用途: 直线穿透压制',
       slow_aura: '用途: 减速拖延推进',
       missile_fire: '用途: 大范围爆炸清场',
+      sniper_fire: '用途: 远程点杀精英',
+      flame_fire: '用途: 近距扇面封路',
+      radar_boost: '用途: 强化附近炮台链路',
       crafting: '用途: 解锁制造配方',
       housing: '用途: 扩容伙伴住宿',
       rest: '用途: 白天恢复状态',
@@ -496,6 +499,9 @@ export class CraftingPanel extends SlidePanel {
         laser_fire: '效果: 激光穿透',
         slow_aura: '效果: 范围减速',
         missile_fire: '效果: 爆炸导弹',
+        sniper_fire: '效果: 远程高伤',
+        flame_fire: '效果: 扇面灼烧',
+        radar_boost: '效果: 炮台增幅',
         heal_aura: '效果: 范围治疗',
         radar: '效果: 预警侦测',
         storage: '效果: 增加仓储',
@@ -845,6 +851,7 @@ export class BasePanel extends SlidePanel {
     const res = gameState.data.resources;
     const companions = gameState.data.companions;
     const autoBuild = gameState.data.autoBuild;
+    const advisorLines = BaseSystem.getConstructionAdvisorLines();
     const compCount = companions.length;
     const popCap = BaseSystem.getPopulationCapacity();
     const partyCount = companions.filter(c => c.status === 'party').length;
@@ -1022,6 +1029,26 @@ export class BasePanel extends SlidePanel {
     container.add(autoBuildBtn);
     summaryRightY += autoBuildBtn.height + unit(3);
 
+    const recommendBuildBtn = this.scene.add.text(
+      rightX,
+      summaryRightY,
+      '推荐施工',
+      {
+        ...actionBtnStyle,
+        color: '#fde68a',
+      }
+    ).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    if (recommendBuildBtn.input) (recommendBuildBtn.input as any).priorityID = 3;
+    recommendBuildBtn.on('pointerdown', () => {
+      const result = BaseSystem.applyRecommendedBuildPlan();
+      emitAutoBuildState();
+      events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+      showTip(result.message, '#fde68a');
+      this.refresh();
+    });
+    container.add(recommendBuildBtn);
+    summaryRightY += recommendBuildBtn.height + unit(3);
+
     const summaryPanelH = Math.max(
       summaryLeftY - summaryTop + summaryPaddingY,
       summaryRightY - summaryTop + summaryPaddingY
@@ -1079,6 +1106,7 @@ export class BasePanel extends SlidePanel {
       detailLines.push(`金来源: 河流淘金 / 山洞挖矿 / 城区搜刮 / 夜战掉落`);
       detailLines.push(`夜间策略: ${autoBuild.pauseAtNight ? '暂停施工' : '持续施工'} · ${autoBuild.autoAssignBuilders ? '自动派工' : '手动派工'}`);
       BaseSystem.getAutoDutyBehaviorSummary().slice(0, 2).forEach((line) => detailLines.push(line));
+      advisorLines.forEach((line) => detailLines.push(`建议: ${line}`));
 
       const detailTop = sy;
       const detailW = this.panelWidth - unit(24);
@@ -1142,13 +1170,6 @@ export class BasePanel extends SlidePanel {
     this.scrollY = 0;
     this.maxScrollY = 0;
 
-    if (companions.length === 0) {
-      container.add(this.scene.add.text(unit(20), sy + unit(10), '暂无伙伴\n夜晚击退敌人有机会招募', {
-        fontSize: fs(12), color: '#64748b', fontFamily: uiFont, lineSpacing: unit(4),
-      }));
-      return;
-    }
-
     const viewportBg = this.scene.add.rectangle(
       this.panelWidth / 2,
       this.scrollAreaTop + this.scrollAreaHeight / 2,
@@ -1170,6 +1191,30 @@ export class BasePanel extends SlidePanel {
     if (scrollZone.input) (scrollZone.input as any).priorityID = 0;
     container.add(scrollZone);
     this.scrollZone = scrollZone;
+
+    if (companions.length === 0) {
+      const emptyCard = this.scene.add.rectangle(
+        this.panelWidth / 2,
+        this.scrollAreaTop + unit(84),
+        this.panelWidth - unit(42),
+        unit(138),
+        0x08111f,
+        0.92
+      ).setStrokeStyle(1, 0x1e3a5f, 0.95);
+      container.add(emptyCard);
+      container.add(this.scene.add.text(unit(24), this.scrollAreaTop + unit(28), '暂无伙伴', {
+        fontSize: fs(14), color: '#e2e8f0', fontFamily: uiFont, fontStyle: 'bold',
+      }));
+      container.add(this.scene.add.text(unit(24), this.scrollAreaTop + unit(54), '夜晚击退敌人有机会招募，宿舍房间可提高人口上限。', {
+        fontSize: fsMeta(11), color: '#94a3b8', fontFamily: uiFont, wordWrap: { width: this.panelWidth - unit(60) },
+      }));
+      advisorLines.forEach((line, index) => {
+        container.add(this.scene.add.text(unit(24), this.scrollAreaTop + unit(82) + index * unit(18), `· ${line}`, {
+          fontSize: fsMeta(11), color: '#67e8f9', fontFamily: uiFont, wordWrap: { width: this.panelWidth - unit(60) },
+        }));
+      });
+      return;
+    }
 
     const scrollCont = this.scene.add.container(0, this.scrollAreaTop);
     container.add(scrollCont);

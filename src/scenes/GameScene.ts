@@ -332,7 +332,7 @@ type DamageSource =
   | { type: 'player'; weaponType?: WeaponType | null }
   | { type: 'companion'; companionId?: string | null }
   | { type: 'turret'; turretId?: string | null };
-type BulletVfxArchetype = 'kinetic' | 'scatter' | 'pulse' | 'flame' | 'pierce' | 'cannon' | 'frost' | 'chain';
+type BulletVfxArchetype = 'kinetic' | 'scatter' | 'pulse' | 'flame' | 'pierce' | 'cannon' | 'frost' | 'chain' | 'orbit' | 'holy' | 'boomerang';
 
 interface RunMutatorEffects {
   playerDamageMul: number;
@@ -4618,7 +4618,17 @@ export default class GameScene extends Phaser.Scene {
       if ((choice.reward.bitcoin || 0) > 0) {
         rewardPreview.push(`₿+${(choice.reward.bitcoin || 0).toFixed(2)}`);
       }
+      const compactRewardText = (parts: string[], limit: number): string => {
+        if (parts.length <= limit) return parts.join(' · ');
+        return `${parts.slice(0, limit).join(' · ')} · 其余${parts.length - limit}项`;
+      };
       const masteryLv = masteryLevels[choice.branch] || 0;
+      const rewardPreviewLabel = `完成奖励 ${compactRewardText(rewardPreview, 3)}`;
+      const footerTop = startY + cardH / 2 - 110;
+      const footerHeight = 84;
+      const footerBg = this.add.rectangle(x, footerTop + footerHeight / 2, cardW - 28, footerHeight, 0x0d1727, 0.5)
+        .setScrollFactor(0)
+        .setStrokeStyle(1, branchColor, 0.28);
 
       const texts = [
         this.add.text(x, startY - cardH / 2 + 16, choice.branchNameCN, {
@@ -4652,18 +4662,19 @@ export default class GameScene extends Phaser.Scene {
           align: 'center',
           wordWrap: { width: cardW - 24, useAdvancedWrap: true },
         }).setOrigin(0.5, 0),
-        this.add.text(x, startY + cardH / 2 - 82, `完成奖励 ${rewardPreview.join(' · ')}`, {
+        this.add.text(x, footerTop + 8, rewardPreviewLabel, {
           fontSize: this.worldFs(15, 12),
           color: '#86efac',
           fontFamily: uiFont,
           align: 'center',
-          wordWrap: { width: cardW - 24, useAdvancedWrap: true },
+          wordWrap: { width: cardW - 38, useAdvancedWrap: true },
         }).setOrigin(0.5, 0),
-        this.add.text(x, startY + cardH / 2 - 54, `+XP${choice.reward.xp} · 永久精通+${choice.masteryGain}`, {
+        this.add.text(x, footerTop + 34, `+XP${choice.reward.xp} · 永久精通+${choice.masteryGain}`, {
           fontSize: this.worldFs(15, 12),
           color: '#fda4af',
           fontFamily: uiFont,
           align: 'center',
+          wordWrap: { width: cardW - 38, useAdvancedWrap: true },
         }).setOrigin(0.5, 0),
       ];
       const pickBtn = this.add.rectangle(x, startY + cardH / 2 - 22, cardW - 30, 40, 0x13233a, 0.98)
@@ -4678,7 +4689,7 @@ export default class GameScene extends Phaser.Scene {
       const pick = () => this.selectDayExplorationChallenge(choice);
       card.on('pointerdown', pick);
       pickBtn.on('pointerdown', pick);
-      container.add([card, ...texts, pickBtn, pickText]);
+      container.add([card, footerBg, ...texts, pickBtn, pickText]);
     });
   }
 
@@ -8860,26 +8871,8 @@ export default class GameScene extends Phaser.Scene {
       if (this.currentFacility) return;
       events.emit('toggle-collection');
     });
-    this.input.keyboard!.on('keydown-J', () => {
-      if (this.currentFacility) return;
-      events.emit('toggle-loot-codex');
-    });
-    this.input.keyboard!.on('keydown-T', () => {
-      if (this.currentFacility) return;
-      if (this.isGameOver) return;
-      const now = this.time.now;
-      if (now - (this as any)._lastToggleBaseAt < 400) return;
-      (this as any)._lastToggleBaseAt = now;
-      events.emit('toggle-base');
-    });
-    this.input.keyboard!.on('keydown-H', () => {
-      if (this.currentFacility) return;
-      if (this.isGameOver) return;
-      const now = this.time.now;
-      if (now - (this as any)._lastToggleLeisureAt < 400) return;
-      (this as any)._lastToggleLeisureAt = now;
-      events.emit('toggle-leisure');
-    });
+    // J / T / H are handled in UIScene so panel hotkeys remain edge-triggered
+    // and do not double-toggle when both scenes are alive.
 
     // Weapon switching (1-6)
     for (let i = 1; i <= 6; i++) {
@@ -9602,6 +9595,7 @@ export default class GameScene extends Phaser.Scene {
       // Store weapon data on bullet
       const anyBullet = bullet as any;
       anyBullet.weaponDamage = damage;
+      anyBullet.weaponType = weaponDef.id;
       anyBullet.weaponSpecial = finalSpecial;
       anyBullet.weaponRange = weaponDef.range || 400;
       anyBullet.originX = this.player.x;
@@ -9625,7 +9619,8 @@ export default class GameScene extends Phaser.Scene {
       anyBullet.swayFrequency = swayAmp > 0 ? (swayArchetype === 'flame' ? 0.02 : 0.014) + milestoneStage * 0.001 : 0;
       anyBullet.swayPhase = Math.random() * Math.PI * 2;
       if (finalSpecial === 'pierce') {
-        anyBullet.pierceLeft = 1 + (mods.pierceBonus || 0);
+        const gearBonuses = gameState.getWeaponGearBonuses(weaponDef.id as any);
+        anyBullet.pierceLeft = 1 + (mods.pierceBonus || 0) + Math.max(0, gearBonuses.pierceBonus || 0);
       } else {
         anyBullet.pierceLeft = null;
       }
@@ -9686,6 +9681,7 @@ export default class GameScene extends Phaser.Scene {
         extra.setRotation(burstAngle + Math.PI / 2);
         const anyExtra = extra as any;
         anyExtra.weaponDamage = burstDamage;
+        anyExtra.weaponType = weaponDef.id;
         anyExtra.weaponSpecial = extraChainChance > 0.22 ? 'chain' : finalSpecial;
         anyExtra.weaponRange = Math.max(160, (weaponDef.range || 400) * 0.75);
         anyExtra.originX = this.player.x;
@@ -9702,7 +9698,12 @@ export default class GameScene extends Phaser.Scene {
         anyExtra.swayAmplitude = (10 + patternPower * 2 + milestoneStage * 3) * orbitAmpMul;
         anyExtra.swayFrequency = 0.012 + patternPower * 0.0008 + milestoneStage * 0.0009;
         anyExtra.swayPhase = (Math.PI * 2 * i) / Math.max(1, burstCount);
-        anyExtra.pierceLeft = anyExtra.weaponSpecial === 'pierce' ? (2 + (mods.pierceBonus || 0)) : null;
+        if (anyExtra.weaponSpecial === 'pierce') {
+          const gearBonuses = gameState.getWeaponGearBonuses(weaponDef.id as any);
+          anyExtra.pierceLeft = 2 + (mods.pierceBonus || 0) + Math.max(0, gearBonuses.pierceBonus || 0);
+        } else {
+          anyExtra.pierceLeft = null;
+        }
         const burstLife = anyExtra.weaponRange / Math.max(120, burstSpeed) * 1000;
         anyExtra.spawnTime = this.time.now;
         anyExtra.maxLifetime = burstLife + 120;
@@ -9747,6 +9748,7 @@ export default class GameScene extends Phaser.Scene {
         nova.setRotation(novaAngle + Math.PI / 2);
         const anyNova = nova as any;
         anyNova.weaponDamage = novaDamage;
+        anyNova.weaponType = weaponDef.id;
         anyNova.weaponSpecial = extraChainChance > 0.18 ? 'chain' : novaSpecial;
         anyNova.weaponRange = Math.max(140, (weaponDef.range || 400) * 0.72);
         anyNova.originX = this.player.x;
@@ -9763,7 +9765,12 @@ export default class GameScene extends Phaser.Scene {
         anyNova.swayAmplitude = (14 + patternPower * 2.4 + milestoneStage * 3.5) * orbitAmpMul;
         anyNova.swayFrequency = 0.014 + patternPower * 0.0009 + milestoneStage * 0.0011;
         anyNova.swayPhase = (Math.PI * 2 * i) / Math.max(1, novaCount);
-        anyNova.pierceLeft = anyNova.weaponSpecial === 'pierce' ? (2 + (mods.pierceBonus || 0)) : null;
+        if (anyNova.weaponSpecial === 'pierce') {
+          const gearBonuses = gameState.getWeaponGearBonuses(weaponDef.id as any);
+          anyNova.pierceLeft = 2 + (mods.pierceBonus || 0) + Math.max(0, gearBonuses.pierceBonus || 0);
+        } else {
+          anyNova.pierceLeft = null;
+        }
         const novaLife = anyNova.weaponRange / Math.max(120, novaSpeed) * 1000;
         anyNova.spawnTime = this.time.now;
         anyNova.maxLifetime = novaLife + 120;
@@ -9779,6 +9786,9 @@ export default class GameScene extends Phaser.Scene {
 
   private getVSBulletTexture(weaponDef: any, special: string | undefined): string {
     const id = String(weaponDef?.id || '');
+    if (id.includes('orbit')) return 'bullet_orbit';
+    if (id.includes('holy') || id.includes('water') || id.includes('sanct')) return 'bullet_holy';
+    if (id.includes('boomerang')) return 'bullet_boomerang';
     if (special === 'burn') return 'bullet_flame';
     if (special === 'pierce') return 'bullet_pierce';
     if (special === 'explode') return 'bullet_cannon';
@@ -9796,10 +9806,17 @@ export default class GameScene extends Phaser.Scene {
 
   private getVSBulletScale(texture: string): number {
     if (texture === 'bullet_cannon') return 3;
+    if (texture === 'bullet_holy') return 2.3;
+    if (texture === 'bullet_orbit' || texture === 'bullet_boomerang') return 2.15;
     return 2;
   }
 
   private resolveBulletVfxArchetype(textureKey: string | undefined, special: string | undefined): BulletVfxArchetype {
+    const key = String(textureKey || '').toLowerCase();
+    if (key.includes('orbit')) return 'orbit';
+    if (key.includes('holy')) return 'holy';
+    if (key.includes('boomerang')) return 'boomerang';
+
     const normalizedSpecial = String(special || '').toLowerCase();
     if (normalizedSpecial === 'burn' || normalizedSpecial === 'burning') return 'flame';
     if (normalizedSpecial === 'explode' || normalizedSpecial === 'explosive') return 'cannon';
@@ -9807,7 +9824,6 @@ export default class GameScene extends Phaser.Scene {
     if (normalizedSpecial === 'pierce' || normalizedSpecial === 'piercing') return 'pierce';
     if (normalizedSpecial === 'slow' || normalizedSpecial === 'frozen') return 'frost';
 
-    const key = String(textureKey || '').toLowerCase();
     if (key.includes('scatter')) return 'scatter';
     if (key.includes('pulse')) return 'pulse';
     if (key.includes('flame')) return 'flame';
@@ -9857,6 +9873,8 @@ export default class GameScene extends Phaser.Scene {
     if (!bullet.active || !enemy.active) return;
     const bulletData = bullet as any;
     const mods = EvolutionSystem.getEquippedBrandCombatModifiers();
+    const bulletWeaponType = (bulletData.weaponType || this.weaponSystem.getCurrentWeaponType()) as WeaponType;
+    const gearBonuses = gameState.getWeaponGearBonuses(bulletWeaponType as any);
     let damage = bulletData.weaponDamage ?? bulletData.damage ?? this.weaponSystem.getCurrentWeapon().damage ?? 10;
     if (!bulletData.brandDamageApplied) {
       damage *= (mods.damageMul || 1);
@@ -9867,12 +9885,12 @@ export default class GameScene extends Phaser.Scene {
     // Apply special effects
     if (special === 'burn') this.applyBurnEffect(enemy);
     else if (special === 'slow') this.applySlowEffect(enemy);
-    else if (special === 'explode') this.createExplosion(enemy.x, enemy.y, 80, damage * 0.5);
-    else if (special === 'chain') this.createChainLightning(enemy, 3, damage * 0.6);
+    else if (special === 'explode') this.createExplosion(enemy.x, enemy.y, 80 * Math.max(0.75, gearBonuses.explosionRadiusMul || 1), damage * 0.5);
+    else if (special === 'chain') this.createChainLightning(enemy, 3 + Math.max(0, gearBonuses.chainBonus || 0), damage * 0.6);
     else if (EvolutionSystem.getGlassesSpecials().has('neural_chain')) this.createChainLightning(enemy, 1, damage * 0.45);
 
     if (special === 'pierce') {
-      if (bulletData.pierceLeft == null) bulletData.pierceLeft = 1 + (mods.pierceBonus || 0);
+      if (bulletData.pierceLeft == null) bulletData.pierceLeft = 1 + (mods.pierceBonus || 0) + Math.max(0, gearBonuses.pierceBonus || 0);
       bulletData.pierceLeft -= 1;
       if (bulletData.pierceLeft <= 0) this.disableBullet(bullet);
     } else {
@@ -9891,7 +9909,7 @@ export default class GameScene extends Phaser.Scene {
       ? { type: 'companion', companionId: bulletData.ownerId || null }
       : bulletData.ownerType === 'turret'
         ? { type: 'turret', turretId: bulletData.ownerId || null }
-        : { type: 'player', weaponType: (bulletData.weaponType || this.weaponSystem.getCurrentWeaponType()) as WeaponType };
+        : { type: 'player', weaponType: bulletWeaponType };
     this.damageEnemy(enemy, damage, source);
   }
 
@@ -9925,6 +9943,9 @@ export default class GameScene extends Phaser.Scene {
         const trailChance = archetype === 'scatter' ? 0.34
           : archetype === 'pulse' ? 0.44
             : archetype === 'flame' ? 0.48
+              : archetype === 'holy' ? 0.46
+                : archetype === 'orbit' ? 0.42
+                  : archetype === 'boomerang' ? 0.38
               : archetype === 'pierce' ? 0.4
                 : archetype === 'cannon' ? 0.3
                   : archetype === 'frost' ? 0.36
@@ -9941,10 +9962,13 @@ export default class GameScene extends Phaser.Scene {
         const length = (archetype === 'pierce' ? 11
           : archetype === 'pulse' ? 9
             : archetype === 'cannon' ? 8
-              : 6) + milestoneStage * 1.8;
-        const width = (archetype === 'cannon' ? 4 : archetype === 'scatter' ? 2 : 3) + Math.min(1.4, milestoneStage * 0.35);
-        const alpha = Math.min(0.72, (archetype === 'flame' ? 0.46 : archetype === 'chain' ? 0.42 : 0.38) + milestoneStage * 0.05);
-        const life = (archetype === 'cannon' ? 170 : archetype === 'frost' ? 150 : 130) + milestoneStage * 18;
+              : archetype === 'boomerang' ? 10
+                : archetype === 'holy' ? 7
+                  : archetype === 'orbit' ? 7
+                    : 6) + milestoneStage * 1.8;
+        const width = (archetype === 'cannon' ? 4 : archetype === 'scatter' ? 2 : archetype === 'holy' ? 4 : 3) + Math.min(1.4, milestoneStage * 0.35);
+        const alpha = Math.min(0.72, (archetype === 'flame' ? 0.46 : archetype === 'holy' ? 0.44 : archetype === 'chain' ? 0.42 : 0.38) + milestoneStage * 0.05);
+        const life = (archetype === 'cannon' ? 170 : archetype === 'frost' ? 150 : archetype === 'boomerang' ? 145 : 130) + milestoneStage * 18;
         const backOffset = Phaser.Math.Clamp(speed * 0.008, 4, 10);
         const tx = bullet.x - Math.cos(dir) * backOffset + Phaser.Math.FloatBetween(-1, 1);
         const ty = bullet.y - Math.sin(dir) * backOffset + Phaser.Math.FloatBetween(-1, 1);
@@ -9973,6 +9997,78 @@ export default class GameScene extends Phaser.Scene {
             alpha: 0,
             duration: life + 30,
             onComplete: () => ember.destroy(),
+          });
+        }
+        if (!this.lowPerfMode && archetype === 'pulse') {
+          const node = this.add.rectangle(tx, ty, 3, 3, 0x67e8f9, 0.34).setDepth(10);
+          node.setBlendMode(Phaser.BlendModes.ADD);
+          this.tweens.add({
+            targets: node,
+            alpha: 0,
+            scaleX: 1.8,
+            scaleY: 1.8,
+            duration: life + 15,
+            onComplete: () => node.destroy(),
+          });
+        }
+        if (!this.lowPerfMode && archetype === 'scatter' && Math.random() < 0.4) {
+          const pellet = this.add.rectangle(tx, ty, 2, 2, 0xe2e8f0, 0.54).setDepth(10);
+          pellet.setBlendMode(Phaser.BlendModes.ADD);
+          this.tweens.add({
+            targets: pellet,
+            x: tx + Phaser.Math.Between(-5, 5),
+            y: ty + Phaser.Math.Between(-5, 5),
+            alpha: 0,
+            duration: life - 20,
+            onComplete: () => pellet.destroy(),
+          });
+        }
+        if (!this.lowPerfMode && archetype === 'holy') {
+          const sigil = this.add.rectangle(tx, ty, 2, 8, 0xfef3c7, 0.72).setDepth(10);
+          const sigilCross = this.add.rectangle(tx, ty, 8, 2, 0x93c5fd, 0.48).setDepth(10);
+          sigil.setBlendMode(Phaser.BlendModes.ADD);
+          sigilCross.setBlendMode(Phaser.BlendModes.ADD);
+          this.tweens.add({
+            targets: [sigil, sigilCross],
+            alpha: 0,
+            scaleX: 1.5,
+            scaleY: 0.4,
+            duration: life + 20,
+            onComplete: () => {
+              sigil.destroy();
+              sigilCross.destroy();
+            },
+          });
+        }
+        if (!this.lowPerfMode && archetype === 'orbit') {
+          [-1, 1].forEach((side) => {
+            const mote = this.add.circle(
+              tx + Math.cos(dir + Math.PI / 2) * side * (4 + milestoneStage),
+              ty + Math.sin(dir + Math.PI / 2) * side * (4 + milestoneStage),
+              1.5 + milestoneStage * 0.25,
+              tint,
+              0.32
+            ).setDepth(9);
+            mote.setBlendMode(Phaser.BlendModes.ADD);
+            this.tweens.add({
+              targets: mote,
+              alpha: 0,
+              scale: 1.9,
+              duration: life + 30,
+              onComplete: () => mote.destroy(),
+            });
+          });
+        }
+        if (!this.lowPerfMode && archetype === 'boomerang') {
+          const arc = this.add.arc(tx, ty, 6 + milestoneStage, Phaser.Math.RadToDeg(dir) - 70, Phaser.Math.RadToDeg(dir) + 70, false, 0x6ee7b7, 0.22).setDepth(9);
+          arc.setBlendMode(Phaser.BlendModes.ADD);
+          this.tweens.add({
+            targets: arc,
+            alpha: 0,
+            scaleX: 1.45,
+            scaleY: 1.45,
+            duration: life + 20,
+            onComplete: () => arc.destroy(),
           });
         }
         if (!this.lowPerfMode && archetype === 'frost') {
@@ -10142,17 +10238,20 @@ export default class GameScene extends Phaser.Scene {
     const ringColor = archetype === 'cannon' ? 0xfb923c
       : archetype === 'chain' ? 0xd8b4fe
         : archetype === 'frost' ? 0x93c5fd
+          : archetype === 'holy' ? 0xfef3c7
+            : archetype === 'orbit' ? 0xf9a8d4
+              : archetype === 'boomerang' ? 0x6ee7b7
           : archetype === 'flame' ? 0xf97316
             : archetype === 'pierce' ? 0x7dd3fc
               : 0x67e8f9;
-    const coreSize = (archetype === 'cannon' ? 8 : archetype === 'pierce' ? 6 : 5) * (1 + (intensityMul - 1) * 0.34);
-    const baseSparkCount = archetype === 'cannon' ? 8 : archetype === 'scatter' ? 5 : 6;
+    const coreSize = (archetype === 'cannon' ? 8 : archetype === 'pierce' ? 6 : archetype === 'holy' ? 7 : 5) * (1 + (intensityMul - 1) * 0.34);
+    const baseSparkCount = archetype === 'cannon' ? 8 : archetype === 'scatter' ? 5 : archetype === 'holy' ? 7 : 6;
     const amplifiedSparkCount = Math.round(baseSparkCount * (1 + (intensityMul - 1) * 0.6));
     const sparkCount = this.ultraLowPerfMode ? Math.max(1, Math.floor(amplifiedSparkCount * 0.35))
       : this.lowPerfMode ? Math.max(2, Math.floor(amplifiedSparkCount * 0.55))
         : amplifiedSparkCount;
-    const travel = (archetype === 'cannon' ? 28 : archetype === 'pierce' ? 22 : 18) * (1 + (intensityMul - 1) * 0.28);
-    const duration = (archetype === 'cannon' ? 220 : archetype === 'chain' ? 180 : 150) * (1 + (intensityMul - 1) * 0.18);
+    const travel = (archetype === 'cannon' ? 28 : archetype === 'pierce' ? 22 : archetype === 'boomerang' ? 24 : 18) * (1 + (intensityMul - 1) * 0.28);
+    const duration = (archetype === 'cannon' ? 220 : archetype === 'chain' ? 180 : archetype === 'holy' ? 190 : 150) * (1 + (intensityMul - 1) * 0.18);
 
     const core = this.add.rectangle(x, y, coreSize, coreSize, ringColor, 0.86).setDepth(110);
     core.setBlendMode(Phaser.BlendModes.ADD);
@@ -10188,8 +10287,8 @@ export default class GameScene extends Phaser.Scene {
     for (let i = 0; i < sparkCount; i++) {
       const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
       const dist = Phaser.Math.Between(Math.floor(travel * 0.45), travel);
-      const sparkW = archetype === 'pierce' ? 5 : 3;
-      const sparkH = archetype === 'pierce' ? 2 : 3;
+      const sparkW = archetype === 'pierce' ? 5 : archetype === 'boomerang' ? 4 : 3;
+      const sparkH = archetype === 'pierce' ? 2 : archetype === 'holy' ? 4 : 3;
       const spark = this.add.rectangle(x, y, sparkW, sparkH, ringColor, 0.94).setDepth(111);
       spark.setBlendMode(Phaser.BlendModes.ADD);
       spark.setRotation(angle + Math.PI / 2);
@@ -10214,6 +10313,70 @@ export default class GameScene extends Phaser.Scene {
           scaleY: 0.2,
           duration: 160,
           onComplete: () => bolt.destroy(),
+        });
+      }
+    } else if (!this.lowPerfMode && archetype === 'holy') {
+      const rayA = this.add.rectangle(x, y, 3, 20, 0xfef9c3, 0.7).setDepth(112);
+      const rayB = this.add.rectangle(x, y, 20, 3, 0x93c5fd, 0.45).setDepth(112);
+      rayA.setBlendMode(Phaser.BlendModes.ADD);
+      rayB.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: [rayA, rayB],
+        alpha: 0,
+        scaleX: 1.4,
+        scaleY: 0.25,
+        duration: 180,
+        onComplete: () => {
+          rayA.destroy();
+          rayB.destroy();
+        },
+      });
+    } else if (!this.lowPerfMode && archetype === 'orbit') {
+      const swirl = this.add.arc(x, y, 10, -50, 210, false, 0xf9a8d4, 0.22).setDepth(112);
+      swirl.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: swirl,
+        alpha: 0,
+        scaleX: 1.6,
+        scaleY: 1.3,
+        angle: 60,
+        duration: 170,
+        onComplete: () => swirl.destroy(),
+      });
+    } else if (!this.lowPerfMode && archetype === 'boomerang') {
+      const crescent = this.add.arc(x, y, 12, -80, 80, false, 0x6ee7b7, 0.3).setDepth(112);
+      crescent.setBlendMode(Phaser.BlendModes.ADD);
+      crescent.setRotation(Phaser.Math.FloatBetween(-0.8, 0.8));
+      this.tweens.add({
+        targets: crescent,
+        alpha: 0,
+        scaleX: 1.5,
+        scaleY: 1.2,
+        duration: 170,
+        onComplete: () => crescent.destroy(),
+      });
+    } else if (!this.lowPerfMode && archetype === 'pulse') {
+      const grid = this.add.rectangle(x, y, 16, 16, 0x67e8f9, 0.12).setDepth(112);
+      grid.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: grid,
+        alpha: 0,
+        scaleX: 1.4,
+        scaleY: 1.4,
+        duration: 160,
+        onComplete: () => grid.destroy(),
+      });
+    } else if (!this.lowPerfMode && archetype === 'scatter') {
+      for (let i = 0; i < 3; i += 1) {
+        const frag = this.add.rectangle(x, y, 2, 2, 0xf8fafc, 0.72).setDepth(112);
+        frag.setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({
+          targets: frag,
+          x: x + Phaser.Math.Between(-12, 12),
+          y: y + Phaser.Math.Between(-12, 12),
+          alpha: 0,
+          duration: 120,
+          onComplete: () => frag.destroy(),
         });
       }
     } else if (!this.lowPerfMode && archetype === 'frost') {
@@ -10259,9 +10422,13 @@ export default class GameScene extends Phaser.Scene {
     const dist = (archetype === 'cannon' ? 14 : 10) + (intensityMul - 1) * 4;
     const fxX = x + Math.cos(angle) * dist;
     const fxY = y + Math.sin(angle) * dist;
-    const coreW = (archetype === 'pierce' ? 10 : archetype === 'cannon' ? 9 : 7) * (1 + (intensityMul - 1) * 0.25);
-    const coreH = (archetype === 'pierce' ? 4 : 6) * (1 + (intensityMul - 1) * 0.16);
-    const core = this.add.rectangle(fxX, fxY, coreW, coreH, tint, 0.78).setDepth(109);
+    const coreTint = archetype === 'holy' ? 0xfef3c7
+      : archetype === 'orbit' ? 0xf9a8d4
+        : archetype === 'boomerang' ? 0x6ee7b7
+          : tint;
+    const coreW = (archetype === 'pierce' ? 10 : archetype === 'cannon' ? 9 : archetype === 'boomerang' ? 9 : 7) * (1 + (intensityMul - 1) * 0.25);
+    const coreH = (archetype === 'pierce' ? 4 : archetype === 'holy' ? 7 : 6) * (1 + (intensityMul - 1) * 0.16);
+    const core = this.add.rectangle(fxX, fxY, coreW, coreH, coreTint, 0.78).setDepth(109);
     core.setBlendMode(Phaser.BlendModes.ADD);
     core.setRotation(angle + Math.PI / 2);
     this.tweens.add({
@@ -10272,7 +10439,7 @@ export default class GameScene extends Phaser.Scene {
       duration: (archetype === 'cannon' ? 110 : 80) * (1 + (intensityMul - 1) * 0.12),
       onComplete: () => core.destroy(),
     });
-    const rune = this.add.circle(fxX, fxY, archetype === 'cannon' ? 7 : 5, tint, 0.26).setDepth(108);
+    const rune = this.add.circle(fxX, fxY, archetype === 'cannon' ? 7 : archetype === 'holy' ? 6 : 5, coreTint, 0.26).setDepth(108);
     rune.setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({
       targets: rune,
@@ -10282,7 +10449,7 @@ export default class GameScene extends Phaser.Scene {
       onComplete: () => rune.destroy(),
     });
     if (!this.lowPerfMode && intensityMul >= 1.4) {
-      const echo = this.add.circle(fxX, fxY, (archetype === 'cannon' ? 9 : 6) * intensityMul, tint, 0.14).setDepth(107);
+      const echo = this.add.circle(fxX, fxY, (archetype === 'cannon' ? 9 : 6) * intensityMul, coreTint, 0.14).setDepth(107);
       echo.setBlendMode(Phaser.BlendModes.ADD);
       this.tweens.add({
         targets: echo,
@@ -10290,6 +10457,31 @@ export default class GameScene extends Phaser.Scene {
         scale: 1.8,
         duration: 120,
         onComplete: () => echo.destroy(),
+      });
+    }
+    if (!this.lowPerfMode && archetype === 'pulse') {
+      const beam = this.add.rectangle(fxX, fxY, 14, 2, 0x67e8f9, 0.28).setDepth(108);
+      beam.setBlendMode(Phaser.BlendModes.ADD);
+      beam.setRotation(angle);
+      this.tweens.add({
+        targets: beam,
+        alpha: 0,
+        scaleX: 1.8,
+        duration: 100,
+        onComplete: () => beam.destroy(),
+      });
+    } else if (!this.lowPerfMode && archetype === 'scatter') {
+      [-0.26, 0, 0.26].forEach((spread) => {
+        const shard = this.add.rectangle(fxX, fxY, 6, 2, 0xe2e8f0, 0.32).setDepth(108);
+        shard.setBlendMode(Phaser.BlendModes.ADD);
+        shard.setRotation(angle + Math.PI + spread);
+        this.tweens.add({
+          targets: shard,
+          alpha: 0,
+          scaleX: 1.4,
+          duration: 90,
+          onComplete: () => shard.destroy(),
+        });
       });
     }
 
@@ -10307,6 +10499,48 @@ export default class GameScene extends Phaser.Scene {
         alpha: 0,
         duration: 90,
         onComplete: () => spark.destroy(),
+      });
+    }
+    if (!this.lowPerfMode && archetype === 'holy') {
+      const halo = this.add.arc(fxX, fxY, 7 + intensityMul, -35, 215, false, 0x93c5fd, 0.18).setDepth(108);
+      halo.setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({
+        targets: halo,
+        alpha: 0,
+        scaleX: 1.55,
+        scaleY: 1.25,
+        duration: 120,
+        onComplete: () => halo.destroy(),
+      });
+    } else if (!this.lowPerfMode && archetype === 'orbit') {
+      [-1, 1].forEach((side) => {
+        const mote = this.add.circle(
+          fxX + Math.cos(angle + Math.PI / 2) * side * 5,
+          fxY + Math.sin(angle + Math.PI / 2) * side * 5,
+          1.8,
+          0xfda4af,
+          0.42
+        ).setDepth(109);
+        mote.setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({
+          targets: mote,
+          alpha: 0,
+          scale: 1.9,
+          duration: 100,
+          onComplete: () => mote.destroy(),
+        });
+      });
+    } else if (!this.lowPerfMode && archetype === 'boomerang') {
+      const slash = this.add.arc(fxX, fxY, 8, -55, 55, false, 0x6ee7b7, 0.24).setDepth(108);
+      slash.setBlendMode(Phaser.BlendModes.ADD);
+      slash.setRotation(angle);
+      this.tweens.add({
+        targets: slash,
+        alpha: 0,
+        scaleX: 1.4,
+        scaleY: 1.2,
+        duration: 100,
+        onComplete: () => slash.destroy(),
       });
     }
   }
@@ -10464,6 +10698,7 @@ export default class GameScene extends Phaser.Scene {
     if (gearDrop) {
       gameState.addGearToStash(gearDrop);
       const rarityStyle = GearLootSystem.getRarityStyle(gearDrop.rarity);
+      const affixSummary = GearLootSystem.formatAffixSummary(gearDrop, 2);
       this.showFloatingText(
         enemy.x,
         enemy.y - 62,
@@ -10471,6 +10706,15 @@ export default class GameScene extends Phaser.Scene {
         rarityStyle.uiColor,
         false
       );
+      if (affixSummary) {
+        this.showFloatingText(
+          enemy.x,
+          enemy.y - 92,
+          `${GearLootSystem.getThemeLabel(gearDrop.sourceTheme)} · ${affixSummary}`,
+          '#f8fafc',
+          false
+        );
+      }
       events.emit('gear-stash-updated', {
         count: gameState.data.gearStash.length,
         dropped: gearDrop,
@@ -11362,7 +11606,13 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
-  private createExplosion(x: number, y: number, radius: number, damage: number): void {
+  private createExplosion(
+    x: number,
+    y: number,
+    radius: number,
+    damage: number,
+    source: DamageSource = { type: 'player' }
+  ): void {
     // Expanding ring
     const ring = this.add.circle(x, y, 10, 0xff4400, 0);
     ring.setStrokeStyle(3, 0xff6600, 0.8);
@@ -11400,7 +11650,7 @@ export default class GameScene extends Phaser.Scene {
     this.enemies.getChildren().forEach(e => {
       const enemy = e as Phaser.Physics.Arcade.Sprite;
       if (Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y) < radius) {
-        this.damageEnemy(enemy, damage);
+        this.damageEnemy(enemy, damage, source);
       }
     });
 
@@ -12004,6 +12254,8 @@ export default class GameScene extends Phaser.Scene {
     if (buildingId === 'missile_turret') return { damage: 30, fireRate: 880, range: 300 };
     if (buildingId === 'laser_turret') return { damage: 24, fireRate: 760, range: 280 };
     if (buildingId === 'slow_turret') return { damage: 14, fireRate: 620, range: 250 };
+    if (buildingId === 'sniper_nest') return { damage: 42, fireRate: 1120, range: 420 };
+    if (buildingId === 'flame_turret') return { damage: 12, fireRate: 520, range: 172 };
     return { damage: 15, fireRate: 700, range: 250 };
   }
 
@@ -12980,6 +13232,8 @@ export default class GameScene extends Phaser.Scene {
     };
     const mapped = textureMap[buildingId];
     if (mapped && this.textures.exists(mapped)) return mapped;
+    if (buildingId === 'sniper_nest' && this.textures.exists('laser_turret')) return 'laser_turret';
+    if (buildingId === 'flame_turret' && this.textures.exists('missile_turret')) return 'missile_turret';
     if (category === 'turret' && this.textures.exists('turret')) return 'turret';
     return 'wall';
   }
@@ -13076,6 +13330,227 @@ export default class GameScene extends Phaser.Scene {
   // ============================================================
   // TURRETS
   // ============================================================
+  private getTurretSupportSnapshot(
+    turret: Phaser.Physics.Arcade.Sprite
+  ): { stage: number; watchtowerCount: number; damageMul: number; fireRateMul: number; rangeMul: number } {
+    const td = turret as any;
+    const level = Math.max(1, Number(td.level || td.buildingTier || 1));
+    const stage = level >= 20 ? 3 : level >= 10 ? 2 : level >= 5 ? 1 : 0;
+    const watchtowerCount = gameState.data.buildings.filter((building) => (
+      building.id === 'watchtower'
+      && Phaser.Math.Distance.Between(turret.x, turret.y, building.x, building.y) <= 192
+    )).length;
+    return {
+      stage,
+      watchtowerCount,
+      damageMul: 1 + stage * 0.14 + watchtowerCount * 0.08,
+      fireRateMul: 1 + stage * 0.08 + watchtowerCount * 0.06,
+      rangeMul: 1 + stage * 0.05 + watchtowerCount * 0.08,
+    };
+  }
+
+  private spawnTurretProjectile(
+    turret: Phaser.Physics.Arcade.Sprite,
+    angle: number,
+    textureKey: string,
+    damage: number,
+    color: number,
+    options: {
+      speed?: number;
+      scale?: number;
+      lifetime?: number;
+      swayAmplitude?: number;
+      swayFrequency?: number;
+      effect?: 'pulse' | 'laser' | 'slow' | 'missile' | 'flame';
+      homingTarget?: Phaser.Physics.Arcade.Sprite | null;
+      pierceLeft?: number;
+      explosionRadius?: number;
+      slowRadius?: number;
+      intensity?: number;
+    } = {}
+  ): Phaser.Physics.Arcade.Sprite | null {
+    const bullet = this.turretBullets.create(turret.x, turret.y, 'bullet') as Phaser.Physics.Arcade.Sprite;
+    if (!bullet) return null;
+    const speed = options.speed ?? 360;
+    const velocityX = Math.cos(angle) * speed;
+    const velocityY = Math.sin(angle) * speed;
+    bullet.setTexture(textureKey);
+    bullet.setScale(options.scale ?? 2);
+    bullet.setTint(color);
+    bullet.setBlendMode(Phaser.BlendModes.ADD);
+    bullet.setDepth(10);
+    bullet.setVelocity(velocityX, velocityY);
+    const bulletData = bullet as any;
+    bulletData.damage = damage;
+    bulletData.ownerType = 'turret';
+    bulletData.ownerId = (turret as any).runtimeId || null;
+    bulletData.bulletTextureKey = textureKey;
+    bulletData.baseVelocityX = velocityX;
+    bulletData.baseVelocityY = velocityY;
+    bulletData.swayAmplitude = options.swayAmplitude ?? 0;
+    bulletData.swayFrequency = options.swayFrequency ?? 0;
+    bulletData.swayPhase = Math.random() * Math.PI * 2;
+    bulletData.turretEffect = options.effect || 'pulse';
+    bulletData.isHoming = !!options.homingTarget;
+    bulletData.homingTarget = options.homingTarget || null;
+    bulletData.pierceLeft = options.pierceLeft ?? 0;
+    bulletData.explosionRadius = options.explosionRadius ?? 0;
+    bulletData.slowRadius = options.slowRadius ?? 0;
+    this.createBulletMuzzleVfx(
+      turret.x,
+      turret.y,
+      angle,
+      color,
+      textureKey,
+      options.intensity ?? 1
+    );
+    this.time.delayedCall(options.lifetime ?? 1500, () => {
+      if (bullet.active) this.disableBullet(bullet);
+    });
+    return bullet;
+  }
+
+  private fireTurretPattern(
+    turret: Phaser.Physics.Arcade.Sprite,
+    target: Phaser.Physics.Arcade.Sprite,
+    damage: number,
+    support: { stage: number; watchtowerCount: number; damageMul: number; fireRateMul: number; rangeMul: number }
+  ): void {
+    const td = turret as any;
+    const baseAngle = Phaser.Math.Angle.Between(turret.x, turret.y, target.x, target.y);
+    const color = td.levelColor || 0x22d3ee;
+    const intensity = 1 + support.stage * 0.22 + support.watchtowerCount * 0.12;
+    const spawn = (angleOffset: number, textureKey: string, options: Parameters<GameScene['spawnTurretProjectile']>[5]) => {
+      this.spawnTurretProjectile(
+        turret,
+        baseAngle + angleOffset,
+        textureKey,
+        damage,
+        color,
+        { ...options, intensity }
+      );
+    };
+
+    if (td.buildingId === 'laser_turret' || td.buildingId === 'sniper_nest') {
+      spawn(0, 'bullet_pierce', {
+        effect: 'laser',
+        scale: td.buildingId === 'sniper_nest' ? 2.8 : 2.3,
+        speed: td.buildingId === 'sniper_nest' ? 780 : 620,
+        lifetime: td.buildingId === 'sniper_nest' ? 920 : 760,
+        pierceLeft: td.buildingId === 'sniper_nest' ? 4 + support.stage : 2 + support.stage,
+      });
+      if (support.stage >= 1) {
+        spawn(0.08, 'bullet_pierce', {
+          effect: 'laser',
+          scale: 2.1,
+          speed: td.buildingId === 'sniper_nest' ? 720 : 560,
+          lifetime: 700,
+          pierceLeft: 1 + support.stage,
+        });
+      }
+      if (support.stage >= 3) {
+        spawn(-0.08, 'bullet_pierce', {
+          effect: 'laser',
+          scale: 2.1,
+          speed: td.buildingId === 'sniper_nest' ? 720 : 560,
+          lifetime: 700,
+          pierceLeft: 1 + support.stage,
+        });
+      }
+      return;
+    }
+
+    if (td.buildingId === 'slow_turret') {
+      spawn(0, 'bullet_frost', {
+        effect: 'slow',
+        scale: 2.5,
+        speed: 280,
+        lifetime: 1200,
+        slowRadius: 86 + support.stage * 18 + support.watchtowerCount * 10,
+      });
+      if (support.stage >= 2) {
+        spawn(0.22, 'bullet_frost', {
+          effect: 'slow',
+          scale: 2.1,
+          speed: 260,
+          lifetime: 1050,
+          slowRadius: 66 + support.stage * 14,
+        });
+        spawn(-0.22, 'bullet_frost', {
+          effect: 'slow',
+          scale: 2.1,
+          speed: 260,
+          lifetime: 1050,
+          slowRadius: 66 + support.stage * 14,
+        });
+      }
+      return;
+    }
+
+    if (td.buildingId === 'missile_turret') {
+      spawn(0, 'bullet_cannon', {
+        effect: 'missile',
+        scale: 2.9,
+        speed: 250,
+        lifetime: 1800,
+        homingTarget: target,
+        explosionRadius: 82 + support.stage * 18 + support.watchtowerCount * 12,
+      });
+      if (support.stage >= 3) {
+        spawn(0.14, 'bullet_cannon', {
+          effect: 'missile',
+          scale: 2.4,
+          speed: 235,
+          lifetime: 1600,
+          homingTarget: target,
+          explosionRadius: 64 + support.stage * 14,
+        });
+      }
+      return;
+    }
+
+    if (td.buildingId === 'flame_turret') {
+      const spread = [0, 0.18, -0.18];
+      if (support.stage >= 2) spread.push(0.34, -0.34);
+      if (support.stage >= 3) spread.push(0.5, -0.5);
+      spread.forEach((offset, idx) => {
+        spawn(offset, 'bullet_flame', {
+          effect: 'flame',
+          scale: idx === 0 ? 2.5 : 2.1,
+          speed: 220 + support.stage * 18,
+          lifetime: 620,
+          swayAmplitude: 16 + support.stage * 3,
+          swayFrequency: 0.018,
+        });
+      });
+      return;
+    }
+
+    const burstCount = 1 + (support.stage >= 1 ? 1 : 0) + (support.stage >= 3 ? 1 : 0);
+    for (let i = 0; i < burstCount; i += 1) {
+      const offset = burstCount === 1 ? 0 : (i - (burstCount - 1) / 2) * 0.12;
+      spawn(offset, 'bullet_pulse', {
+        effect: 'pulse',
+        scale: 2 + support.stage * 0.22,
+        speed: 350 + support.stage * 24,
+        lifetime: 1500,
+        swayAmplitude: 14 + support.stage * 4 + support.watchtowerCount * 2,
+        swayFrequency: 0.012,
+      });
+    }
+    if (support.watchtowerCount > 0 && !this.lowPerfMode) {
+      const ring = this.add.circle(turret.x, turret.y, 10, color, 0).setDepth(11);
+      ring.setStrokeStyle(2, color, 0.4);
+      this.tweens.add({
+        targets: ring,
+        scale: 2.4,
+        alpha: 0,
+        duration: 260,
+        onComplete: () => ring.destroy(),
+      });
+    }
+  }
+
   private updateTurrets(): void {
     const now = this.time.now;
     const base = gameState.data.base;
@@ -13114,9 +13589,13 @@ export default class GameScene extends Phaser.Scene {
         turret.setAlpha(healthAlpha);
       }
 
+      const support = this.getTurretSupportSnapshot(turret);
       const fireRate = td.fireRate || 700;
-      const effectiveFireRate = Math.round(fireRate * (1 + (1 - structureMul) * 0.42));
-      const range = td.range || 220;
+      const effectiveFireRate = Math.max(
+        110,
+        Math.round((fireRate / support.fireRateMul) * (1 + (1 - structureMul) * 0.42))
+      );
+      const range = Math.round((td.range || 220) * support.rangeMul);
       if (now - (td.lastFireTime || 0) < effectiveFireRate) return;
 
       let nearest: Phaser.Physics.Arcade.Sprite | null = null;
@@ -13130,47 +13609,71 @@ export default class GameScene extends Phaser.Scene {
       if (nearest) {
         td.lastFireTime = now;
         const target: Phaser.Physics.Arcade.Sprite = nearest;
-        const angle = Phaser.Math.Angle.Between(turret.x, turret.y, target.x, target.y);
-        const bullet = this.turretBullets.create(turret.x, turret.y, 'bullet') as Phaser.Physics.Arcade.Sprite;
-        if (bullet) {
-          bullet.setTexture('bullet_pulse');
-          const bulletScale = (td.level || 1) >= 20 ? 3 : 2;
-          bullet.setScale(bulletScale);
-          bullet.setTint(td.levelColor || 0x22d3ee);
-          bullet.setBlendMode(Phaser.BlendModes.ADD);
-          bullet.setDepth(10);
-          const bulletSpeed = td.bulletSpeed || 350;
-          const velocityX = Math.cos(angle) * bulletSpeed;
-          const velocityY = Math.sin(angle) * bulletSpeed;
-          bullet.setVelocity(velocityX, velocityY);
-          const b = bullet as any;
-          b.damage = Math.max(1, Math.round((td.damage || 15) * structureMul));
-          b.ownerType = 'turret';
-          b.ownerId = td.runtimeId || null;
-          b.bulletTextureKey = 'bullet_pulse';
-          b.baseVelocityX = velocityX;
-          b.baseVelocityY = velocityY;
-          b.swayAmplitude = 14;
-          b.swayFrequency = 0.012;
-          b.swayPhase = Math.random() * Math.PI * 2;
-          this.createBulletMuzzleVfx(turret.x, turret.y, angle, td.levelColor || 0x22d3ee, 'bullet_pulse');
-          this.time.delayedCall(1500, () => { if (bullet.active) this.disableBullet(bullet); });
-        }
+        const damage = Math.max(1, Math.round((td.damage || 15) * structureMul * support.damageMul));
+        this.fireTurretPattern(turret, target, damage, support);
       }
     });
   }
 
   private turretBulletHitEnemy(bullet: Phaser.Physics.Arcade.Sprite, enemy: Phaser.Physics.Arcade.Sprite): void {
     if (!bullet.active || !enemy.active) return;
-    const damage = (bullet as any).damage || 15;
-    const source: DamageSource = { type: 'turret', turretId: (bullet as any).ownerId || null };
+    const bulletData = bullet as any;
+    const damage = bulletData.damage || 15;
+    const effect = bulletData.turretEffect || 'pulse';
+    const source: DamageSource = { type: 'turret', turretId: bulletData.ownerId || null };
+    const impactArchetype = effect === 'missile'
+      ? 'cannon'
+      : effect === 'laser'
+        ? 'pierce'
+        : effect === 'slow'
+          ? 'frost'
+          : effect === 'flame'
+            ? 'flame'
+            : 'pulse';
     this.createBulletImpactVfx(
       enemy.x,
       enemy.y,
-      'pulse',
+      impactArchetype,
       bullet.tintTopLeft || 0x22d3ee,
-      (bullet as any).bulletTextureKey || bullet.texture?.key
+      bulletData.bulletTextureKey || bullet.texture?.key
     );
+
+    if (effect === 'slow') {
+      const radius = bulletData.slowRadius || 88;
+      this.enemies.getChildren().forEach((entry) => {
+        const target = entry as Phaser.Physics.Arcade.Sprite;
+        if (!target.active) return;
+        if (Phaser.Math.Distance.Between(enemy.x, enemy.y, target.x, target.y) > radius) return;
+        this.applySlowEffect(target);
+        this.damageEnemy(target, Math.max(1, Math.round(damage * 0.52)), source);
+      });
+      this.disableBullet(bullet);
+      return;
+    }
+
+    if (effect === 'flame') {
+      this.applyBurnEffect(enemy);
+      this.damageEnemy(enemy, damage, source);
+      this.disableBullet(bullet);
+      return;
+    }
+
+    if (effect === 'missile') {
+      this.createExplosion(enemy.x, enemy.y, bulletData.explosionRadius || 84, damage * 0.62, source);
+      this.disableBullet(bullet);
+      return;
+    }
+
+    if (effect === 'laser') {
+      bulletData.pierceLeft = Math.max(0, Number(bulletData.pierceLeft || 0));
+      this.damageEnemy(enemy, damage, source);
+      bulletData.pierceLeft -= 1;
+      if (bulletData.pierceLeft <= 0) {
+        this.disableBullet(bullet);
+      }
+      return;
+    }
+
     this.disableBullet(bullet);
     this.damageEnemy(enemy, damage, source);
   }
@@ -16211,6 +16714,7 @@ export default class GameScene extends Phaser.Scene {
     });
     updateGroup(this.bullets);
     updateGroup(this.companionBullets);
+    updateGroup(this.turretBullets);
     updateGroup(this.vsBullets);
   }
 

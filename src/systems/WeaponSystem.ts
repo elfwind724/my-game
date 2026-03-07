@@ -750,6 +750,7 @@ export class WeaponSystem {
             ...config,
             damage: Math.max(1, Math.round(config.damage * Math.max(0.5, bonuses.damageMul || 1))),
             fireRate: Math.max(24, Math.round(config.fireRate / Math.max(0.45, bonuses.fireRateMul || 1))),
+            range: Math.max(120, Math.round(config.range * Math.max(0.7, bonuses.rangeMul || 1))),
             speed: Math.max(80, Math.round(config.speed * Math.max(0.6, bonuses.speedMul || 1))),
             projectileCount: Math.max(1, config.projectileCount + Math.max(0, bonuses.projectileBonus || 0)),
             color: this.getGearRarityTint(equipped?.rarity) || config.color,

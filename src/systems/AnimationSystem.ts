@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { hasCustomHeroDirectionalTextures } from '../data/customHero';
 
 export class AnimationSystem {
     private scene: Phaser.Scene;
@@ -72,6 +73,7 @@ export class AnimationSystem {
         if (!target.body) return;
         if (this.isPlayingRecoil) return; // Don't fight with recoil tween
         const base = this.getBaseScale(target);
+        const shouldPreserveDirectionalTexture = target.name === 'player' && hasCustomHeroDirectionalTextures(this.scene);
 
         const speed = target.body.velocity.length();
 
@@ -81,10 +83,12 @@ export class AnimationSystem {
             const stretch = Math.sin(t * 1.5) * 0.05; // Reduced from 0.1 to 0.05 for subtlety
 
             // Face direction
-            if (target.body.velocity.x < 0) {
-                target.setFlipX(true);
-            } else if (target.body.velocity.x > 0) {
-                target.setFlipX(false);
+            if (!shouldPreserveDirectionalTexture) {
+                if (target.body.velocity.x < 0) {
+                    target.setFlipX(true);
+                } else if (target.body.velocity.x > 0) {
+                    target.setFlipX(false);
+                }
             }
 
             target.scaleY = base.y * (1 + stretch);

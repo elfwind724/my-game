@@ -227,12 +227,56 @@ export class EnemySystem {
                     const chaseSpeed = ed.special === 'enrage_on_hit'
                         ? speed * (1 + (ed.enrageStacks || 0) * 0.06)
                         : speed;
-                    this.scene.physics.moveToObject(enemy, this.player, chaseSpeed);
+                    if (ed.special === 'dash_weave') {
+                        const now = this.scene.time.now;
+                        if (!ed.nextDashAt) ed.nextDashAt = now + Phaser.Math.Between(500, 900);
+                        if (!ed.weaveDir) ed.weaveDir = Phaser.Math.RND.pick([-1, 1]);
+                        const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+                        const dashSpeed = chaseSpeed * (now >= ed.nextDashAt ? 1.65 : 1.05);
+                        const sideAngle = angle + Math.PI / 2 * ed.weaveDir;
+                        if (now >= ed.nextDashAt) {
+                            ed.nextDashAt = now + Phaser.Math.Between(1050, 1650);
+                            ed.weaveDir *= -1;
+                        }
+                        enemy.setVelocity(
+                            Math.cos(angle) * dashSpeed + Math.cos(sideAngle) * dashSpeed * 0.34,
+                            Math.sin(angle) * dashSpeed + Math.sin(sideAngle) * dashSpeed * 0.34
+                        );
+                    } else if (ed.special === 'pack_rush') {
+                        const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+                        const packBoost = distToPlayer < 220 ? 1.38 : 1.08;
+                        enemy.setVelocity(
+                            Math.cos(angle) * chaseSpeed * packBoost,
+                            Math.sin(angle) * chaseSpeed * packBoost
+                        );
+                    } else {
+                        this.scene.physics.moveToObject(enemy, this.player, chaseSpeed);
+                    }
                     break;
                 }
 
                 case 'heavy':
-                    this.scene.physics.moveToObject(enemy, this.player, speed * 0.7);
+                    if (ed.special === 'brace_surge') {
+                        const now = this.scene.time.now;
+                        if (!ed.nextBraceAt) ed.nextBraceAt = now + Phaser.Math.Between(900, 1400);
+                        const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+                        if (now >= ed.nextBraceAt && distToPlayer > 90) {
+                            ed.nextBraceAt = now + Phaser.Math.Between(1800, 2600);
+                            enemy.setVelocity(Math.cos(angle) * speed * 1.28, Math.sin(angle) * speed * 1.28);
+                            const braceFx = this.scene.add.circle(enemy.x, enemy.y, 16, 0xfbbf24, 0.25).setDepth(8);
+                            this.scene.tweens.add({
+                                targets: braceFx,
+                                alpha: 0,
+                                scale: 2,
+                                duration: 260,
+                                onComplete: () => braceFx.destroy(),
+                            });
+                        } else {
+                            this.scene.physics.moveToObject(enemy, this.player, speed * 0.68);
+                        }
+                    } else {
+                        this.scene.physics.moveToObject(enemy, this.player, speed * 0.7);
+                    }
                     break;
 
                 case 'ranged': {
@@ -264,6 +308,19 @@ export class EnemySystem {
                         } else {
                             enemy.setVelocity(0, 0);
                             this.bomberLobAttack(enemy);
+                        }
+                    } else if (ed.special === 'strafe_shot') {
+                        if (!ed.strafeDir) ed.strafeDir = Phaser.Math.RND.pick([-1, 1]);
+                        const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+                        const orbitAngle = angle + Math.PI / 2 * ed.strafeDir;
+                        if (dist > 260) {
+                            enemy.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+                        } else if (dist < 140) {
+                            enemy.setVelocity(Math.cos(angle + Math.PI) * speed * 0.92, Math.sin(angle + Math.PI) * speed * 0.92);
+                        } else {
+                            enemy.setVelocity(Math.cos(orbitAngle) * speed * 0.76, Math.sin(orbitAngle) * speed * 0.76);
+                            if (Math.random() < 0.018) ed.strafeDir *= -1;
+                            this.rangedAttack(enemy);
                         }
                     } else if (dist > 200) {
                         this.scene.physics.moveToObject(enemy, this.player, speed);
@@ -653,6 +710,10 @@ export class EnemySystem {
 
     private updateBossBehavior(boss: Phaser.Physics.Arcade.Sprite): void {
         const bd = boss as any;
+        const marker = bd.bossMarker as Phaser.GameObjects.Text | undefined;
+        if (marker && marker.active) {
+            marker.setPosition(boss.x, boss.y - Math.max(58, boss.displayHeight * 0.7));
+        }
         if (!this.bossHealthBar || !this.bossNameText) {
             const bossLabel = bd?.enemyDef?.nameCN || bd?.bossType || '首领目标';
             this.createBossHealthBar(String(bossLabel));
@@ -799,6 +860,12 @@ export class EnemySystem {
     }
 
     public onBossKilled(boss: Phaser.Physics.Arcade.Sprite): void {
+        const bd = boss as any;
+        const marker = bd.bossMarker as Phaser.GameObjects.Text | undefined;
+        if (marker) {
+            marker.destroy();
+            bd.bossMarker = undefined;
+        }
         for (let i = 0; i < 20; i++) {
             const angle = (i / 20) * Math.PI * 2;
             const x = boss.x + Math.cos(angle) * 20;
