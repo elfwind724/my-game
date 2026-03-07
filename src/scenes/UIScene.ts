@@ -151,6 +151,7 @@ export default class UIScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.resetRuntimeUiState();
     const w = this.cameras.main.width;
     const h = this.cameras.main.height;
     const portraitLayout = h > w * 1.2;
@@ -414,6 +415,23 @@ export default class UIScene extends Phaser.Scene {
     });
 
     this.registerKeyboardHotkeys();
+  }
+
+  private resetRuntimeUiState(): void {
+    this.destroyUiArtifacts(this.leftHudCollapsibleObjects);
+    this.leftHudCollapsibleObjects = [];
+    Object.values(this.resourceValueTexts).forEach((text) => text?.destroy());
+    this.resourceValueTexts = {};
+    Object.values(this.rightStatusTexts).forEach((text) => text?.destroy());
+    this.rightStatusTexts = {};
+    this.mobileButtons = {};
+  }
+
+  private destroyUiArtifacts(objects: Phaser.GameObjects.GameObject[]): void {
+    objects.forEach((obj) => {
+      if (!obj || !obj.active) return;
+      obj.destroy();
+    });
   }
 
   private isMobileViewport(): boolean {
@@ -1484,7 +1502,7 @@ export default class UIScene extends Phaser.Scene {
     if (!resources) return;
     const set = (key: string, val: string, color = '#e2e8f0') => {
       const text = this.resourceValueTexts[key];
-      if (!text) return;
+      if (!text || !text.active || !(text as any).canvas || !(text as any).context) return;
       text.setText(val);
       text.setColor(color);
     };
@@ -1679,5 +1697,6 @@ export default class UIScene extends Phaser.Scene {
     this.glassesShopPanel?.destroy();
     this.gearVaultPanel?.destroy();
     this.lootCodexPanel?.destroy();
+    this.resetRuntimeUiState();
   }
 }

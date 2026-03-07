@@ -2029,3 +2029,10 @@ src/
 - [x] Boss 可见性修复：Boss 现在优先在玩家附近的可视区域外圈入场，而不是随机刷在超远边缘；普通夜晚从第 3 天开始也会出现一只轻量小首领，血月夜仍保持更强首领压力。
 - [x] Boss 入场演出增强：新增 Boss 近场入场脉冲和跟随名称标记，击杀时会正确回收标记，玩家能明确感知 Boss 已经到场。
 - [x] 验证：`npx tsc --noEmit` 通过；`npm run build` 通过（仅保留原有 chunk size warning）。
+
+## 最新进展（2026-03-07 重新觉醒死机修复）
+- [x] `GameScene.restartGame()` 改为串行重开：先停止 `UIScene`，等待其 `SHUTDOWN` 完成，再延迟一帧执行 `scene.restart()`，避免 UI 场景与主场景同时重建导致 Phaser 动态文字纹理竞态。
+- [x] `UIScene` 新增运行态重置：`create()` 前会清空 `resourceValueTexts / rightStatusTexts / leftHudCollapsibleObjects / mobileButtons` 等旧引用，防止复用旧场景实例时残留 HUD 对象。
+- [x] `UIScene.shutdown()` 现在会主动销毁并清空 HUD 折叠对象与资源文本映射，确保重新觉醒后资源栏从干净状态重建。
+- [x] `updateResourceHud()` 增加动态 Text 可用性保护，遇到已失效的文本 canvas/context 时直接跳过，不再触发 `drawImage` 读取空对象崩溃。
+- [x] 验证：`npx tsc --noEmit` 通过；`npm run build` 通过。

@@ -16903,8 +16903,23 @@ export default class GameScene extends Phaser.Scene {
     this.physics.resume();
     // Stop CRT overlay to prevent stacking
     try { this.scene.stop('CRTScene'); } catch (_e) { /* ignore */ }
-    this.scene.stop('UIScene');
-    this.scene.restart();
+    const restartSelf = () => {
+      if (!this.scene.isActive()) return;
+      this.time.delayedCall(0, () => {
+        if (this.scene.isActive()) this.scene.restart();
+      });
+    };
+    try {
+      const uiScene = this.scene.get('UIScene') as Phaser.Scene | null;
+      if (uiScene && uiScene.scene.isActive()) {
+        uiScene.events.once(Phaser.Scenes.Events.SHUTDOWN, restartSelf);
+        this.scene.stop('UIScene');
+        return;
+      }
+    } catch (_e) {
+      // fall through to local restart
+    }
+    restartSelf();
   }
 
   // ============================================================
