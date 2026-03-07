@@ -1456,6 +1456,8 @@ export default class UIScene extends Phaser.Scene {
   }
 
   private createResourceHud(startX: number, startY: number): void {
+    const resources = gameState.data.resources;
+    const base = gameState.data.base;
     const entries = [
       { key: 'wood', icon: 'icon_wood' },
       { key: 'metal', icon: 'icon_metal' },
@@ -1483,7 +1485,22 @@ export default class UIScene extends Phaser.Scene {
       const icon = this.textures.exists(entry.icon)
         ? this.add.image(x + 10, y + 11, entry.icon).setScale(1).setDepth(1002)
         : this.add.rectangle(x + 10, y + 10, 10, 10, 0x64748b, 1).setDepth(1002);
-      const value = this.add.text(x + 23, y + 3, '0', {
+      const initialValue = (() => {
+        if (entry.key === 'bitcoin') return `${Number(resources.bitcoin || 0).toFixed(2)}`;
+        if (entry.key === 'power') return `${base.powerUsed}/${base.powerCapacity}`;
+        switch (entry.key) {
+          case 'wood': return `${Math.max(0, resources.wood || 0)}`;
+          case 'metal': return `${Math.max(0, resources.metal || 0)}`;
+          case 'scrap': return `${Math.max(0, resources.scrap || 0)}`;
+          case 'food': return `${Math.max(0, resources.food || 0)}`;
+          case 'water': return `${Math.max(0, resources.water || 0)}`;
+          case 'medical': return `${Math.max(0, resources.medical || 0)}`;
+          case 'ammo': return `${Math.max(0, resources.ammo || 0)}`;
+          case 'energyCore': return `${Math.max(0, resources.energyCore || 0)}`;
+          default: return '0';
+        }
+      })();
+      const value = this.add.text(x + 23, y + 3, initialValue, {
         fontSize: this.hudFs(13, 12),
         color: '#e2e8f0',
         fontFamily: this.uiFontFamily,
@@ -1495,14 +1512,19 @@ export default class UIScene extends Phaser.Scene {
       value.setScrollFactor(0);
       this.leftHudCollapsibleObjects.push(bg, icon, value);
     });
-    this.updateResourceHud(gameState.data.resources);
+    this.time.delayedCall(0, () => {
+      if (!this.scene.isActive()) return;
+      this.updateResourceHud(gameState.data.resources);
+    });
   }
 
   private updateResourceHud(resources: any): void {
     if (!resources) return;
     const set = (key: string, val: string, color = '#e2e8f0') => {
       const text = this.resourceValueTexts[key];
-      if (!text || !text.active || !(text as any).canvas || !(text as any).context) return;
+      const frame = (text as any)?.frame;
+      const sourceImage = frame?.source?.image;
+      if (!text || !text.active || !(text as any).canvas || !(text as any).context || !frame || !sourceImage) return;
       text.setText(val);
       text.setColor(color);
     };

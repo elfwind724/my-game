@@ -23,6 +23,7 @@ class SlidePanel {
   protected isOpen: boolean = false;
   protected panelWidth: number;
   protected side: 'left' | 'right';
+  protected suppressNextOpenAnimation: boolean = false;
   private lastToggleAt: number = -9999;
 
   constructor(scene: Phaser.Scene, width: number, side: 'left' | 'right' = 'right') {
@@ -35,8 +36,11 @@ class SlidePanel {
     const w = this.scene.cameras.main.width;
     const h = this.scene.cameras.main.height;
     const startX = this.side === 'right' ? w : -this.panelWidth;
+    const targetX = this.side === 'right' ? w - this.panelWidth : 0;
+    const skipAnimation = this.suppressNextOpenAnimation;
+    this.suppressNextOpenAnimation = false;
 
-    this.container = this.scene.add.container(startX, 0);
+    this.container = this.scene.add.container(skipAnimation ? targetX : startX, 0);
     this.container.setScrollFactor(0);
     // Keep slide panels above in-world overlays (day events / directives / mini games).
     this.container.setDepth(6200);
@@ -48,11 +52,11 @@ class SlidePanel {
     if (bg.input) (bg.input as any).priorityID = 0;
     this.container.add(bg);
 
-    // Slide in
-    const targetX = this.side === 'right' ? w - this.panelWidth : 0;
-    this.scene.tweens.add({
-      targets: this.container, x: targetX, duration: 300, ease: 'Quad.easeOut',
-    });
+    if (!skipAnimation) {
+      this.scene.tweens.add({
+        targets: this.container, x: targetX, duration: 300, ease: 'Quad.easeOut',
+      });
+    }
 
     this.isOpen = true;
     return this.container;
@@ -296,6 +300,7 @@ export class CraftingPanel extends SlidePanel {
     const popUsage = BaseSystem.getPopulationUsage();
     const popCap = BaseSystem.getPopulationCapacity();
     const housingChain = BaseSystem.getBuildChainStatus('room_quarters');
+    const turretOverview = BaseSystem.getTurretChainOverview();
     const housingHint = housingChain.canConstruct
       ? '人口扩容已解锁：可建宿舍房间'
       : `人口扩容未解锁：${(housingChain.blockedReasons || []).slice(0, 1).join('；') || '需前置建筑'}`;
@@ -305,10 +310,19 @@ export class CraftingPanel extends SlidePanel {
       fontFamily: uiFont,
       wordWrap: { width: this.panelWidth - unit(36) },
     }));
+    const showTurretSummary = this.selectedBuildCategory === 'all' || this.selectedBuildCategory === 'turret';
+    if (showTurretSummary) {
+      container.add(this.scene.add.text(unit(18), unit(140), `炮台链: ${turretOverview.slice(0, mobilePortrait ? 1 : 2).join(' / ')}`, {
+        fontSize: fs(10),
+        color: '#c4b5fd',
+        fontFamily: uiFont,
+        wordWrap: { width: this.panelWidth - unit(36) },
+      }));
+    }
 
-    const cardH = mobilePortrait ? unit(152) : unit(126);
+    const cardH = mobilePortrait ? unit(168) : unit(142);
     const cardGap = unit(8);
-    const listTop = unit(160);
+    const listTop = showTurretSummary ? unit(176) : unit(160);
     const listBottom = h - unit(120);
     const availableHeight = Math.max(cardH, listBottom - listTop);
     const cardsPerPage = Math.max(1, Math.floor((availableHeight + cardGap) / (cardH + cardGap)));
@@ -358,6 +372,15 @@ export class CraftingPanel extends SlidePanel {
         fontSize: fs(10), color: '#93c5fd', fontFamily: uiFont,
         wordWrap: { width: this.panelWidth - unit(190) },
       }));
+      const turretLinkLine = BaseSystem.isTurretLinkedBuilding(def.id)
+        ? BaseSystem.getTurretLinkStatusLine(def.id)
+        : '';
+      if (turretLinkLine) {
+        container.add(this.scene.add.text(unit(42), y + unit(106), turretLinkLine, {
+          fontSize: fs(10), color: '#c4b5fd', fontFamily: uiFont,
+          wordWrap: { width: this.panelWidth - unit(190) },
+        }));
+      }
 
       const btnLabel = canBuild
         ? '选中建造'
@@ -692,6 +715,7 @@ export class BasePanel extends SlidePanel {
       this.container = null;
     }
     this.isOpen = false;
+    this.suppressNextOpenAnimation = true;
     this.show();
   }
 
@@ -852,6 +876,9 @@ export class BasePanel extends SlidePanel {
     const companions = gameState.data.companions;
     const autoBuild = gameState.data.autoBuild;
     const advisorLines = BaseSystem.getConstructionAdvisorLines();
+    const diagnostics = BaseSystem.getConstructionDiagnostics();
+    const buildChainOverview = BaseSystem.getCoreBuildChainOverview().slice(0, mobilePortrait ? 2 : 3);
+    const turretChainOverview = BaseSystem.getTurretChainOverview().slice(0, mobilePortrait ? 2 : 3);
     const compCount = companions.length;
     const popCap = BaseSystem.getPopulationCapacity();
     const partyCount = companions.filter(c => c.status === 'party').length;
@@ -1029,10 +1056,29 @@ export class BasePanel extends SlidePanel {
     container.add(autoBuildBtn);
     summaryRightY += autoBuildBtn.height + unit(3);
 
+    const strategyBtn = this.scene.add.text(
+      rightX,
+      summaryRightY,
+      `模板: ${BaseSystem.getAutoBuildStrategyLabel(autoBuild.strategyTemplate as any)}`,
+      {
+        ...actionBtnStyle,
+        color: '#c4b5fd',
+      }
+    ).setOrigin(0, 0).setInteractive({ useHandCursor: true });
+    if (strategyBtn.input) (strategyBtn.input as any).priorityID = 3;
+    strategyBtn.on('pointerdown', () => {
+      const result = BaseSystem.cycleAutoBuildStrategyTemplate();
+      events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
+      showTip(`施工模板切换为 ${result.label}`, '#c4b5fd');
+      this.refresh();
+    });
+    container.add(strategyBtn);
+    summaryRightY += strategyBtn.height + unit(3);
+
     const recommendBuildBtn = this.scene.add.text(
       rightX,
       summaryRightY,
-      '推荐施工',
+      '应用模板',
       {
         ...actionBtnStyle,
         color: '#fde68a',
@@ -1040,7 +1086,7 @@ export class BasePanel extends SlidePanel {
     ).setOrigin(0, 0).setInteractive({ useHandCursor: true });
     if (recommendBuildBtn.input) (recommendBuildBtn.input as any).priorityID = 3;
     recommendBuildBtn.on('pointerdown', () => {
-      const result = BaseSystem.applyRecommendedBuildPlan();
+      const result = BaseSystem.applyRecommendedBuildPlan(autoBuild.strategyTemplate as any);
       emitAutoBuildState();
       events.emit(GameEvents.BASE_UPDATED, { ...gameState.data.base });
       showTip(result.message, '#fde68a');
@@ -1098,14 +1144,45 @@ export class BasePanel extends SlidePanel {
     container.add(compactOps);
     sy += compactOps.height + unit(4);
 
+    const strategySummary = this.scene.add.text(leftX, sy, `模板: ${BaseSystem.getAutoBuildStrategyLabel(autoBuild.strategyTemplate as any)} · 缺口: ${(diagnostics.slice(0, 2) || ['暂无']).join(' / ')}`, {
+      fontSize: fsTiny(10),
+      color: '#c4b5fd',
+      fontFamily: uiFont,
+      wordWrap: { width: this.panelWidth - unit(32) },
+    });
+    container.add(strategySummary);
+    sy += strategySummary.height + unit(3);
+
+    const chainSummary = this.scene.add.text(leftX, sy, `主链: ${buildChainOverview.join(' / ')}`, {
+      fontSize: fsTiny(10),
+      color: '#93c5fd',
+      fontFamily: uiFont,
+      wordWrap: { width: this.panelWidth - unit(32) },
+    });
+    container.add(chainSummary);
+    sy += chainSummary.height + unit(4);
+
+    const turretChainSummary = this.scene.add.text(leftX, sy, `炮台链: ${turretChainOverview.join(' / ')}`, {
+      fontSize: fsTiny(10),
+      color: '#c4b5fd',
+      fontFamily: uiFont,
+      wordWrap: { width: this.panelWidth - unit(32) },
+    });
+    container.add(turretChainSummary);
+    sy += turretChainSummary.height + unit(4);
+
     if (this.showAutoBuildDetails && sy + reserveForListHeader < topSectionLimit) {
       const detailLines: string[] = [];
       const warningLine = (base.ecologyWarnings || [])[0];
       if (warningLine) detailLines.push(`⚠ ${warningLine}`);
       if (slotParts.length > 0) detailLines.push(`岗位槽位: ${slotParts.join(' · ')}`);
+      detailLines.push(`施工模板: ${BaseSystem.getAutoBuildStrategyLabel(autoBuild.strategyTemplate as any)} · 并发${autoBuild.maxConcurrent} · 队列${autoBuild.queueCap}`);
       detailLines.push(`金来源: 河流淘金 / 山洞挖矿 / 城区搜刮 / 夜战掉落`);
       detailLines.push(`夜间策略: ${autoBuild.pauseAtNight ? '暂停施工' : '持续施工'} · ${autoBuild.autoAssignBuilders ? '自动派工' : '手动派工'}`);
       BaseSystem.getAutoDutyBehaviorSummary().slice(0, 2).forEach((line) => detailLines.push(line));
+      diagnostics.forEach((line) => detailLines.push(`缺口: ${line}`));
+      buildChainOverview.forEach((line) => detailLines.push(`主链: ${line}`));
+      turretChainOverview.forEach((line) => detailLines.push(`炮台链: ${line}`));
       advisorLines.forEach((line) => detailLines.push(`建议: ${line}`));
 
       const detailTop = sy;

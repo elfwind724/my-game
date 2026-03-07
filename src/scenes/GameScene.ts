@@ -514,6 +514,7 @@ export default class GameScene extends Phaser.Scene {
   // State
   private isGameOver: boolean = false;
   private isBuildMode: boolean = false;
+  private isRestartingRun: boolean = false;
   private buildPreview: Phaser.GameObjects.Rectangle | null = null;
   private selectedBuildingId: string = 'wall';
   private buildPalette?: Phaser.GameObjects.Container;
@@ -927,6 +928,7 @@ export default class GameScene extends Phaser.Scene {
   create(): void {
     // Ensure physics is running (may have been paused on previous death)
     this.physics.resume();
+    this.isRestartingRun = false;
     (this as any)._lastToggleBaseAt = 0;
     (this as any)._lastToggleLeisureAt = 0;
 
@@ -2933,21 +2935,31 @@ export default class GameScene extends Phaser.Scene {
     this.add.image(worldW / 2, worldH / 2, 'world_base_map').setDepth(-30);
     this.add.rectangle(worldW / 2, worldH / 2, worldW, worldH, 0x030712, 0.05).setDepth(-29);
 
-    const baseRing = this.add.ellipse(1000, 750, 540, 430, 0x2a2119, 0.08);
-    baseRing.setStrokeStyle(2, 0xb08968, 0.24);
-    baseRing.setDepth(-9);
-    const baseCore = this.add.ellipse(1000, 750, 468, 356, 0x312417, 0.07);
-    baseCore.setStrokeStyle(1, 0xfbbf24, 0.2);
-    baseCore.setDepth(-9);
-    this.add.rectangle(1000, 750, 388, 2, 0xb08968, 0.16).setDepth(-9);
-    this.add.rectangle(1000, 750, 2, 288, 0xb08968, 0.16).setDepth(-9);
-    this.add.text(1000, 536, '基地中枢', {
+    const baseGround = this.textures.exists('village_ground')
+      ? this.add.tileSprite(1000, 748, 620, 540, 'village_ground').setDepth(-28)
+      : this.add.rectangle(1000, 748, 620, 540, 0x3a3026, 0.88).setDepth(-28);
+    const basePath = this.textures.exists('village_path')
+      ? this.add.tileSprite(1000, 748, 208, 540, 'village_path').setDepth(-27)
+      : this.add.rectangle(1000, 748, 208, 540, 0x5f4a39, 0.92).setDepth(-27);
+    const baseApron = this.textures.exists('village_path')
+      ? this.add.tileSprite(1000, 868, 620, 120, 'village_path').setDepth(-27)
+      : this.add.rectangle(1000, 868, 620, 120, 0x5f4a39, 0.92).setDepth(-27);
+
+    [baseGround, basePath, baseApron].forEach((obj) => {
+      obj.setAlpha(obj === baseGround ? 0.98 : 0.94);
+    });
+
+    const baseBoundary = this.add.rectangle(1000, 748, 620, 540, 0x000000, 0);
+    baseBoundary.setStrokeStyle(2, 0xb08968, 0.2);
+    baseBoundary.setDepth(-26);
+
+    this.add.text(1000, 522, '基地中枢', {
       fontSize: this.worldFs(14, 13),
       color: '#fef3c7',
       fontFamily: this.getUIFontFamily(),
       stroke: '#0b1220',
       strokeThickness: 3,
-    }).setOrigin(0.5).setAlpha(0.3).setDepth(-8);
+    }).setOrigin(0.5).setAlpha(0.24).setDepth(-25);
   }
 
   private createExplorationWorld(): void {
@@ -2971,9 +2983,6 @@ export default class GameScene extends Phaser.Scene {
     addShadowedStructure('deco_barricade', 576, 1010, 0.7, 0x8f6a48);
 
     // Forest biome (top-right).
-    const forestArea = this.add.ellipse(1605, 410, 640, 660, 0x14532d, 0.1);
-    forestArea.setStrokeStyle(1, 0x22c55e, 0.14);
-    this.worldFeatureLayer.add(forestArea);
     addShadowedStructure('forest_cabin', 1486, 286, 0.86, 0xd1d5db);
     addShadowedStructure('forest_cabin', 1762, 442, 0.78, 0xbdd7c2);
     addShadowedStructure('deco_billboard', 1638, 214, 0.58, 0xa3e635);
@@ -2982,9 +2991,6 @@ export default class GameScene extends Phaser.Scene {
     addShadowedStructure('deco_boulder', 1818, 688, 0.92, 0x7f8ea3);
 
     // City biome (top-left) with stricter boundary so it doesn't invade base visuals.
-    const cityArea = this.add.ellipse(322, 396, 544, 584, 0x334155, 0.1);
-    cityArea.setStrokeStyle(1, 0x94a3b8, 0.16);
-    this.worldFeatureLayer.add(cityArea);
     const cityBlocks = [
       { key: 'house_tower_ruin', x: 160, y: 172, s: 0.56, tint: 0x95a2b5 },
       { key: 'house_apartment', x: 236, y: 210, s: 0.62, tint: 0x9aa6b8 },
@@ -3043,12 +3049,9 @@ export default class GameScene extends Phaser.Scene {
     }
 
     // Cave biome (bottom-right).
-    const caveArea = this.add.ellipse(1670, 1160, 390, 336, 0x1f2937, 0.16);
-    caveArea.setStrokeStyle(1, 0x64748b, 0.24);
-    this.worldFeatureLayer.add(caveArea);
-    this.worldFeatureLayer.add(this.add.ellipse(1650, 1168, 170, 98, 0x020617, 0.88));
-    this.worldFeatureLayer.add(this.add.ellipse(1654, 1172, 104, 54, 0x000000, 0.78));
-    this.worldFeatureLayer.add(this.add.ellipse(1654, 1144, 126, 44, 0x334155, 0.22));
+    this.worldFeatureLayer.add(this.add.ellipse(1650, 1168, 170, 98, 0x020617, 0.56));
+    this.worldFeatureLayer.add(this.add.ellipse(1654, 1172, 104, 54, 0x000000, 0.5));
+    this.worldFeatureLayer.add(this.add.ellipse(1654, 1144, 126, 44, 0x334155, 0.14));
     addShadowedStructure('deco_cave_gate', 1650, 1168, 0.78, 0x8d99ad);
     addShadowedStructure('cave_watch_post', 1764, 1088, 0.72, 0x8b95a9);
     addShadowedStructure('deco_radio_tower', 1818, 1230, 0.54, 0x8b95a9);
@@ -12053,6 +12056,10 @@ export default class GameScene extends Phaser.Scene {
     lines.push(getBuildingUpgradeHint(def.id));
     const chain = BaseSystem.getBuildChainStatus(def.id);
     lines.push(`链路：${chain.roleCN} | 分区：${chain.zoneLabelCN}`);
+    const turretLinkLine = BaseSystem.getTurretLinkStatusLine(def.id);
+    if (turretLinkLine) {
+      lines.push(`炮台链：${turretLinkLine}`);
+    }
     if (chain.blockedReasons.length > 0) {
       lines.push(`阻塞：${chain.blockedReasons.slice(0, 2).join('；')}`);
     }
@@ -16898,6 +16905,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   private restartGame(): void {
+    if (this.isRestartingRun) return;
+    this.isRestartingRun = true;
     gameState.save();
     // Resume physics before restart (it was paused on death)
     this.physics.resume();

@@ -1,6 +1,15 @@
 # 末日生存肉鸽游戏 - 开发进度
 Original prompt: 修复夜晚显示与白光问题、提升像素写实美术、完善基地/伙伴/建造系统，并修复子弹停火与 UI 重叠等 Bug。
 
+## 最新修复
+- [x] 修复“重新觉醒/重来游戏”偶发死机
+  - 根因：`UIScene` 在场景重启首帧立即刷新资源栏文本，Phaser 动态文字纹理尚未稳定，触发 `drawImage` 空引用
+  - 处理：
+    - `GameScene` 增加单次重启保护，避免重复触发重开链路
+    - `UIScene` 资源栏首帧改为延后一帧刷新
+    - `updateResourceHud()` 增加更严格的纹理可用性检查
+  - 验证：`npx tsc --noEmit` 与 `npm run build` 均通过
+
 ## 项目信息
 - **框架**: Phaser 3.80.1 + TypeScript + Vite
 - **分辨率**: 800x450 (高清像素风，自动缩放)
@@ -2035,4 +2044,26 @@ src/
 - [x] `UIScene` 新增运行态重置：`create()` 前会清空 `resourceValueTexts / rightStatusTexts / leftHudCollapsibleObjects / mobileButtons` 等旧引用，防止复用旧场景实例时残留 HUD 对象。
 - [x] `UIScene.shutdown()` 现在会主动销毁并清空 HUD 折叠对象与资源文本映射，确保重新觉醒后资源栏从干净状态重建。
 - [x] `updateResourceHud()` 增加动态 Text 可用性保护，遇到已失效的文本 canvas/context 时直接跳过，不再触发 `drawImage` 读取空对象崩溃。
+- [x] 验证：`npx tsc --noEmit` 通过；`npm run build` 通过。
+
+## 最新进展（2026-03-07 基地面板抖动与背景错位专项修复）
+- [x] `BasePanel` 改为原位刷新：`SlidePanel` 新增 `suppressNextOpenAnimation`，`BasePanel.refresh()` 现在会无动画重建，不再因 `BASE_UPDATED` 高频触发而重复播放滑入动画，解决基地管理“缩进去又弹出来”的体感问题。
+- [x] 基地中心背景职责收拢：`GameScene.createBackground()` 取消旧的程序化盆地椭圆和十字引导线，改为直接用 `village_ground / village_path` 铺设基地中心地块，避免用户背景被旧底层压脏。
+- [x] 区域脏覆盖收敛：`createExplorationWorld()` 移除了城市/森林大面积分区椭圆，仅保留必要的世界结构与较弱洞口暗部，减少背景素材上方的灰绿蒙层。
+- [x] 验证：`npx tsc --noEmit` 通过；`npm run build` 通过。
+
+## 最新进展（2026-03-07 建造系统二期增强）
+- [x] 自动建造模板落地：`GameState.autoBuild` 新增 `strategyTemplate`，支持 `均衡推进 / 防守优先 / 生存优先 / 扩张优先` 四种施工策略，并写入存档标准化流程。
+- [x] 推荐施工按模板生效：`BaseSystem.applyRecommendedBuildPlan()` 现在会按模板调整墙体、炮台、瞭望塔、供电、宿舍、仓储、工坊、生存链和高阶火力的目标数、优先级、并发与建筑工目标。
+- [x] 基地缺口诊断：新增 `BaseSystem.getConstructionDiagnostics()`，会直接汇总供电、仓储、制造链、人口上限、防线、食物、净水、炮台侦测等当前主要缺口。
+- [x] 主链概览：新增 `BaseSystem.getCoreBuildChainOverview()`，可在面板中直接看到 `供电 / 仓储 / 工坊 / 宿舍` 的当前档位或缺失状态。
+- [x] 基地管理面板增强：`Panels` 增加模板切换按钮、模板应用按钮、缺口摘要和主链摘要，运营详情里也会显示模板状态、链路缺口与主链概览，不再只有难读的施工数字。
+- [x] 验证：`npx tsc --noEmit` 通过；`npm run build` 通过。
+
+## 最新进展（2026-03-07 炮台升级树和建造链联动）
+- [x] 炮台链 helper 落地：`BaseSystem` 新增 `isTurretLinkedBuilding / getTurretLinkStatusLine / getTurretChainOverview`，把 `基础炮台 -> 减速/激光 -> 导弹` 以及 `瞭望塔 / 雷达 / 弹药厂 / 供电 / 工作台` 的联动状态翻译成可读状态行。
+- [x] 单座炮台可读性增强：建造卡现在对炮台及其联动建筑额外显示一行 `炮台链` 状态，能直接看出分支是否就绪、当前卡在雷达还是弹药厂。
+- [x] 炮台页总览增强：建造面板顶部在 `全部 / 炮台` 分类下新增 `炮台链` 摘要，玩家能快速看到基础链、侦测链和高压链的当前推进状态。
+- [x] 基地管理联动增强：`T` 面板主链摘要下新增 `炮台链` 总览，运营详情里也会展开显示，让玩家能同时读懂“基地主链”和“炮台火力链”。
+- [x] 建造模式预览增强：右下角建造预览在选中炮台或其联动建筑时，会追加 `炮台链：...` 状态行，不用切回基地面板也能判断下一步该补什么。
 - [x] 验证：`npx tsc --noEmit` 通过；`npm run build` 通过。

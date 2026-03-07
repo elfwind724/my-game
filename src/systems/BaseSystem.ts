@@ -100,6 +100,25 @@ export class BaseSystem {
   private static readonly RING_SAMPLE_COUNT = 28;
   private static readonly RING_COVERAGE_DISTANCE = 86;
   private static readonly BARRIER_IDS = new Set<string>(['wall', 'reinforced_wall', 'gate']);
+  private static readonly AUTO_BUILD_TEMPLATE_LABELS = {
+    balanced: '均衡推进',
+    defense: '防守优先',
+    survival: '生存优先',
+    expansion: '扩张优先',
+  } as const;
+  private static readonly TURRET_LINK_RELATED_IDS = new Set<string>([
+    'turret',
+    'slow_turret',
+    'laser_turret',
+    'missile_turret',
+    'sniper_nest',
+    'flame_turret',
+    'watchtower',
+    'radar',
+    'ammo_factory',
+    'generator',
+    'workbench',
+  ]);
 
   private static readonly EXCHANGE_BASE: Record<ExchangeResource, number> = {
     wood: 0.015,
@@ -1756,7 +1775,172 @@ export class BaseSystem {
     return lines.slice(0, 3);
   }
 
-  static applyRecommendedBuildPlan(): { updated: number; message: string } {
+  static getAutoBuildStrategyLabel(
+    template: keyof typeof BaseSystem.AUTO_BUILD_TEMPLATE_LABELS = gameState.data.autoBuild.strategyTemplate || 'balanced'
+  ): string {
+    return this.AUTO_BUILD_TEMPLATE_LABELS[template] || this.AUTO_BUILD_TEMPLATE_LABELS.balanced;
+  }
+
+  static cycleAutoBuildStrategyTemplate(): { template: string; label: string } {
+    const ordered: Array<keyof typeof BaseSystem.AUTO_BUILD_TEMPLATE_LABELS> = ['balanced', 'defense', 'survival', 'expansion'];
+    const current = ordered.includes(gameState.data.autoBuild.strategyTemplate as any)
+      ? gameState.data.autoBuild.strategyTemplate as keyof typeof BaseSystem.AUTO_BUILD_TEMPLATE_LABELS
+      : 'balanced';
+    const next = ordered[(ordered.indexOf(current) + 1) % ordered.length];
+    gameState.data.autoBuild.strategyTemplate = next;
+    return { template: next, label: this.getAutoBuildStrategyLabel(next) };
+  }
+
+  static getConstructionDiagnostics(): string[] {
+    const base = gameState.data.base;
+    const resources = gameState.data.resources;
+    const runtime = this.toRuntimeBuildings();
+    const counts = this.getBuildingCountsById(runtime);
+    const companions = gameState.data.companions.length;
+    const popCap = this.getPopulationCapacity();
+    const diagnostics: string[] = [];
+
+    if (!counts.generator || base.powerCapacity - base.powerUsed <= 2) diagnostics.push('供电吃紧');
+    if (!counts.storage || resources.wood + resources.metal + resources.scrap >= 50) diagnostics.push('仓储偏紧');
+    if (!counts.workbench && gameState.data.currentDay >= 2) diagnostics.push('制造链未开');
+    if (companions >= popCap || popCap - companions <= 1) diagnostics.push('人口将封顶');
+    if (base.structureCoverage < 0.82 || base.structureBreachOpen) diagnostics.push('防线未闭环');
+    if (resources.food < 10) diagnostics.push('食物压力高');
+    if (resources.water < 8) diagnostics.push('净水不足');
+    if ((counts.turret || 0) >= 2 && !counts.watchtower) diagnostics.push('炮台缺瞭望塔');
+
+    return diagnostics.slice(0, 4);
+  }
+
+  static getCoreBuildChainOverview(): string[] {
+    const runtime = this.toRuntimeBuildings();
+    const counts = this.getBuildingCountsById(runtime);
+    const topTier = (buildingId: string) => runtime
+      .filter((item) => item.id === buildingId)
+      .reduce((best, item) => Math.max(best, item.tier || 1), 0);
+    const chainLine = (label: string, buildingId: string, emptyHint: string): string => {
+      const count = counts[buildingId] || 0;
+      if (count <= 0) return `${label} ${emptyHint}`;
+      const tier = topTier(buildingId);
+      const def = BUILDING_DEFS[buildingId];
+      const upgrade = def && tier < def.maxTier ? `T${tier}→T${Math.min(def.maxTier, tier + 1)}` : `T${tier}`;
+      return `${label} ${upgrade}`;
+    };
+
+    return [
+      chainLine('供电', 'generator', '未建'),
+      chainLine('仓储', 'storage', '未建'),
+      chainLine('工坊', 'workbench', '未开'),
+      chainLine('宿舍', 'room_quarters', '未扩容'),
+    ];
+  }
+
+  private static getTopTierById(
+    buildingId: string,
+    runtime: RuntimeBuilding[] = this.toRuntimeBuildings()
+  ): number {
+    return runtime
+      .filter((item) => item.id === buildingId)
+      .reduce((best, item) => Math.max(best, Math.max(1, item.tier || 1)), 0);
+  }
+
+  private static getPrimaryBlockedReason(reason: string | undefined): string {
+    if (!reason) return '未就绪';
+    return reason
+      .replace('需 ', '缺')
+      .replace('（当前0）', '')
+      .replace('（当前', '(');
+  }
+
+  private static getTurretBranchState(
+    fromId: string,
+    toId: string,
+    label: string
+  ): string {
+    const fromTier = Math.max(1, BUILDING_DEFS[fromId]?.tier || 1);
+    const check = this.getBuildingUpgradeCheck(fromId, toId, fromTier);
+    if (check.available) return `${label}就绪`;
+    const reason = this.getPrimaryBlockedReason(
+      check.blockedReasons.find((item) => item !== '资源不足') || check.blockedReasons[0]
+    );
+    return `${label}${reason}`;
+  }
+
+  static isTurretLinkedBuilding(buildingId: string): boolean {
+    return this.TURRET_LINK_RELATED_IDS.has(buildingId);
+  }
+
+  static getTurretLinkStatusLine(buildingId: string): string {
+    const runtime = this.toRuntimeBuildings();
+    const counts = this.getBuildingCountsById(runtime);
+    const turretCount = counts.turret || 0;
+    const watchtowerCount = counts.watchtower || 0;
+    const radarCount = counts.radar || 0;
+    const ammoFactoryCount = counts.ammo_factory || 0;
+    const generatorCount = counts.generator || 0;
+    const workbenchCount = counts.workbench || 0;
+    const laserCount = counts.laser_turret || 0;
+
+    switch (buildingId) {
+      case 'turret':
+        return `分支: ${this.getTurretBranchState('turret', 'slow_turret', '控场')} · ${this.getTurretBranchState('turret', 'laser_turret', '激光')}`;
+      case 'slow_turret':
+        return `控场链: 基础炮台${turretCount} · 供电${generatorCount}/1 · 已接减速压制`;
+      case 'laser_turret':
+        return `激光链: 供电${generatorCount}/2 · 雷达${radarCount}/1 · ${this.getTurretBranchState('laser_turret', 'missile_turret', '导弹')}`;
+      case 'missile_turret':
+        return `导弹链: 激光炮台${laserCount}/1 · 弹药厂${ammoFactoryCount}/1 · 末端高压火力`;
+      case 'flame_turret':
+        return `近圈链: 基础炮台${turretCount} · 供电${generatorCount}/1 · 负责堵口灼烧`;
+      case 'sniper_nest':
+        return `狙击链: 瞭望塔${watchtowerCount}/1 · 炮台群${turretCount + laserCount} · 高点单杀增幅`;
+      case 'watchtower':
+        return `增幅链: 联动炮台${turretCount + laserCount + (counts.slow_turret || 0) + (counts.flame_turret || 0) + (counts.missile_turret || 0) + (counts.sniper_nest || 0)} · 狙击巢${counts.sniper_nest || 0}`;
+      case 'radar':
+        return `侦测链: 激光炮台${laserCount} · 导弹链${ammoFactoryCount > 0 ? '已开' : '待弹药厂'} · 夜战预警`;
+      case 'ammo_factory':
+        return `军备链: 工作台${workbenchCount}/1 · 供电${generatorCount}/1 · 导弹链${laserCount}/1`;
+      case 'generator':
+        return `供电脉络: 炮台群${turretCount + laserCount + (counts.slow_turret || 0) + (counts.flame_turret || 0) + (counts.missile_turret || 0) + (counts.sniper_nest || 0)} · 雷达${radarCount} · 弹药厂${ammoFactoryCount}`;
+      case 'workbench':
+        return `制造链: 基础炮台${turretCount} · 激光链${radarCount > 0 ? '已开' : '待雷达'} · 改装中枢`;
+      default:
+        return '';
+    }
+  }
+
+  static getTurretChainOverview(): string[] {
+    const runtime = this.toRuntimeBuildings();
+    const counts = this.getBuildingCountsById(runtime);
+    const topTier = (buildingId: string) => this.getTopTierById(buildingId, runtime);
+
+    const baseLine = `基础链: 炮台${counts.turret || 0}${counts.turret ? `(T${topTier('turret')})` : ''} · 减速${counts.slow_turret || 0} · 火焰${counts.flame_turret || 0}`;
+    const intelLine = `侦测链: 瞭望塔${counts.watchtower || 0} · 雷达${counts.radar || 0} · 狙击巢${counts.sniper_nest || 0}`;
+    const highLine = `高压链: 激光${counts.laser_turret || 0}${counts.laser_turret ? `(T${topTier('laser_turret')})` : ''} · 弹药厂${counts.ammo_factory || 0} · 导弹${counts.missile_turret || 0}`;
+
+    let nextLine = '下一步: 先补基础炮台，打开火力链';
+    if ((counts.turret || 0) <= 0) {
+      nextLine = '下一步: 基础炮台起步，优先补工作台和供电';
+    } else if (!counts.watchtower) {
+      nextLine = '下一步: 补瞭望塔，触发炮台射程与火控增幅';
+    } else if (!counts.radar) {
+      nextLine = '下一步: 补雷达，打开激光火力链';
+    } else if (!counts.laser_turret) {
+      nextLine = '下一步: 将基础炮台改装为激光炮台';
+    } else if (!counts.ammo_factory) {
+      nextLine = '下一步: 补弹药厂，打开导弹炮台终端';
+    } else if (!counts.missile_turret) {
+      nextLine = '下一步: 激光炮台继续改装为导弹炮台';
+    } else {
+      nextLine = '状态: 末端炮台链已打通，可继续升阶并补狙击巢';
+    }
+
+    return [baseLine, intelLine, highLine, nextLine];
+  }
+
+  static applyRecommendedBuildPlan(
+    requestedTemplate: keyof typeof BaseSystem.AUTO_BUILD_TEMPLATE_LABELS = gameState.data.autoBuild.strategyTemplate || 'balanced'
+  ): { updated: number; message: string } {
     const autoBuild = gameState.data.autoBuild;
     const base = gameState.data.base;
     const resources = gameState.data.resources;
@@ -1765,54 +1949,89 @@ export class BaseSystem {
     const companions = gameState.data.companions.length;
     const popCap = this.getPopulationCapacity();
     const day = Math.max(1, gameState.data.currentDay || 1);
+    const template = requestedTemplate in this.AUTO_BUILD_TEMPLATE_LABELS ? requestedTemplate : 'balanced';
+    const defenseMode = template === 'defense';
+    const survivalMode = template === 'survival';
+    const expansionMode = template === 'expansion';
 
     autoBuild.enabled = true;
     autoBuild.autoAssignBuilders = true;
     autoBuild.autoAssignDuties = true;
-    autoBuild.pauseAtNight = true;
-    autoBuild.maxConcurrent = Phaser.Math.Clamp(day >= 5 ? 2 : 1, 1, 2);
-    autoBuild.desiredBuilderCount = Phaser.Math.Clamp(Math.max(1, Math.ceil(companions * 0.34)), 1, 3);
+    autoBuild.strategyTemplate = template;
+    autoBuild.pauseAtNight = expansionMode ? day <= 3 : true;
+    autoBuild.maxConcurrent = Phaser.Math.Clamp(expansionMode ? 2 : day >= 5 ? 2 : 1, 1, 2);
+    autoBuild.queueCap = Phaser.Math.Clamp(expansionMode ? 8 : defenseMode ? 6 : 7, 2, 24);
+    autoBuild.desiredBuilderCount = Phaser.Math.Clamp(
+      Math.max(
+        1,
+        Math.ceil(
+          companions * (defenseMode ? 0.4 : survivalMode ? 0.3 : expansionMode ? 0.45 : 0.34)
+        )
+      ),
+      1,
+      4
+    );
 
-    const wallTarget = Math.max(8, counts.wall || 0, day >= 4 ? 12 : 8);
-    const turretTarget = Math.max(2, counts.turret || 0, day >= 4 ? 3 : 2);
-    const watchtowerTarget = (counts.turret || 0) >= 2
+    const wallTarget = Math.max(8, counts.wall || 0, day >= 4 ? 12 : 8, defenseMode ? 14 : 0);
+    const turretTarget = Math.max(2, counts.turret || 0, day >= 4 ? 3 : 2, defenseMode ? 4 : 0);
+    const watchtowerTarget = (counts.turret || 0) >= 2 || defenseMode
       ? Math.max(1, counts.watchtower || 0)
       : Math.max(0, counts.watchtower || 0);
-    const generatorTarget = Math.max(1, counts.generator || 0, base.powerCapacity - base.powerUsed <= 2 ? (counts.generator || 0) + 1 : 1);
-    const laserTarget = day >= 4 && generatorTarget >= 2
+    const generatorTarget = Math.max(
+      1,
+      counts.generator || 0,
+      base.powerCapacity - base.powerUsed <= 2 ? (counts.generator || 0) + 1 : 1,
+      expansionMode ? 2 : 0
+    );
+    const laserTarget = day >= (defenseMode ? 3 : 4) && generatorTarget >= 2
       ? Math.max(1, counts.laser_turret || 0)
       : Math.max(0, counts.laser_turret || 0);
-    const flameTarget = day >= 3 && (counts.turret || 0) >= 2
+    const flameTarget = day >= 3 && ((counts.turret || 0) >= 2 || defenseMode)
       ? Math.max(1, counts.flame_turret || 0)
       : Math.max(0, counts.flame_turret || 0);
-    const sniperTarget = day >= 4 && watchtowerTarget >= 1
+    const sniperTarget = day >= (defenseMode ? 3 : 4) && watchtowerTarget >= 1
       ? Math.max(1, counts.sniper_nest || 0)
       : Math.max(0, counts.sniper_nest || 0);
-    const missileTarget = day >= 6 && laserTarget >= 1
+    const missileTarget = day >= (defenseMode ? 5 : 6) && laserTarget >= 1
       ? Math.max(1, counts.missile_turret || 0)
       : Math.max(0, counts.missile_turret || 0);
-    const storageTarget = Math.max(1, counts.storage || 0, resources.wood + resources.metal + resources.scrap >= 50 ? (counts.storage || 0) + 1 : 1);
-    const roomTarget = companions >= popCap || popCap - companions <= 1 ? Math.max(1, (counts.room_quarters || 0) + 1) : Math.max(0, counts.room_quarters || 0);
-    const farmTarget = resources.food < 10 ? Math.max(1, (counts.farm || 0) + 1) : Math.max(1, counts.farm || 0);
-    const waterTarget = resources.water < 8 ? Math.max(1, (counts.water_collector || 0) + 1) : Math.max(1, counts.water_collector || 0);
-    const workbenchTarget = day >= 2 ? Math.max(1, counts.workbench || 0) : 0;
-    const medicalTarget = companions >= 2 || day >= 3 ? Math.max(1, counts.medical_station || 0) : 0;
+    const storageTarget = Math.max(
+      1,
+      counts.storage || 0,
+      resources.wood + resources.metal + resources.scrap >= 50 ? (counts.storage || 0) + 1 : 1,
+      expansionMode ? 2 : 0
+    );
+    const roomTarget = companions >= popCap || popCap - companions <= 1 || survivalMode || expansionMode
+      ? Math.max(1, (counts.room_quarters || 0) + 1)
+      : Math.max(0, counts.room_quarters || 0);
+    const farmTarget = resources.food < 10 || survivalMode
+      ? Math.max(1, (counts.farm || 0) + 1)
+      : Math.max(1, counts.farm || 0);
+    const waterTarget = resources.water < 8 || survivalMode
+      ? Math.max(1, (counts.water_collector || 0) + 1)
+      : Math.max(1, counts.water_collector || 0);
+    const workbenchTarget = day >= 2
+      ? Math.max(1, counts.workbench || 0, expansionMode ? 2 : 1)
+      : 0;
+    const medicalTarget = companions >= 2 || day >= 3 || survivalMode
+      ? Math.max(1, counts.medical_station || 0)
+      : 0;
 
     const plan = [
-      { id: 'wall_line', buildingId: 'wall', enabled: true, targetCount: wallTarget, maxTier: 3, priority: 100, allowUpgrade: true },
-      { id: 'turret_line', buildingId: 'turret', enabled: true, targetCount: turretTarget, maxTier: 3, priority: 95, allowUpgrade: true },
-      { id: 'watchtower_line', buildingId: 'watchtower', enabled: watchtowerTarget > 0, targetCount: watchtowerTarget, maxTier: 2, priority: 90, allowUpgrade: true },
-      { id: 'power_line', buildingId: 'generator', enabled: true, targetCount: generatorTarget, maxTier: 2, priority: 92, allowUpgrade: true },
-      { id: 'flame_line', buildingId: 'flame_turret', enabled: flameTarget > 0, targetCount: flameTarget, maxTier: 2, priority: 68, allowUpgrade: true },
-      { id: 'laser_line', buildingId: 'laser_turret', enabled: laserTarget > 0, targetCount: laserTarget, maxTier: 2, priority: 66, allowUpgrade: true },
-      { id: 'sniper_line', buildingId: 'sniper_nest', enabled: sniperTarget > 0, targetCount: sniperTarget, maxTier: 2, priority: 64, allowUpgrade: true },
-      { id: 'missile_line', buildingId: 'missile_turret', enabled: missileTarget > 0, targetCount: missileTarget, maxTier: 2, priority: 60, allowUpgrade: true },
-      { id: 'storage_line', buildingId: 'storage', enabled: true, targetCount: storageTarget, maxTier: 2, priority: 84, allowUpgrade: true },
-      { id: 'farm_line', buildingId: 'farm', enabled: true, targetCount: farmTarget, maxTier: 2, priority: 80, allowUpgrade: true },
-      { id: 'water_line', buildingId: 'water_collector', enabled: true, targetCount: waterTarget, maxTier: 2, priority: 78, allowUpgrade: true },
-      { id: 'workbench_line', buildingId: 'workbench', enabled: workbenchTarget > 0, targetCount: workbenchTarget, maxTier: 2, priority: 74, allowUpgrade: true },
-      { id: 'medical_line', buildingId: 'medical_station', enabled: medicalTarget > 0, targetCount: medicalTarget, maxTier: 2, priority: 72, allowUpgrade: true },
-      { id: 'room_line', buildingId: 'room_quarters', enabled: roomTarget > 0, targetCount: roomTarget, maxTier: 2, priority: 70, allowUpgrade: true },
+      { id: 'wall_line', buildingId: 'wall', enabled: true, targetCount: wallTarget, maxTier: 3, priority: defenseMode ? 110 : 100, allowUpgrade: true },
+      { id: 'turret_line', buildingId: 'turret', enabled: true, targetCount: turretTarget, maxTier: 3, priority: defenseMode ? 104 : survivalMode ? 82 : 95, allowUpgrade: true },
+      { id: 'watchtower_line', buildingId: 'watchtower', enabled: watchtowerTarget > 0, targetCount: watchtowerTarget, maxTier: 2, priority: defenseMode ? 100 : 90, allowUpgrade: true },
+      { id: 'power_line', buildingId: 'generator', enabled: true, targetCount: generatorTarget, maxTier: 2, priority: expansionMode ? 98 : 92, allowUpgrade: true },
+      { id: 'flame_line', buildingId: 'flame_turret', enabled: flameTarget > 0, targetCount: flameTarget, maxTier: 2, priority: defenseMode ? 86 : 68, allowUpgrade: true },
+      { id: 'laser_line', buildingId: 'laser_turret', enabled: laserTarget > 0, targetCount: laserTarget, maxTier: 2, priority: expansionMode ? 84 : defenseMode ? 88 : 66, allowUpgrade: true },
+      { id: 'sniper_line', buildingId: 'sniper_nest', enabled: sniperTarget > 0, targetCount: sniperTarget, maxTier: 2, priority: defenseMode ? 84 : 64, allowUpgrade: true },
+      { id: 'missile_line', buildingId: 'missile_turret', enabled: missileTarget > 0, targetCount: missileTarget, maxTier: 2, priority: defenseMode ? 82 : 60, allowUpgrade: true },
+      { id: 'storage_line', buildingId: 'storage', enabled: true, targetCount: storageTarget, maxTier: 2, priority: expansionMode ? 92 : survivalMode ? 88 : 84, allowUpgrade: true },
+      { id: 'farm_line', buildingId: 'farm', enabled: true, targetCount: farmTarget, maxTier: 2, priority: survivalMode ? 92 : 80, allowUpgrade: true },
+      { id: 'water_line', buildingId: 'water_collector', enabled: true, targetCount: waterTarget, maxTier: 2, priority: survivalMode ? 94 : 78, allowUpgrade: true },
+      { id: 'workbench_line', buildingId: 'workbench', enabled: workbenchTarget > 0, targetCount: workbenchTarget, maxTier: 2, priority: expansionMode ? 96 : 74, allowUpgrade: true },
+      { id: 'medical_line', buildingId: 'medical_station', enabled: medicalTarget > 0, targetCount: medicalTarget, maxTier: 2, priority: survivalMode ? 90 : 72, allowUpgrade: true },
+      { id: 'room_line', buildingId: 'room_quarters', enabled: roomTarget > 0, targetCount: roomTarget, maxTier: 2, priority: survivalMode ? 86 : expansionMode ? 88 : 70, allowUpgrade: true },
     ];
 
     plan.forEach((rule) => this.upsertAutoBuildRule(rule));
@@ -1832,7 +2051,7 @@ export class BaseSystem {
 
     return {
       updated: plan.length,
-      message: `推荐施工已应用 · ${messageParts.join(' / ')} · 建筑工目标${autoBuild.desiredBuilderCount}`,
+      message: `${this.getAutoBuildStrategyLabel(template)}已应用 · ${messageParts.join(' / ')} · 建筑工目标${autoBuild.desiredBuilderCount}`,
     };
   }
 

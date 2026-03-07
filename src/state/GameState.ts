@@ -148,6 +148,7 @@ export interface BaseNodeDiagnostic {
 
 export type AutoBuildResourceKey = Exclude<keyof Resources, 'bitcoin'>;
 export type AutoBuildCrewMode = 'workshop_only' | 'workshop_idle';
+export type AutoBuildStrategyTemplate = 'balanced' | 'defense' | 'survival' | 'expansion';
 export type ConstructionTaskKind = 'build' | 'upgrade-tier' | 'upgrade-morph';
 export type ConstructionTaskStatus = 'queued' | 'active' | 'done' | 'failed';
 
@@ -170,6 +171,7 @@ export interface AutoBuildSettings {
   autoAssignBuilders: boolean;
   desiredBuilderCount: number;
   crewMode: AutoBuildCrewMode;
+  strategyTemplate: AutoBuildStrategyTemplate;
   reserve: Partial<Record<AutoBuildResourceKey, number>>;
   rules: AutoBuildRule[];
 }
@@ -426,6 +428,7 @@ const DEFAULT_AUTO_BUILD_SETTINGS: AutoBuildSettings = {
   autoAssignBuilders: true,
   desiredBuilderCount: 2,
   crewMode: 'workshop_idle',
+  strategyTemplate: 'balanced',
   reserve: {
     wood: 12,
     metal: 10,
@@ -1446,6 +1449,12 @@ class GameStateManager {
       autoAssignBuilders: raw?.autoAssignBuilders != null ? !!raw.autoAssignBuilders : defaults.autoAssignBuilders,
       desiredBuilderCount: Math.max(0, Math.min(12, Math.floor(Number(raw?.desiredBuilderCount ?? defaults.desiredBuilderCount)))),
       crewMode: raw?.crewMode === 'workshop_only' ? 'workshop_only' : defaults.crewMode,
+      strategyTemplate: raw?.strategyTemplate === 'defense'
+        || raw?.strategyTemplate === 'survival'
+        || raw?.strategyTemplate === 'expansion'
+        || raw?.strategyTemplate === 'balanced'
+        ? raw.strategyTemplate
+        : defaults.strategyTemplate,
       reserve,
       rules: mergedRules,
     };
